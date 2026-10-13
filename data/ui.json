@@ -1,0 +1,20 @@
+{
+  "title": "無人戰略：鋼鐵與蜂群",
+  "subtitle": "推進兵線，摧毀敵方主堡",
+  "solo": "單機對戰", "host": "建立區網房間", "join": "加入伺服器",
+  "start": "開始戰鬥", "leave": "返回大廳", "team": "每隊人數", "map": "戰場",
+  "character": "駕駛員", "address": "伺服器 IP 或 ws:// 網址", "port": "連接埠",
+  "ready": "已加入，等待房主開戰", "waiting": "等待玩家加入", "connected": "連線成功",
+  "connecting": "正在連線", "failed": "連線失敗", "disconnected": "伺服器已中斷",
+  "full": "房間已滿或對戰已開始", "invalid": "設定無效", "host_failed": "無法建立伺服器",
+  "controls": "WASD 移動 · 滑鼠瞄準 · 左鍵射擊 · 右鍵瞄準 · 1/2 切換武器\nSpace 跳躍／上升 · C 下降 · Shift 加速 · R 填彈 · F 變形\nQ 防守招式 · E 攻擊招式 · B 軍械庫 · M 地圖 · Esc 選單",
+  "hp": "裝甲", "shield": "護盾", "power": "電力", "credits": "資金", "score": "戰績",
+  "reload": "填彈中", "respawn": "重生倒數", "victory": "勝利", "defeat": "戰敗",
+  "shop": "軍械庫", "shop_hint": "主堡補給範圍內可購買升級；資金與戰績由伺服器驗證。",
+  "buy": "升級", "max": "已滿級", "close": "關閉", "resume": "繼續戰鬥",
+  "pause": "戰場選單", "ammo": "彈藥", "light": "輕武器", "heavy": "重武器",
+  "defense": "防守招式", "attack": "攻擊招式", "wave": "兵波", "players": "玩家",
+  "weather": "天氣", "clear": "晴天", "fog": "霧", "rain": "雨", "snow": "雪",
+  "time": "時段", "day": "白天", "dusk": "黃昏", "night": "夜晚",
+  "unsupported": "此招式的原作機制尚未移植", "pending": "完整招式與地形移植進行中"
+}

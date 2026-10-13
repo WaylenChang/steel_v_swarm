@@ -1,0 +1,172 @@
+extends Node3D
+
+var checks := 0
+var failures: Array[String] = []
+var worlds := 0
+var maximum_error := 0.0
+var support_probe: BattleUnit
+
+func _ready() -> void:
+	_run.call_deferred()
+
+func _check(condition: bool, description: String) -> void:
+	checks += 1
+	if not condition:
+		failures.append(description)
+		push_error(description)
+
+func _height(x: float, z: float, start_y: float, end_y: float, mask: int, excluded: Array[RID] = []) -> Variant:
+	var query := PhysicsRayQueryParameters3D.create(Vector3(x, start_y, z), Vector3(x, end_y, z), mask)
+	query.hit_back_faces = true
+	query.exclude = excluded
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return hit.position.y if not hit.is_empty() else null
+
+func _run() -> void:
+	support_probe = BattleUnit.new()
+	add_child(support_probe)
+	support_probe.configure({"id": 90001, "peer": 1, "side": "STEEL", "kind": "robot", "character": "t01", "position": Vector3.ZERO})
+	support_probe.collision_layer = 0
+	support_probe.collision_mask = 32
+	var directory := DirAccess.open("res://assets/worlds")
+	if directory == null:
+		push_error("Native world resources are missing")
+		get_tree().quit(1)
+		return
+	var selected: Array = Array(OS.get_cmdline_user_args())
+	for file in directory.get_files():
+		if not file.ends_with(".res") or (not selected.is_empty() and not selected.any(func(id): return file.begins_with(id + "_"))):
+			continue
+		var data: Resource = load("res://assets/worlds/" + file)
+		var source: Dictionary = Content.read_json("res://data/worlds/" + file.get_basename() + ".json")
+		_check(data.source == source.source, file + ": native provenance matches the verified source bundle")
+		var scene: Node3D = data.scene.instantiate()
+		add_child(scene)
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		var map_id := file.get_basename().rsplit("_", true, 1)[0]
+		var team_size := file.get_basename().rsplit("_", true, 1)[1]
+		var map_entry: Dictionary = Content.maps.filter(func(entry): return entry.id == map_id)[0]
+		var variant: Dictionary = map_entry.variants[team_size]
+		for structure in variant.structures:
+			_check(_height(structure.position[0], structure.position[2], data.ceiling + 100, data.min_height - 100, 8) != null, file + ": structure has a verified standing surface")
+		for side in variant.hero_spawns:
+			for spawn_point in variant.hero_spawns[side]:
+				_check(_height(spawn_point.position[0], spawn_point.position[1], data.ceiling + 100, data.min_height - 100, 8) != null, file + ": source hero spawn has a verified standing surface")
+		for mesh_index in range(source.meshes.size()):
+			var source_mesh: Dictionary = source.meshes[mesh_index]
+			var native_mesh: MeshInstance3D = scene.get_node("SourceMesh_%d" % mesh_index)
+			var mesh_arrays: Array = native_mesh.mesh.surface_get_arrays(0)
+			var vertices := PackedVector3Array()
+			for i in range(0, source_mesh.positions.size(), 3):
+				vertices.append(Vector3(source_mesh.positions[i], source_mesh.positions[i + 1], source_mesh.positions[i + 2]))
+			_check(mesh_arrays[Mesh.ARRAY_VERTEX] == vertices, file + ": source road/world vertices preserved")
+			var indices := PackedInt32Array()
+			for i in range(0, source_mesh.index.size(), 3):
+				indices.append_array(PackedInt32Array([source_mesh.index[i], source_mesh.index[i + 2], source_mesh.index[i + 1]]))
+			_check(mesh_arrays[Mesh.ARRAY_INDEX] == indices, file + ": source road/world winding converted")
+			if not source_mesh.colors.is_empty():
+				var colors: PackedColorArray = mesh_arrays[Mesh.ARRAY_COLOR]
+				var color_error := 0.0
+				for i in range(0, source_mesh.colors.size(), 3):
+					var color: Color = colors[i / 3]
+					color_error = maxf(color_error, absf(color.r - source_mesh.colors[i]))
+					color_error = maxf(color_error, absf(color.g - source_mesh.colors[i + 1]))
+					color_error = maxf(color_error, absf(color.b - source_mesh.colors[i + 2]))
+				# ArrayMesh stores vertex colors as RGBA8; geometry retains exact float32 positions.
+				_check(color_error <= 1.0 / 255.0 + 0.000001, file + ": source colors within native RGBA8 precision, error=" + str(color_error))
+		var terrain: MeshInstance3D = scene.get_node("SourceMesh_0")
+		var arrays: Array = terrain.mesh.surface_get_arrays(0)
+		var expected := PackedVector3Array()
+		for i in range(0, source.sourceGridPositions.size(), 3):
+			expected.append(Vector3(source.sourceGridPositions[i], source.sourceGridPositions[i + 1], source.sourceGridPositions[i + 2]))
+		_check(arrays[Mesh.ARRAY_VERTEX] == expected, file + ": source vertex positions preserved exactly")
+		var actual: PackedInt32Array = arrays[Mesh.ARRAY_INDEX].duplicate()
+		for i in range(0, actual.size(), 3):
+			var previous := actual[i + 1]
+			actual[i + 1] = actual[i + 2]
+			actual[i + 2] = previous
+		var expected_indices := PackedInt32Array()
+		for index in source.sourceGridIndex:
+			expected_indices.append(int(index))
+		_check(actual == expected_indices, file + ": source triangle topology and portal holes preserved")
+		for probe in data.probes:
+			var native_height = _height(probe.x, probe.z, data.ceiling + 100, data.min_height - 100, 8)
+			if probe.collisionGround == null:
+				_check(native_height == null, file + ": portal removes ground collision")
+			else:
+				var error: float = absf(native_height - probe.collisionGround) if native_height != null else INF
+				maximum_error = maxf(maximum_error, error)
+				_check(error < 0.01, file + ": native terrain ray matches source, error=" + str(error))
+		for deck in data.deck_probes:
+			var x: float = deck.x
+			var z: float = deck.z
+			var y: float = deck.y
+			var upper = _height(x, z, y + 0.03, y - 0.03, 16)
+			_check(upper != null and absf(upper - deck.upper) < 0.01, file + ": source selects the highest overlapping deck")
+			var lower: float = y - source.collision.deckThickness
+			var underside = _height(x, z, lower - 0.03, lower + 0.03, 16)
+			_check(underside != null and absf(underside - deck.lower) < 0.01, file + ": source selects the nearest overlapping underside")
+		var floor_bodies := scene.get_node("TunnelFloors").get_children()
+		for tunnel_index in range(data.tunnels.size()):
+			var tunnel: Dictionary = data.tunnels[tunnel_index]
+			if Vector2(tunnel.x1, tunnel.z1) == Vector2(tunnel.x2, tunnel.z2):
+				continue
+			var point := _interior_point(tunnel)
+			var x: float = point.x
+			var z: float = point.y
+			var floor_height: float = lerpf(tunnel.fy1, tunnel.fy2, 0.371)
+			var excluded: Array[RID] = []
+			for floor_body: StaticBody3D in floor_bodies:
+				if floor_body.name != "Floor_%d" % tunnel_index:
+					excluded.append(floor_body.get_rid())
+			var floor_hit = _height(x, z, floor_height + 0.03, floor_height - 0.03, 32, excluded)
+			_check(floor_hit != null and absf(floor_hit - floor_height) < 0.01, file + ": tunnel floor x=" + str(x) + " z=" + str(z) + " expected=" + str(floor_height) + " actual=" + str(floor_hit))
+			var ceiling_height: float = lerpf(tunnel.cy1, tunnel.cy2, 0.371)
+			var roof_hit = _height(x, z, ceiling_height - 0.03, ceiling_height + 0.03, 64)
+			if tunnel.get("open", false):
+				# Another crossing tunnel may own this location; an open segment itself adds no roof.
+				var overlapping: bool = data.tunnels.any(func(other):
+					if other.get("open", false):
+						return false
+					var a := Vector2(other.x1, other.z1)
+					var b := Vector2(other.x2, other.z2)
+					return Geometry2D.get_closest_point_to_segment(Vector2(x, z), a, b).distance_to(Vector2(x, z)) <= other.hw)
+				if not overlapping:
+					_check(roof_hit == null, file + ": open approach has no phantom ceiling collision")
+			else:
+				_check(roof_hit != null and absf(roof_hit - ceiling_height) < 0.01, file + ": tunnel ceiling blocks upward shots")
+			# A point ray exactly on a float32 triangle edge has ambiguous ownership; verify support there with the real player collider.
+			var parameters := PhysicsTestMotionParameters3D.new()
+			var start_clearance := support_probe.radius + support_probe.height
+			parameters.from = Transform3D(Basis.IDENTITY, Vector3((tunnel.x1 + tunnel.x2) / 2, (tunnel.fy1 + tunnel.fy2) / 2 + start_clearance, (tunnel.z1 + tunnel.z2) / 2))
+			parameters.margin = 0.001
+			parameters.recovery_as_collision = true
+			var supported := false
+			var fall_speed := 0.0
+			var tick := 1.0 / Engine.physics_ticks_per_second
+			for step in range(Engine.physics_ticks_per_second * 2):
+				fall_speed += Content.constants.AIR.GRAV * tick
+				parameters.motion = Vector3.DOWN * fall_speed * tick
+				if PhysicsServer3D.body_test_motion(support_probe.get_rid(), parameters):
+					supported = true
+					break
+				parameters.from.origin += parameters.motion
+			_check(supported, file + ": player floor support segment=%d width=%f rise=%f length=%f" % [tunnel_index, tunnel.hw, tunnel.fy2 - tunnel.fy1, Vector2(tunnel.x2 - tunnel.x1, tunnel.z2 - tunnel.z1).length()])
+		worlds += 1
+		scene.queue_free()
+		await get_tree().process_frame
+		print("WORLD_CHECKED ", file.get_basename())
+	_check(worlds > 0, "At least one native world was verified")
+	if failures.is_empty():
+		print("WORLD_TEST_PASS worlds=", worlds, " checks=", checks, " max_ground_error_m=", maximum_error)
+	else:
+		print("WORLD_TEST_FAIL count=", failures.size())
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func _interior_point(segment: Dictionary) -> Vector2:
+	var a := Vector2(segment.x1, segment.z1)
+	var b := Vector2(segment.x2, segment.z2)
+	var direction := (b - a).normalized()
+	return a.lerp(b, 0.371) + Vector2(direction.y, -direction.x) * segment.hw * 0.173
+

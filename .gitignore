@@ -1,0 +1,6 @@
+.godot/
+build/
+*.tmp
+tests/*.log
+tests/*.png
+

@@ -1,0 +1,13 @@
+{
+  "inputs": {
+    "public/js/data.js": "52993dab6038a4e6f691c5900438862858aa158977bddb93c3a7433a883d0eb3",
+    "public/js/venues.js": "a7b6bb25519afa329c3dacf5582690c038093b4eae8494d05c43590c79199ef3",
+    "public/js/venueLanes.js": "64356310b16b39d8e6dbc5ecb91f70e68c225c2c26677b3b495343a2784b9f3c",
+    "public/js/rng.js": "96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654",
+    "public/js/game.js": "69826e7cfda9d1961c9425024698c94c5d1665aa1c5abd87d6cbf9b354b11b02"
+  },
+  "heroes": 32,
+  "qualifiedMaps": 18,
+  "runtime": "GDScript",
+  "sourceLicense": "Apache-2.0"
+}

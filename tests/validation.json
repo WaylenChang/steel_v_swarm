@@ -1,0 +1,25 @@
+{
+  "engine": "4.7.2.stable.official.ed1daf0bf",
+  "scriptAndResourceImport": "passed",
+  "sourceAndSettlementAssertions": 2701,
+  "sourceAndSettlementResult": "passed",
+  "offlineSmoke": {"result": "passed", "simulationSeconds": 6, "units": 22, "wave": 1, "finiteActorPositions": true, "localGroundSupport": true},
+  "nativeWorlds": {
+    "result": "passed",
+    "maps": 18,
+    "teamSizes": [1, 2, 3, 4, 5],
+    "resources": 90,
+    "assertions": 150414,
+    "maximumGroundErrorMetres": 0.00108242985823,
+    "groundToleranceMetres": 0.01,
+    "vertexColorTolerance": "one RGBA8 channel step",
+    "checks": ["provenance", "source vertices and topology", "road geometry", "source fallback colors", "ground and portal rays", "layered decks and undersides", "tunnel floors, ceilings and openings", "player support under source gravity", "structure and hero standing surfaces"]
+  },
+  "enetSeparateProcessConnection": "passed",
+  "websocketSeparateProcessConnection": "passed",
+  "enetSnapshotMtuRegression": "passed; separate native reliable channel, no MTU warning",
+  "nativeRayDamageIntegration": "passed",
+  "lobbyAndBattleRenderInspection": "passed",
+  "completeFeatureParity": false,
+  "parityLedger": "MIGRATION.md"
+}

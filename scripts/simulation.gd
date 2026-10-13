@@ -21,6 +21,7 @@ var projectile_rng := SourceRng.new(4242)
 var fire_controls: Dictionary = {}
 var missiles: Array[Dictionary] = []
 var missile_bodies: Dictionary = {}
+var footprint_glows: FootprintGlows
 
 func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool) -> void:
 	set_physics_process(false)
@@ -341,6 +342,8 @@ func fire(unit: BattleUnit, slot: String) -> void:
 	unit.power -= def.heavyMp
 	unit.fire_at[slot] = clock + 1.0 / def.rate
 	unit.play_action(slot)
+	unit.fire_serial += 1
+	events.append({"type": "weapon_fire", "actor": unit.entity_id, "slot": slot, "side": unit.side, "serial": unit.fire_serial, "clock": clock})
 	var start := unit.eye()
 	if def.trajectory == "flat":
 		var state := ProjectileMotion.ballistic(start, unit.aim_direction() * def.projectile.speed, reach)
@@ -401,7 +404,9 @@ func lob_control(unit: BattleUnit, def: Dictionary) -> Dictionary:
 	var target: BattleUnit = crosshair.target
 	var anti_air := target != null and CombatMath.target_class(target.kind) == "air"
 	if anti_air:
-		aim = target.position + Vector3.UP * target.height / 2
+		aim = target.aim_point()
+		if not aim.is_finite():
+			return {}
 	var reach := _launch_range(unit, def, target)
 	if not is_finite(reach):
 		return {}
@@ -442,7 +447,9 @@ func _aim_target(unit: BattleUnit, reach: float) -> BattleUnit:
 	for target: BattleUnit in units.values():
 		if not target.is_hero() or not target.alive() or target.side == unit.side or not visible_to_side(target, unit.side):
 			continue
-		var point := target.position + Vector3.UP * target.height / 2
+		var point := target.aim_point()
+		if not point.is_finite():
+			continue
 		var obstruction := world.obstruction_hit(unit.eye(), point)
 		candidates.append({"id": target.entity_id, "hero": true, "point": point,
 			"obstruction": INF if obstruction.is_empty() else unit.eye().distance_to(obstruction.position)})
@@ -1053,7 +1060,90 @@ func snapshot(peer: int = 0) -> Dictionary:
 		visible_events = events.filter(func(event): return event.has("missile") or visible_ids.has(event.actor))
 	return {"clock": clock, "wave": wave, "over": over, "winner": winner,
 		"units": visible_units, "events": visible_events.duplicate(), "fire_control": _control_snapshot(viewer),
-		"lock": _lock_snapshot(viewer), "missiles": _missile_snapshot()}
+		"lock": _lock_snapshot(viewer), "reachability": _reachability_snapshot(viewer),
+		"footprint": _footprint_snapshot(viewer), "missiles": _missile_snapshot()}
+
+func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
+	if viewer == null or world == null or over or not viewer.alive() or not viewer.is_hero():
+		return {}
+	var slot: String = viewer.input_state.get("slot", "light")
+	if slot not in ["light", "heavy"]:
+		return {}
+	var definition := Content.weapon(viewer.character, slot, int(viewer.upgrades.hw if slot == "heavy" else viewer.upgrades.lw) + 1)
+	if definition.get("needAim", false) and not viewer.input_state.get("aim", false):
+		return {}
+	var origin := viewer.eye()
+	var maximum := TargetingMath.maximum_range(definition)
+	var ray: Dictionary
+	if definition.area == "line":
+		var end := origin + viewer.aim_direction() * maximum
+		var obstruction := _arc_collision(origin, end)
+		ray = {"point": obstruction.position if not obstruction.is_empty() else end, "target": null}
+	else:
+		ray = _projectile_aim(viewer, maximum)
+	var targets: Array = []
+	for target: BattleUnit in units.values():
+		if target.side == viewer.side or not target.alive() or not visible_to_side(target, viewer.side):
+			continue
+		var dimensions := target.visual_dimensions()
+		if dimensions.is_empty():
+			continue
+		var reach := _launch_range(viewer, definition, target)
+		if not is_finite(reach):
+			continue
+		targets.append({"id": target.entity_id, "kind": target.kind, "position": target.position,
+			"radius": target.radius, "height": dimensions.height, "top": dimensions.top, "reach": reach,
+			"self": target == viewer, "ally": target.side == viewer.side, "foe": target.side != viewer.side,
+			"visible": target.alive() and visible_to_side(target, viewer.side), "dead": not target.alive()})
+	var control := {}
+	if definition.trajectory == "lob":
+		var cached: Dictionary = fire_controls.get(viewer.entity_id, {})
+		if cached.is_empty():
+			return {}
+		if cached.clock != clock or cached.origin != origin or cached.direction != viewer.aim_direction() or int(cached.level) != int(viewer.upgrades.hw):
+			return {}
+		control = {"on": true, "ok": cached.ok, "close": cached.close, "has_impact": cached.arc.has_impact,
+			"impact": cached.arc.impact, "aim": cached.aim}
+	var footprint := ShotFootprintMath.evaluate(definition, origin, viewer.aim_direction(), targets,
+		{"point": ray.point, "target": ray.target.entity_id if ray.target != null else 0}, control, _arc_collision)
+	return {} if footprint.is_empty() else {"hits": footprint.hits, "warn": footprint.warn, "slot": slot, "side": viewer.side}
+
+func apply_footprint(footprint: Dictionary, lock_state: Dictionary = {}) -> void:
+	if footprint_glows == null:
+		footprint_glows = FootprintGlows.new()
+		add_child(footprint_glows)
+	footprint_glows.apply(units, footprint, int(lock_state.get("anchor", 0)))
+
+func _reachability_snapshot(viewer: BattleUnit) -> Dictionary:
+	if viewer == null or world == null or over or not viewer.alive() or not viewer.is_hero():
+		return {}
+	var slot: String = viewer.input_state.get("slot", "light")
+	if slot not in ["light", "heavy"]:
+		return {}
+	var level := int(viewer.upgrades.hw if slot == "heavy" else viewer.upgrades.lw) + 1
+	var definition := Content.weapon(viewer.character, slot, level)
+	# Source fan/line footprints have no single-target entrance gate.
+	if definition.area in ["fan", "line"]:
+		return {}
+	var maximum := TargetingMath.maximum_range(definition)
+	# Flat rounds and frozen laser points do not steer toward cone candidates.
+	var target: BattleUnit
+	if definition.trajectory in ["flat", "guide"]:
+		target = _projectile_aim(viewer, maximum).target
+	else:
+		target = _aim_target(viewer, maximum)
+	if target == null or not target.alive() or target.side == viewer.side or not visible_to_side(target, viewer.side):
+		return {}
+	var reach := _launch_range(viewer, definition, target)
+	if not is_finite(reach):
+		return {}
+	var dimensions := target.visual_dimensions()
+	if dimensions.is_empty():
+		return {}
+	var advice := ReachabilityMath.evaluate(definition, viewer.eye(),
+		{"position": target.position, "kind": target.kind, "height": dimensions.height, "top": dimensions.top,
+			"radius": target.radius}, reach, _arc_collision)
+	return {"target": target.entity_id, "slot": slot, "ok": advice.ok, "warn": advice.warn}
 
 func _missile_snapshot() -> Array:
 	var states: Array = []
@@ -1076,7 +1166,8 @@ func _control_snapshot(viewer: BattleUnit) -> Dictionary:
 	if control.is_empty():
 		return {}
 	return {"points": control.arc.points, "impact": control.arc.impact, "has_impact": control.arc.has_impact,
-		"ok": control.ok, "aa": control.aa, "high": control.high, "close": control.close, "side": viewer.side}
+		"ok": control.ok, "aa": control.aa, "high": control.high, "close": control.close, "side": viewer.side,
+		"elevation": CockpitPose.barrel_elevation(control.velocity, control.direction)}
 
 func apply_snapshot(data: Dictionary) -> void:
 	if authoritative or data.clock < clock:

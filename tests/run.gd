@@ -119,6 +119,10 @@ func _run() -> void:
 	await _base_target_tests(fixtures.baseTargets)
 	await _missile_authority_tests(fixtures.baseLaunches)
 	await StructureSuite.run(self, fixtures)
+	await ReachabilitySuite.run(self, fixtures.reachability)
+	await ModelSuite.run(self, fixtures.modelCentres)
+	await FootprintSuite.run(self, fixtures.shotFootprints)
+	await CockpitSuite.run(self, fixtures)
 	if failures.is_empty():
 		print("TEST_PASS assertions=", assertions)
 		print("FAN_REFERENCE_PASS cases=", fixtures.fanHits.size(), " maximumDamageError=", maximum_fan_error)
@@ -129,6 +133,10 @@ func _run() -> void:
 		print("TARGETING_REFERENCE_PASS cone=", fixtures.targetingCone.size(), " launchRanges=", fixtures.launchRange.size(), " locks=", fixtures.lockCandidates.size(), " priorities=", fixtures.aimPriority.size(), " confirmations=", fixtures.lockConfirmation.size())
 		print("MISSILE_REFERENCE_PASS flights=", fixtures.missileFlight.size(), " damage=", fixtures.missileDamage.size(), " lines=", fixtures.missileLines.size(), " rays=", fixtures.missileRays.size())
 		print("STRUCTURE_REFERENCE_PASS separation=", fixtures.structureSeparation.size(), " levels=", fixtures.structureLevels.size(), " clientPoses=", fixtures.structureClient.size(), " worlds=", fixtures.structureWorlds.size(), " blasts=", fixtures.structureBlasts.size())
+		print("REACHABILITY_REFERENCE_PASS cases=", fixtures.reachability.size())
+		print("MODEL_CENTRE_REFERENCE_PASS cases=", fixtures.modelCentres.size())
+		print("FOOTPRINT_REFERENCE_PASS cases=", fixtures.shotFootprints.size())
+		print("COCKPIT_REFERENCE_PASS poses=", fixtures.cockpitPoses.size(), " ports=", fixtures.cockpitMuzzles.size())
 	else:
 		print("TEST_FAIL count=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)

@@ -42,6 +42,7 @@ var network_kinetic_light_seen := false
 var network_kinetic_terminal_seen := false
 var bound_pilot := 0
 var capture_finished := false
+var presentation_clock := 0.0
 
 func _ready() -> void:
 	Session.battle_started.connect(_begin_battle)
@@ -323,6 +324,18 @@ func _bind_camera(pilot: BattleUnit) -> void:
 	if pilot.camera != null:
 		pilot.camera.current = true
 		pilot.model.visible = false
+		pilot.ensure_cockpit()
+
+func _process(delta: float) -> void:
+	if simulation == null or Session.dedicated:
+		return
+	presentation_clock += delta
+	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	if pilot == null or pilot.cockpit == null:
+		return
+	var aiming := Input.is_action_pressed("aim") and not overlay_open
+	var clock := simulation.clock if simulation.authoritative else presentation_clock
+	pilot.cockpit.update_view(pilot, selected_slot, aiming, delta, clock)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if simulation == null or Session.dedicated:
@@ -422,6 +435,7 @@ func _physics_process(delta: float) -> void:
 
 func _receive_state(state: Dictionary) -> void:
 	smoke_state_seen = true
+	presentation_clock = state.clock
 	if simulation == null:
 		return
 	minimap.state = state
@@ -434,6 +448,7 @@ func _receive_state(state: Dictionary) -> void:
 	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
 	if pilot == null:
 		return
+	simulation.apply_footprint({} if shop.visible else state.get("footprint", {}), state.get("lock", {}))
 	var control: Dictionary = state.get("fire_control", {})
 	if network_kinetic_test:
 		for event in state.events:
@@ -456,6 +471,10 @@ func _receive_state(state: Dictionary) -> void:
 				network_lob_shot_seen = true
 	simulation.world.aim_arc(control)
 	_bind_camera(pilot)
+	pilot.cockpit.control = control
+	for event: Dictionary in state.events:
+		if event.type == "weapon_fire" and int(event.actor) == pilot.entity_id:
+			pilot.cockpit.fire_feedback(event)
 	stats.text = "%s %.0f/%.0f  |  %s %.0f/%.0f  |  %s %.0f\n%s %.0f  |  %s %.0f  |  %s %d" % [
 		Content.label("hp"), pilot.hp, pilot.max_hp, Content.label("shield"), pilot.shield, pilot.max_shield,
 		Content.label("power"), pilot.power, Content.label("credits"), pilot.money,
@@ -470,6 +489,10 @@ func _receive_state(state: Dictionary) -> void:
 	var lock_state: Dictionary = state.get("lock", {})
 	if not lock_state.is_empty() and int(lock_state.get("anchor", 0)) != 0:
 		ammo_label.text += " · " + Content.label("locked")
+	var reachability: Dictionary = state.get("reachability", {})
+	if not reachability.is_empty() and reachability.slot == selected_slot:
+		var status := "reach_warning" if reachability.warn else "reach_clear" if reachability.ok else "reach_blocked"
+		ammo_label.text += " · " + Content.label(status)
 	if not pilot.alive():
 		notice.text = "%s %.1f" % [Content.label("respawn"), maxf(0, pilot.respawn_at - state.clock)]
 	elif not state.over and notice.text.begins_with(Content.label("respawn")):
@@ -490,6 +513,8 @@ func _overlay(panel: Control, show_panel: bool) -> void:
 	menu.hide()
 	shop.hide()
 	panel.visible = show_panel
+	if panel == shop and show_panel and simulation != null:
+		simulation.apply_footprint({})
 	overlay_open = show_panel
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if overlay_open else Input.MOUSE_MODE_CAPTURED
 

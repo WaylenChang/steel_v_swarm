@@ -71,8 +71,10 @@ static func trace(origin: Vector3, initial_velocity: Vector3, reach: float, aim:
 			break
 	return {"points": points, "impact": impact, "has_impact": has_impact, "minimum_distance": nearest, "cut": reason}
 
-static func ladder(origin: Vector3, aim: Vector3, reach: float, base_speed: float, anti_air: bool, collision: Callable) -> Dictionary:
-	var tolerance: float = Content.constants.BALLISTIC.LOB_TOL
+static func ladder(origin: Vector3, aim: Vector3, reach: float, base_speed: float, anti_air: bool, collision: Callable,
+		tolerance: float = NAN, best_effort: bool = true) -> Dictionary:
+	if not is_finite(tolerance):
+		tolerance = Content.constants.BALLISTIC.LOB_TOL
 	if not anti_air:
 		var fixed := velocity_45(origin, aim, base_speed)
 		if not fixed.is_empty():
@@ -91,7 +93,7 @@ static func ladder(origin: Vector3, aim: Vector3, reach: float, base_speed: floa
 			"velocity": motion, "arc": arc, "high": index > 0}
 		if result.ok or arc.cut != "block":
 			break
-	if result.arc.is_empty():
+	if result.arc.is_empty() and best_effort:
 		# Source still fires its best-effort low solution when no charge can reach the point.
 		result.velocity = velocity(origin, aim, base_speed)
 		result.arc = trace(origin, result.velocity, reach, aim, collision)

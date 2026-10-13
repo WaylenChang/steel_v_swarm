@@ -31,6 +31,7 @@ var upgrades: Dictionary = {"lw": 0, "hw": 0, "def": 0, "atk": 0, "hp": 0, "ar":
 var ammo: Dictionary = {}
 var reload_at: Dictionary = {}
 var fire_at: Dictionary = {}
+var fire_serial := 0
 var cooldowns: Dictionary = {}
 var buffs: Array = []
 var damaged_at := -100.0
@@ -39,6 +40,7 @@ var target_position := Vector3.ZERO
 var target_yaw := 0.0
 var model: Node3D
 var camera: Camera3D
+var cockpit: CockpitRig
 var animation_player: AnimationPlayer
 var path_follower: PathFollow3D
 var reaction_at := 0.0
@@ -146,11 +148,29 @@ func _build_model() -> void:
 func is_hero() -> bool:
 	return not character.is_empty()
 
+func ensure_cockpit() -> void:
+	if cockpit != null or camera == null:
+		return
+	cockpit = CockpitRig.new()
+	camera.add_child(cockpit)
+	cockpit.configure(character)
+
 func alive() -> bool:
 	return hp > 0
 
 func eye() -> Vector3:
 	return global_position + Vector3.UP * height * Content.constants.SELF_F.eye
+
+func visual_dimensions() -> Dictionary:
+	var geometry: Dictionary = Content.balance.modelGeometry
+	return geometry.heroes.get(character, {}) if is_hero() else geometry.units.get(kind, {}).get(side, {})
+
+func aim_point() -> Vector3:
+	var dimensions := visual_dimensions()
+	if dimensions.is_empty():
+		return Vector3(NAN, NAN, NAN)
+	# Source acquisition uses the spawn-time measured centre even when the body rotates or morphs.
+	return global_position + Vector3.UP * dimensions.centre
 
 func sight_origin() -> Vector3:
 	return global_position + Vector3.UP * (Content.constants.LOS.TOWER_EYE_M if kind == "tower" else Content.constants.LOS.EYE_M)

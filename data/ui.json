@@ -19,5 +19,6 @@
   "unsupported": "此招式的原作機制尚未移植", "pending": "完整招式與地形移植進行中",
   "unavailable_surface": "目前位置沒有已驗證的發射表面，無法發射彈體",
   "lob_close": "距離過近：爆風將波及友軍與自身", "lob_blocked": "彈道未對準",
-  "lob_aa": "對空彈射", "lob_high": "降裝藥越障", "lob_45": "45° 拋投", "locked": "已鎖定"
+  "lob_aa": "對空彈射", "lob_high": "降裝藥越障", "lob_45": "45° 拋投", "locked": "已鎖定",
+  "reach_clear": "目標可命中", "reach_blocked": "目標受遮蔽或超出射程", "reach_warning": "目標過近：彈道偏移或爆風危險"
 }

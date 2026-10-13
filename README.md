@@ -38,6 +38,21 @@ blast damage.
 Launch range uses the original target-dependent altitude frame. Confirmed
 locks appear in the pilot's private HUD, refresh at the source quarter-second
 interval and can continue for a missile already in flight after aim release.
+Direct/blast target advice now reports geometric reachability and warns inside
+the source arming/minimum-range distance. It uses the native eye origin and
+source spawn-time measured model centres. Source weapon-footprint rosters now
+highlight the predicted direct, blast, fan and penetration victims. Shared
+glow resources warn the whole shot, clear in the shop and disappear with hidden
+targets. Exact source muzzle placement and animated visual-mesh queries remain
+pending.
+
+All 32 pilots now have source-built native first-person cockpit geometry.
+Weapon roots follow source reload, recoil-kick and lob elevation limits;
+aiming hides cockpit parts until the camera returns to its normal FOV. Morph
+pilots select the matching ground/air weapon group. Animated weapon mirrors,
+barrel progression, payload omission and muzzle flashes now follow source
+events and clips. Full morph transitions, burst echoes, authority muzzle origins
+and final toon appearance are pending.
 
 Unguided launchers now solve a 45-degree ground throw or a crosshair-selected
 AA trajectory, lowering charge only when the low arc is blocked. A native dashed
@@ -78,7 +93,14 @@ godot --headless --path . -- --smoke
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -LobControl
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -KineticShots
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -MissileShots
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Reachability
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Footprints
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Cockpits
 godot --headless --path . res://tests/lob_preview.tscn
+godot --headless --path . res://tests/reachability.tscn
+godot --headless --path . res://tests/models.tscn
+godot --headless --path . res://tests/footprints.tscn
+godot --headless --path . res://tests/cockpits.tscn
 ```
 
 The test scene compares GDScript against fixtures evaluated by the original
@@ -88,6 +110,32 @@ processes for both transports; `-LobControl` also checks private fire-control
 snapshots and physical shot segments. `-KineticShots` verifies light-round flight
 and heavy-round termination events. `-MissileShots` checks base launches, missile
 geometry/HP snapshots, fire commands, interception events and bounty replication.
+`-Reachability` checks private target advice, clear/warning HUD transitions and
+hidden-target removal. `tests/reachability_preview.tscn -- --capture-preview`
+writes a rendered aiming HUD to `tests/reachability-preview.png` with a graphical
+display. Reachability fixtures run the original source advisory/arc seams across
+all pilot weapon tiers, including obstruction and warning boundaries.
+Model-centre fixtures execute the source model builders and spawn measurement
+block, including both mercenary factions and combined morph geometry. Native
+acquisition checks include a cone-edge case that the former body midpoint misses.
+Footprint fixtures evaluate the original client victim roster for every weapon
+tier, including its separate 3D penetration basis and reused blast aim buffer.
+`-Footprints` verifies a two-victim private roster, warning/normal glows, shop
+clearing and hidden-target removal over both transports.
+`tests/footprint_preview.tscn -- --capture-preview` writes two rendered glows to
+`tests/footprint-preview.png` with a graphical display.
+Cockpit fixtures compare all 32 original source graphs, indexed rest ports,
+reload/kick/lob poses and aim/FOV/morph visibility. Another 1,456 original full
+animation frames compare receiver/payload/finger mirrors, barrel progression,
+duplicate events and shared fallback-cache aliases; source clip tracks use native
+Animation resources. Flash fixtures cover lifetime, heavy size and aiming.
+`-Cockpits` verifies authority serial/clock feedback, sequence/flash presentation,
+reload presentation, private elevation and zoom/death hiding over both
+transports. `tests/cockpit_preview.tscn -- --character m01 --capture-preview`
+writes the native first-person view to `tests/cockpit-m01.png` with a graphical
+display. These checks do not certify dynamic muzzle origins or final shaders.
+Add `--fire-feedback --feedback-slot heavy` to capture an accepted-shot flash in
+`tests/cockpit-m01-fire.png` instead of the resting view.
 Structural fixtures compare source blast layers and support-height references,
 including bridge overflow, tunnel portals, gallery exits and all 90 accepted
 world profiles. Native impact checks cover player warheads and SAM fuses.
@@ -104,6 +152,7 @@ under source gravity at the configured physics rate. `--capture` writes a render
 
 ```powershell
 node tools/import_source.mjs ../steel_vs_swarm
+godot --headless --path . res://tools/import_cockpits.tscn
 node tools/bake_worlds.mjs --reuse
 node tools/world_references.mjs
 godot --headless --path . res://tools/import_worlds.tscn
@@ -111,9 +160,16 @@ godot --headless --path . res://tools/import_worlds.tscn
 
 This optional developer command evaluates the original balance/venue seams,
 exports resolved values, copies existing glTF/audio/content resources, and
-records SHA-256 provenance. It requires the source checkout; ordinary play does
-not. Imported maps include only presets admitted by the source's qualification
+records SHA-256 provenance. It requires the source checkout and its development
+Playwright/Chromium runtime for offline model measurement; ordinary play does
+not. `PW_CHROME` can select an installed Chromium executable. Imported maps
+include only presets admitted by the source's qualification
 checks, with the source's active lane subsets and solved tower positions.
+The source importer also exports the original cockpit builders' geometry,
+textures and pose/visibility fixtures. The native cockpit importer packs those
+graphs into `assets/cockpits/*.scn`; `data/cockpits/` is development-only and is
+excluded from exports. Runtime cockpit presentation loads only native scenes
+and imported scalar metadata.
 
 World baking additionally uses the original development Playwright runtime,
 cached Three.js modules and validated OSM/elevation captures. `SVS_SOURCE` can

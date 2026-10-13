@@ -7,7 +7,7 @@ behavior. A passing math fixture does not establish full match equivalence.
 | --- | --- | --- |
 | Project/runtime | GDScript main scene and autoloads; no runtime JS | Platform exports and delivery builds |
 | Character content | All 32 pilots, four weapon/ability tiers, chassis stats | Some mechanics below remain unavailable |
-| Art | Original reference/combat/faction glTF and audio imported; native animation playback | Combat attachments, morph poses, full cockpit presentation, VFX, damage states |
+| Art | Original reference/combat/faction glTF and audio imported; native animation playback; all 32 source-built FPV cockpit graphs packed as native scenes, with source gun-root reload/kick/lob poses, aim/FOV/morph visibility, weapon-binding mirrors, barrel progression and additive muzzle flashes | Combat attachments, full morph poses and transition continuity, burst echoes, toon/outline shaders, VFX, damage states |
 | Map layouts | 18 qualified presets, all five team sizes, source lane subsets/tower pairs; 90 native terrain/road resources | Satellite imagery, OSM buildings/facilities, habitat objects, water and hazards; complete geography-service behavior |
 | Map generation/services | Verified captures drive offline terrain resources; missing runtime resources reject explicitly | Mixed geographic layers, procedural random recipes, authored story arenas, live source preparation/qualification, cache refresh and relay fallback |
 | World | Source terrain vertices/topology/portal holes; graded roads, bridge slabs, tunnels, roofs, gallery openings and columns; native Jolt collision | Full scenery, texture/shader appearance, edge geometry, environmental LOS and complete traversal equivalence |
@@ -23,7 +23,7 @@ behavior. A passing math fixture does not establish full match equivalence.
 | Visibility | Shared planar team sight and hero aiming bonus; source observer/target LOS heights; side-filtered snapshots and shot events also drive offline/host rendering without removing authority actors | Full environmental vision effects, fog/stealth/blindness, source grazing-obstacle tolerance and event audibility |
 | Story | Original narrative/chapter content exported | Campaign flow, boss/siege rules, scene staging/dialogue UI and saves |
 | Environment | Native static day/dusk/night sky and fog selection | Dynamic climate, rain/snow, deposits, lightning/fire, source weather gameplay |
-| Input/UI | Chinese native lobby, HUD, shop, menu, minimap; basic controller bindings; authority lob arc, AA/charge/blocked status and minimum-range warning; private confirmed-lock HUD status | Native touch UI, gyro, source control restrictions, spectator controls, settings/persistence; full source aiming presentation |
+| Input/UI | Chinese native lobby, HUD, shop, menu, minimap; basic controller bindings; authority lob arc, AA/charge/blocked status and minimum-range warning; private confirmed-lock and target reachability HUD status; private multi-victim weapon footprints with pooled source-texture glows | Native touch UI, gyro, source control restrictions, spectator controls, settings/persistence; full source aiming presentation, confirmed-lock and skill glows |
 
 ## Verification boundary
 
@@ -141,11 +141,137 @@ continuation after aim release, expiry, failed lob-control refusal, non-terrain
 obstruction and independent authority LOS rejection, private lock snapshots,
 and physical FNF/flat rounds capturing the target-dependent launch envelope.
 Cone obstruction queries exclude terrain, as the original `_obstHitT` does;
-confirmation LOS still queries all native static collision. Native centres
-currently use normalized target-body proxies; source measured visual centres,
-muzzle placement, touch/view-lock NDC lists, reachability glows, blindness and
+confirmation LOS still queries all native static collision. Native acquisition
+uses source spawn-time measured visual centres. Muzzle placement,
+touch/view-lock NDC lists, reachability glows, blindness and
 neutral factions remain outside these checks. Lock confirmation is authority
 local rather than a replay of source client lock messages.
+
+Reachability references execute the original `_reachable`, `_shotWarn`,
+`_lobLadder` and `_arcTrace` seams. All 32 pilots' two slots and four tiers
+contribute 2,744 cases covering near-surface range, altitude envelopes, ray
+clearance tolerance, blast-core coverage behind obstructions, ground/AA arcs,
+charge reduction, absent real solutions and arming/minimum-range warnings.
+Native arc references use Jolt ground/box queries; ray references isolate
+source clearance and core-distance decisions with synthetic obstruction cuts.
+The advisory solver shares the launch fire-control ladder, with the source
+target-radius tolerance and no best-effort arc when no real solution exists.
+
+Private authority snapshots drive target-specific HUD status for direct/blast
+weapons without consuming ammunition, power or either RNG stream. Fan/line
+weapons retain the source rule with no single-target entrance gate; weapon
+footprints are described below. Native integration and separate-process
+ENet/WebSocket checks cover clear/warning transitions, HUD text, global-snapshot
+privacy and hidden-target removal. Flat rounds and frozen laser points require
+an exact-ray target for advice; cone acquisition cannot promise a physical hit.
+A populated native map's status is rendered
+and inspected. These checks use the current eye-origin and source measured
+visual bands with authority hit radii; muzzle placement, moving-target hit
+prediction, confirmed-lock and skill glow visuals remain pending.
+
+Model-centre references execute the original `makeUnit`, `_spawnUnit` dimension
+block and `_entAimPoint` offline with the source cached Three.js modules.
+There are 168 translated centre cases for all 32 pilots, both factions of the
+eight mercenaries and both factions of eight standard NPC/structure kinds.
+Measurements preserve source outline/weapon geometry, combined morph forms,
+and team-ring/presentation-effect exclusions. Every loaded source module is
+hashed in `data/provenance.json`; the native runtime reads only saved scalars.
+
+Native integration retains spawn-time centres across rotation and morph flags,
+uses them for cone acquisition, AA lob aim and target reachability, and verifies
+an angular-boundary case where the old cylinder midpoint incorrectly rejects
+the original centre. ENet/WebSocket private advice also targets a mercenary
+whose measured centre differs from its authority cylinder midpoint. Neither
+authority target volumes nor balance values are retuned. Animated visual-mesh
+collision, full native pose/attachment rendering, muzzle placement, boss/super
+scaling and complete animated visual-mesh envelopes remain pending.
+
+Weapon-footprint references execute the original `_shotVictims`,
+`_lancePierced`, `_inShotRange`, `_reachable` and `_bodyDy` seams. All 32 pilots'
+two slots and four tiers contribute 4,820 cases: 1,624 direct, 1,156 blast,
+1,400 line and 640 fan cases. They preserve the no-reticle fan/line entrance,
+nearest-per-bin screening and stable ties, source 3D perpendicular line sections,
+endpoint caps, independent penetration budgets and post-budget visibility/range
+gates. Controlled proxy geometry isolates selection; penetration fixtures retain
+the original `lancePenCost` values. They do not certify animated visual-mesh hits.
+
+Blast footprints consume visible enemy body bands after one shot gate, without
+adding victim LOS, launch-range or structural-layer checks. Source `_reachable`
+reuses `_rgAim`, so a reticle unit overwrites the blast footprint's impact with
+its measured centre; a dedicated paired-surface case preserves this behavior.
+Lob footprints reuse the cached fire-control impact/aim and whole-shot warning;
+obsolete control position, direction, clock or weapon tier rejects the preview.
+These client advisory lists remain separate from authority damage settlement.
+
+Private snapshots drive native additive, depth-independent billboard glows.
+The importer executes source `glowTexture`; source size, colour and opacity
+seams supply shared resources. Glows pool/reuse nodes, skip a confirmed anchor,
+clear in the shop, and remove hidden/dead/freed victims. Native checks cover
+blast coverage behind a wall with shared team sight, front/rear penetration,
+independent fan bins, cached lob controls, privacy and no resource/RNG spending.
+ENet/WebSocket checks transmit an actual two-victim roster, normal/warning
+materials, shop clearing and hidden-target removal; a populated native map's
+two glows are rendered and inspected. Muzzle/parallax origins, source visual-mesh
+ray endpoints, moving-target prediction, skill footprints, confirmed-lock glows,
+siege locks and full status/environment interactions remain pending.
+
+Cockpit references execute the original `_buildCockpit`, `_syncCockpitWeapon`,
+`_cockpitEmission`, `_selfMuzzle`, `_reloadAnimOffset` and gun-root render-tick
+block offline. All 32 source model graphs become compressed native scenes with
+1,400 mesh nodes, source vertices, material groups, local transforms, procedural
+textures and reversed native front-face winding. Native checks compare each
+mesh's transformed bounds against original Three.js bounds within 0.0001 metres,
+plus topology and sampled original vertices. There are 184 indexed rest muzzle
+cases, including both morph forms and the source no-cloned-emitter fallbacks;
+these capture original gun-local positions rather than inventing body offsets.
+
+Another 5,376 source poses cover both slots and all four tiers, reload progress
+clamps, kick/pull limits, positive/negative lob angles and rotation around the
+measured weapon pivot. There are 640 aim/FOV/morph visibility cases at the source
+0.1-degree return threshold, and 25 barrel-elevation boundary cases. Native
+presentation reads authoritative reload deadlines, accepted-fire feedback and
+private fire-control elevation. Only the bound local camera allocates a cockpit;
+dedicated and remote actors keep no FPV geometry. Presentation cannot refill
+ammunition, settle damage or consume either combat RNG stream.
+
+Separate-process ENet/WebSocket checks verify accepted light/heavy feedback,
+reload pose, private lob elevation, zoom hiding, death hiding and absent server
+cockpit allocation. Four populated-map renders (two robot and two morph pilots)
+are inspected. These fixtures certify rest geometry and gun-root pose,
+not world visual-mesh hits or full toon/outline appearance. Dynamic weapon
+presentation references are described below. The runtime still launches/queries
+combat from the existing eye origin; adopting FPV launch ports requires the
+authority pose/clock integration and immutable shooter height frames.
+
+Weapon-presentation references execute original `_markFire`,
+`fireReferenceWeapon`, `stepCombatFx`, full `stepLocomotion`,
+`_syncCockpitWeapon` and the FPV flash render block. Forty endpoint-form
+sequences (all 32 pilots, including both trees of eight morph pilots) contribute
+1,456 complete frames with variable frame intervals, alternating slots, barrel
+wraps, two distinct rounds in one clock tick and repeated immutable events.
+Native source-node mirrors match original position/scale/quaternion within
+0.00001; they preserve the parent-name translation gate and active-rig lookup.
+Both morph sequences advance on each event even when one tree is hidden.
+
+Forty-seven imported source clip tracks become native Animation value tracks.
+They override procedural receiver recoil before payload omission/restoration
+and the finger/tuft post-pass, preserving the original ordering. Event-relative
+decay remains independent of frame rate. Three source slots have no cloned
+emitter; `_muzzle.copy()` can mutate their shared fallback vector after switching
+slots. Native caches retain those aliases, with current-emitter flash positions
+compared on every reference frame rather than replaced with constant offsets.
+
+Another 36 source flash cases verify the 0.045-second lifetime, heavy size,
+independent random samples and inclusive expiry. Native additive materials
+retain source depth-test/depth-write flags. Aiming hides parts while retaining
+the flash. Authority feedback carries a per-pilot serial and accepted clock;
+duplicates/older serials cannot advance barrels or restart effects. Integration
+also rejects non-finite presentation times and verifies no presentation damage,
+ammo refill or combat/spread RNG consumption. Separate-process ENet/WebSocket
+checks now receive the actual serial-driven sequence and flash. Three additional
+accepted-fire renders cover finger, payload and no-cloned-emitter weapons.
+Burst echoes, continuous morph/body pose, full status interactions, authority
+muzzle origins, visual-mesh collision and final shaders remain pending.
 
 Server missile references execute `_tickMissiles`, `hitMissile`, `heroLance`,
 `_tickBaseGuns`, `_acquireTarget` and `_frame`. Eleven flight sequences cover
@@ -232,8 +358,15 @@ source NPC surface-following policy remains pending.
    flight/terminal planar penetration, default cone acquisition/hysteresis,
    authority lock lifecycle, target-dependent launch ranges, base missile flight
    and direct/kinetic/penetrating interception, structural blast-layer separation
-   and rooftop height references are in place. Next implement complete
-   reachability/muzzle envelopes and impact-report semantics.
+   and rooftop height references are in place. Source target reachability
+   decisions and private HUD status use source spawn-time measured model centres.
+   Source weapon-footprint rosters and pooled native range glows are in place.
+   Source FPV rest geometry, indexed ports, gun-root poses and visibility are
+   also verified and rendered natively. Source weapon-binding mirrors, visual
+   barrel progression, fallback-cache aliases and muzzle flashes are in place.
+   Next integrate authority pose/clock and immutable shooter height frames before
+   adopting muzzle launch/query origins; finish burst scheduling, visual-mesh
+   envelopes and impact-report semantics, then confirmed-lock/skill presentation.
 3. Implement the complete ability matrix, status/shield/evasion behavior,
    carriers and summons with source simulation reference fixtures.
 4. Port full wave/economy/bot rules, then compare seeded complete matches.

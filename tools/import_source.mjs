@@ -8,6 +8,9 @@ import { lineReferences } from './line_references.mjs';
 import { targetingReferences } from './targeting_references.mjs';
 import { missileReferences } from './missile_references.mjs';
 import { structureReferences } from './structure_references.mjs';
+import { reachabilityReferences } from './reachability_references.mjs';
+import { modelReferences } from './model_references.mjs';
+import { footprintReferences } from './footprint_references.mjs';
 
 // Offline migration only: evaluate the source's settlement seams instead of copying derived numbers.
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -47,7 +50,7 @@ for (const [id, ch] of Object.entries(d.CHARACTERS)) {
   for (const slot of ['light', 'heavy']) {
     heroes[id].weapons[slot] = Array.from({ length: d.ECON.UPGRADES[slot === 'light' ? 'lw' : 'hw'].max + 1 }, (_, i) => {
       const def = d.heroWeapon(id, slot, i + 1);
-      return { ...def, area: d.aoeClass(def), trajectory: d.trajClass(def),
+      return { ...def, area: d.aoeClass(def), trajectory: d.trajClass(def), reachRule: d.reachRule(def),
         lanceRadius: d.lanceR(def), lancePen: d.lancePen(def),
         fanSubs: d.fanSubs(def), fanMaxBuildingHits: d.fanBuildingMaxHits(def),
         fanRangeFactors: Array.from({ length: d.fanSubs(def) }, (_, bin) => d.fanBinRangeF(def, bin)),
@@ -89,13 +92,22 @@ const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object
   [side,{radius:d.hitR({kind,side}),height:d.hitH({kind,side})}]))]));
 const missileReference = await missileReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource);
 const structureReference = await structureReferences(d, BattleSim, maps[0].variants['1'].config, source, root, gameSource);
+const reachabilityReference = await reachabilityReferences(d, gameSource, source);
+const modelReference = await modelReferences(source, gameSource);
+const glowOpacity = /opacity: warn \? ([\d.]+) : ([\d.]+)/.exec(gameSource);
+const glowColor = /color: warn \? (0x[\da-f]+) : sideInfo\(this.side\).color/.exec(gameSource);
+const glowSize = /sp.scale.setScalar\(Math.max\(([\d.]+), Math.max\(h, r \* 2\) \* ([\d.]+)\)\)/.exec(gameSource);
+if (!glowOpacity || !glowColor || !glowSize) throw new Error('Source weapon glow style seams missing');
 const fixtures = {
+  ...await footprintReferences(d, gameSource, source),
+  ...modelReference.fixtures,
   ...structureReference.fixtures,
   ...missileReference.fixtures,
   ...combatReferences(d, BattleSim, maps[0].variants['1'].config, buildings),
   ...await projectileReferences(d, gameSource, source),
   ...lineReferences(d, BattleSim, maps[0].variants['1'].config),
   ...await targetingReferences(d, gameSource, source, BattleSim, maps[0].variants['1'].config),
+  reachability: reachabilityReference.reachability,
   volumes: [
     ...Object.entries(d.CHARACTERS).map(([id, ch]) => {
       const actor = {hero:true, kind:ch.kind, ch:id};
@@ -124,6 +136,12 @@ const fixtures = {
 await mkdir(join(root, 'data'), { recursive: true });
 for (const [name, value] of Object.entries({ balance: { constants, heroes, unitVolumes,
   structure: structureReference.rules,
+  modelGeometry: modelReference.geometry,
+  cockpit: modelReference.cockpits,
+  cockpitRules: modelReference.cockpitRules,
+  footprintGlow: { warningOpacity: Number(glowOpacity[1]), opacity: Number(glowOpacity[2]),
+    warningColor: Number(glowColor[1]), minimumSize: Number(glowSize[1]), sizeFactor: Number(glowSize[2]) },
+  reachability: reachabilityReference.reachabilityRules,
   missile: missileReference.metadata,
   projectilePreview: { maxPoints: Number(arcPoints[1]), colors: Object.fromEntries(['close','blocked','aa','high'].map((key, i) => [key, Number(arcColors[i + 1])])) },
   targeting: { coneAngle: Number(coneAngle[1]), lockInterval: Number(lockInterval[1]), obstructionTolerance: Number(obstructionTolerance[1]) },
@@ -135,11 +153,16 @@ for (const [name, value] of Object.entries({ balance: { constants, heroes, unitV
 for (const folder of ['models/reference', 'models/combat', 'models/factions', 'mech_avatars', 'story']) {
   await cp(join(source, 'public/assets', folder), join(root, 'assets', folder), { recursive: true });
 }
+await mkdir(join(root, 'assets/ui'), { recursive: true });
+await writeFile(join(root, 'assets/ui/footprint-glow.png'), Buffer.from(modelReference.glowPng, 'base64'));
+await mkdir(join(root, 'data/cockpits'), { recursive: true });
+for (const [character, graph] of Object.entries(modelReference.cockpitGraphs))
+  await writeFile(join(root, 'data/cockpits', `${character}.json`), JSON.stringify(graph));
 await cp(join(source, 'public/audio'), join(root, 'assets/audio'), { recursive: true });
 await cp(join(source, 'LICENSE'), join(root, 'LICENSE'));
 const inputs = ['public/js/data.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];
 const hashes = {};
-for (const file of inputs) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
+for (const file of new Set([...inputs, ...modelReference.inputs])) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
 await writeFile(join(root, 'data/provenance.json'), JSON.stringify({ inputs: hashes, heroes: Object.keys(heroes).length,
   qualifiedMaps: maps.length, runtime: 'GDScript', sourceLicense: 'Apache-2.0' }, null, 2));
 console.log(`Imported ${Object.keys(heroes).length} heroes, ${maps.length} qualified maps and native glTF assets.`);

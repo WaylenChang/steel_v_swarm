@@ -10,6 +10,10 @@ The playable native project includes all 32 characters' source definitions and
 Buildings, live map services and the remaining gameplay systems are pending.
 See [MIGRATION.md](MIGRATION.md) for the exact implementation boundaries.
 
+Three oversized source world captures use Git LFS. Install Git LFS before
+cloning, or run `git lfs pull` in an existing checkout before rebuilding worlds
+or running world-reference tests.
+
 ## Play
 
 Choose a battlefield, team size (1–5), faction and pilot. Offline matches fill

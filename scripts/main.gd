@@ -34,6 +34,12 @@ var capture := false
 var smoke_time := 0.0
 var smoke_state_seen := false
 var network_test := false
+var network_lob_test := false
+var network_lob_control_seen := false
+var network_lob_shot_seen := false
+var network_kinetic_test := false
+var network_kinetic_light_seen := false
+var network_kinetic_terminal_seen := false
 var bound_pilot := 0
 var capture_finished := false
 
@@ -45,6 +51,8 @@ func _ready() -> void:
 	_build_ui()
 	var arguments := OS.get_cmdline_user_args()
 	network_test = arguments.has("--network-test")
+	network_lob_test = arguments.has("--network-lob-test")
+	network_kinetic_test = arguments.has("--network-kinetic-test")
 	Session.dedicated = arguments.has("--server")
 	if Session.dedicated:
 		ui.visible = false
@@ -289,6 +297,8 @@ func _begin_battle(settings: Dictionary, players: Array) -> void:
 	var map_data := Content.map_variant(int(settings.map_index), int(settings.team_size))
 	await simulation.setup(map_data, players, settings.env, Session.multiplayer.is_server())
 	Session.simulation = simulation
+	if simulation.authoritative and not Session.dedicated:
+		simulation.apply_presentation_view(simulation.snapshot(multiplayer.get_unique_id()))
 	simulation.message.connect(func(peer, key):
 		if peer == multiplayer.get_unique_id():
 			_status(key))
@@ -358,6 +368,18 @@ func _physics_process(delta: float) -> void:
 		"slot": selected_slot, "aim": Input.is_action_pressed("aim") and not overlay_open,
 		"sprint": Input.is_action_pressed("sprint") and not overlay_open}
 	held_jump = false
+	if network_lob_test:
+		command.aim = true
+		command.fire = true
+		command.slot = "heavy"
+		command.pitch = -0.15
+		selected_slot = "heavy"
+	if network_kinetic_test:
+		command.aim = true
+		command.fire = true
+		command.slot = "heavy" if smoke_time > 1 else "light"
+		command.pitch = -0.15
+		selected_slot = command.slot
 	Session.command(command)
 	var local_pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
 	if local_pilot != null and local_pilot.camera != null:
@@ -365,10 +387,19 @@ func _physics_process(delta: float) -> void:
 		local_pilot.camera.fov = unit_stats.get("zoomFov", 35) if command.aim else unit_stats.get("fov", 68)
 	if network_test:
 		smoke_time += delta
-		if smoke_time > 3 and smoke_state_seen and simulation.pilots.has(multiplayer.get_unique_id()):
+		var lob_ready := not network_lob_test or (network_lob_control_seen and network_lob_shot_seen)
+		var kinetic_ready := not network_kinetic_test or (network_kinetic_light_seen and network_kinetic_terminal_seen)
+		if smoke_time > 3 and smoke_state_seen and simulation.pilots.has(multiplayer.get_unique_id()) and lob_ready and kinetic_ready:
 			print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+			if network_lob_test:
+				print("NETWORK_LOB_PASS control=", network_lob_control_seen, " shot=", network_lob_shot_seen)
+			if network_kinetic_test:
+				print("NETWORK_KINETIC_PASS light=", network_kinetic_light_seen, " heavyTerminal=", network_kinetic_terminal_seen)
 			Session.stop()
 			get_tree().quit()
+		elif smoke_time > 10:
+			push_error("NETWORK_TEST_TIMEOUT")
+			get_tree().quit(1)
 	if (smoke or capture) and not capture_finished:
 		smoke_time += delta
 		if smoke_time > 6:
@@ -396,12 +427,34 @@ func _receive_state(state: Dictionary) -> void:
 	minimap.state = state
 	minimap.queue_redraw()
 	if Session.multiplayer.is_server():
+		simulation.apply_presentation_view(state)
 		for event in state.events:
 			if event.type == "shot":
 				simulation.world.tracer(event.start, event.end, event.side)
 	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
 	if pilot == null:
 		return
+	var control: Dictionary = state.get("fire_control", {})
+	if network_kinetic_test:
+		for event in state.events:
+			if event.type != "shot" or int(event.actor) != pilot.entity_id:
+				continue
+			if event.get("slot") == "light" and event.start.distance_to(event.end) < 20:
+				network_kinetic_light_seen = true
+			if event.get("slot") == "heavy" and event.get("terminal", false):
+				network_kinetic_terminal_seen = true
+	if network_lob_test:
+		if not control.is_empty() and control.points is PackedVector3Array and control.points.size() > 1:
+			var actor_state: Dictionary = state.units.filter(func(actor): return int(actor.peer) == multiplayer.get_unique_id())[0]
+			var expected: Vector3 = actor_state.position + Vector3.UP * Content.heroes[actor_state.character].height * Content.constants.SELF_F.eye
+			if control.points[0].distance_to(expected) > 0.01:
+				push_error("NETWORK_LOB_ORIGIN_MISMATCH")
+				get_tree().quit(1)
+			network_lob_control_seen = true
+		for event in state.events:
+			if event.type == "shot" and int(event.actor) == pilot.entity_id and event.start.distance_to(event.end) < 20:
+				network_lob_shot_seen = true
+	simulation.world.aim_arc(control)
 	_bind_camera(pilot)
 	stats.text = "%s %.0f/%.0f  |  %s %.0f/%.0f  |  %s %.0f\n%s %.0f  |  %s %.0f  |  %s %d" % [
 		Content.label("hp"), pilot.hp, pilot.max_hp, Content.label("shield"), pilot.shield, pilot.max_shield,
@@ -411,6 +464,12 @@ func _receive_state(state: Dictionary) -> void:
 	ammo_label.text = "%s\n%s %d/%d" % [definition.name, Content.label("ammo"), int(pilot.ammo.get(selected_slot, 0)), int(definition.mag)]
 	if pilot.reload_at.has(selected_slot):
 		ammo_label.text += " · %s %.1f" % [Content.label("reload"), maxf(0, pilot.reload_at[selected_slot] - state.clock)]
+	if not control.is_empty():
+		var status := "lob_close" if control.close else "lob_blocked" if not control.ok else "lob_aa" if control.aa else "lob_high" if control.high else "lob_45"
+		ammo_label.text += " · " + Content.label(status)
+	var lock_state: Dictionary = state.get("lock", {})
+	if not lock_state.is_empty() and int(lock_state.get("anchor", 0)) != 0:
+		ammo_label.text += " · " + Content.label("locked")
 	if not pilot.alive():
 		notice.text = "%s %.1f" % [Content.label("respawn"), maxf(0, pilot.respawn_at - state.clock)]
 	elif not state.over and notice.text.begins_with(Content.label("respawn")):

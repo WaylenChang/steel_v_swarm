@@ -16,5 +16,8 @@
   "defense": "防守招式", "attack": "攻擊招式", "wave": "兵波", "players": "玩家",
   "weather": "天氣", "clear": "晴天", "fog": "霧", "rain": "雨", "snow": "雪",
   "time": "時段", "day": "白天", "dusk": "黃昏", "night": "夜晚",
-  "unsupported": "此招式的原作機制尚未移植", "pending": "完整招式與地形移植進行中"
+  "unsupported": "此招式的原作機制尚未移植", "pending": "完整招式與地形移植進行中",
+  "unavailable_surface": "目前位置沒有已驗證的發射表面，無法發射彈體",
+  "lob_close": "距離過近：爆風將波及友軍與自身", "lob_blocked": "彈道未對準",
+  "lob_aa": "對空彈射", "lob_high": "降裝藥越障", "lob_45": "45° 拋投", "locked": "已鎖定"
 }

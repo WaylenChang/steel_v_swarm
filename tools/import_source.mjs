@@ -2,6 +2,12 @@ import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { combatReferences } from './combat_references.mjs';
+import { projectileReferences } from './projectile_references.mjs';
+import { lineReferences } from './line_references.mjs';
+import { targetingReferences } from './targeting_references.mjs';
+import { missileReferences } from './missile_references.mjs';
+import { structureReferences } from './structure_references.mjs';
 
 // Offline migration only: evaluate the source's settlement seams instead of copying derived numbers.
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -11,10 +17,18 @@ const d = await load('public/js/data.js');
 const v = await load('public/js/venues.js');
 const { BattleSim } = await load('server/sim.js');
 const { mulberry32 } = await load('public/js/rng.js');
+const buildings = await load('public/js/mapBuilding.js');
 const narrative = await load('public/js/story.js');
 const gameSource = await readFile(join(source, 'public/js/game.js'), 'utf8');
 const sprintMatch = /const boost = ax\.boost \? ([\d.]+) : 1/.exec(gameSource);
 if (!sprintMatch) throw new Error('Source sprint seam not found');
+const arcPoints = /const ARC_MAXP = (\d+);/.exec(gameSource);
+const arcColors = /const col = fc.close \? (0x[\da-f]+) : !fc.ok \? (0x[\da-f]+) : fc.aa \? (0x[\da-f]+) : fc.high \? (0x[\da-f]+) :/.exec(gameSource);
+if (!arcPoints || !arcColors) throw new Error('Source arc preview seam not found');
+const coneAngle = /const LIM = opt\?\.lim \?\? ([\d.]+)/.exec(gameSource);
+const lockInterval = /now - \(this\._lockAt \|\| 0\) < ([\d.]+)/.exec(gameSource);
+const obstructionTolerance = /dB < ro\.distanceTo\(c\) - ([\d.]+)/.exec(gameSource);
+if (!coneAngle || !lockInterval || !obstructionTolerance) throw new Error('Source acquisition seams not found');
 const serialize = value => JSON.parse(JSON.stringify(value, (_, item) =>
   item instanceof Set ? [...item] : item instanceof Map ? Object.fromEntries(item) : item));
 const constants = {};
@@ -37,6 +51,8 @@ for (const [id, ch] of Object.entries(d.CHARACTERS)) {
         lanceRadius: d.lanceR(def), lancePen: d.lancePen(def),
         fanSubs: d.fanSubs(def), fanMaxBuildingHits: d.fanBuildingMaxHits(def),
         fanRangeFactors: Array.from({ length: d.fanSubs(def) }, (_, bin) => d.fanBinRangeF(def, bin)),
+        projectile: { speed: d.shotV0(def), antiAirSpeed: d.shotV0(def, true), arm: d.armingOf(def), fuel: d.chaseCapS(def), flightCap: d.flightCapS(def),
+          core: d.blastCoreR(def), launchDistance: d.guidedLaunchDist(def) },
         heavyMp: slot === 'heavy' ? d.heavyMpCost(def) : 0 };
     });
   }
@@ -71,7 +87,15 @@ for (const venue of v.VENUES.filter(item => !item.story)) {
 const rng = mulberry32(123456789);
 const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object.fromEntries(['SWARM','STEEL'].map(side=>
   [side,{radius:d.hitR({kind,side}),height:d.hitH({kind,side})}]))]));
+const missileReference = await missileReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource);
+const structureReference = await structureReferences(d, BattleSim, maps[0].variants['1'].config, source, root, gameSource);
 const fixtures = {
+  ...structureReference.fixtures,
+  ...missileReference.fixtures,
+  ...combatReferences(d, BattleSim, maps[0].variants['1'].config, buildings),
+  ...await projectileReferences(d, gameSource, source),
+  ...lineReferences(d, BattleSim, maps[0].variants['1'].config),
+  ...await targetingReferences(d, gameSource, source, BattleSim, maps[0].variants['1'].config),
   volumes: [
     ...Object.entries(d.CHARACTERS).map(([id, ch]) => {
       const actor = {hero:true, kind:ch.kind, ch:id};
@@ -98,9 +122,14 @@ const fixtures = {
     ({ offset: [x, z], radius, beam: 5.4, result: d.lanceZones(x, z, radius, 5.4) })))),
 };
 await mkdir(join(root, 'data'), { recursive: true });
-for (const [name, value] of Object.entries({ balance: { constants, heroes, unitVolumes, movement: { sprint: Number(sprintMatch[1]) }, charge: Array.from({ length: 4 }, (_, i) => d.chargeF(i)),
+for (const [name, value] of Object.entries({ balance: { constants, heroes, unitVolumes,
+  structure: structureReference.rules,
+  missile: missileReference.metadata,
+  projectilePreview: { maxPoints: Number(arcPoints[1]), colors: Object.fromEntries(['close','blocked','aa','high'].map((key, i) => [key, Number(arcColors[i + 1])])) },
+  targeting: { coneAngle: Number(coneAngle[1]), lockInterval: Number(lockInterval[1]), obstructionTolerance: Number(obstructionTolerance[1]) },
+  movement: { sprint: Number(sprintMatch[1]) }, charge: Array.from({ length: 4 }, (_, i) => d.chargeF(i)),
   waves: Array.from({ length: 16 }, (_, i) => d.waveComp(i)) }, maps, fixtures,
-  narrative: serialize(narrative) })) {
+  narrative: serialize(narrative), structures: structureReference.worlds })) {
   await writeFile(join(root, 'data', `${name}.json`), JSON.stringify(value));
 }
 for (const folder of ['models/reference', 'models/combat', 'models/factions', 'mech_avatars', 'story']) {
@@ -108,7 +137,7 @@ for (const folder of ['models/reference', 'models/combat', 'models/factions', 'm
 }
 await cp(join(source, 'public/audio'), join(root, 'assets/audio'), { recursive: true });
 await cp(join(source, 'LICENSE'), join(root, 'LICENSE'));
-const inputs = ['public/js/data.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js'];
+const inputs = ['public/js/data.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];
 const hashes = {};
 for (const file of inputs) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
 await writeFile(join(root, 'data/provenance.json'), JSON.stringify({ inputs: hashes, heroes: Object.keys(heroes).length,

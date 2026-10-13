@@ -5,12 +5,14 @@ var maps: Array
 var text: Dictionary
 var constants: Dictionary
 var heroes: Dictionary
+var structures: Dictionary
 
 func _ready() -> void:
 	balance = read_json("res://data/balance.json")
 	maps = read_json("res://data/maps.json")
 	constants = balance.constants
 	heroes = balance.heroes
+	structures = read_json("res://data/structures.json")
 	text = read_json("res://data/ui.json")
 	_install_input()
 

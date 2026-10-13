@@ -25,6 +25,32 @@ Basic controller movement/look and action buttons use Godot's InputMap.
 Only explicitly implemented abilities are available. The UI reports an
 unavailable ability instead of inventing substitute behavior.
 
+Laser-guided launchers freeze the firing-time aim point. Fire-and-forget missiles
+acquire the firing-time exact-ray target or an eligible hero in the source aim
+cone, retaining a valid confirmed anchor; without a target they fly under
+gravity. These warheads now travel and collide on the authority before dealing
+blast damage.
+
+Launch range uses the original target-dependent altitude frame. Confirmed
+locks appear in the pilot's private HUD, refresh at the source quarter-second
+interval and can continue for a missile already in flight after aim release.
+
+Unguided launchers now solve a 45-degree ground throw or a crosshair-selected
+AA trajectory, lowering charge only when the low arc is blocked. A native dashed
+arc shows the authority's launch solution. Firing below the minimum safe range
+can damage the shooter and allies.
+
+Ordinary gun rounds now fly under source gravity and stop at the first observed
+enemy. Penetrating gun rounds pass through bodies and settle their planar line
+damage once the trajectory hits scenery or reaches its range boundary. Beam and
+rail attacks retain the source's instant behavior.
+
+Base guns now launch two independent incoming missiles. They lose guidance when
+the target escapes the launch envelope; intercepted missiles disappear without
+blast damage and award the source bounty. Instant beams, kinetic shots and
+penetrating lines can intercept them. Player FNF/lob warheads remain a separate
+projectile family.
+
 ## Dedicated server
 
 ```powershell
@@ -45,12 +71,27 @@ godot --headless --path . res://tests/run.tscn
 godot --headless --path . res://tests/worlds.tscn
 godot --headless --path . -- --smoke
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -LobControl
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -KineticShots
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -MissileShots
+godot --headless --path . res://tests/lob_preview.tscn
 ```
 
 The test scene compares GDScript against fixtures evaluated by the original
 JavaScript seams, and exercises authority, purchases, ammo, reload deadlines,
 respawn and outcome settlement. Network checks use separate server/client
-processes for both transports. World checks compare source mesh topology,
+processes for both transports; `-LobControl` also checks private fire-control
+snapshots and physical shot segments. `-KineticShots` verifies light-round flight
+and heavy-round termination events. `-MissileShots` checks base launches, missile
+geometry/HP snapshots, fire commands, interception events and bounty replication.
+Structural fixtures compare source blast layers and support-height references,
+including bridge overflow, tunnel portals, gallery exits and all 90 accepted
+world profiles. Native impact checks cover player warheads and SAM fuses.
+`tests/missile_preview.tscn` writes a rendered missile to
+`tests/missile-preview.png` with a graphical display.
+`tests/lob_preview.tscn -- --capture-preview`
+writes a rendered lob HUD/arc to `tests/lob-preview.png` with a graphical display.
+World checks compare source mesh topology,
 ray heights, layered bridge surfaces, tunnel portals and native player support
 under source gravity at the configured physics rate. `--capture` writes a rendered battle view to
 `tests/battle.png`; this command requires a graphical display.

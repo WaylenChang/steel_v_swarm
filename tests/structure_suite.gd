@@ -1,0 +1,227 @@
+class_name StructureSuite
+extends RefCounted
+
+static func run(h: Node, fixtures: Dictionary) -> void:
+	references(h, fixtures)
+	await blasts(h, fixtures.structureBlasts)
+	await physics(h)
+	await tunnel_impacts(h)
+
+static func references(h: Node, fixtures: Dictionary) -> void:
+	var layers := StructureLayers.new()
+	var previous: Array = []
+	for fixture: Dictionary in fixtures.structureSeparation:
+		if fixture.slabs != previous:
+			layers.configure(fixture.slabs)
+			previous = fixture.slabs
+		var result := layers.separated(int(fixture.level), Vector2(fixture.impact[0], fixture.impact[1]), Vector2(fixture.target[0], fixture.target[1]), int(fixture.target_level))
+		h._check(result == fixture.result, "Original slab blast separation: " + fixture.name)
+	previous = []
+	layers.configure([])
+	for fixture: Dictionary in fixtures.structureLevels:
+		if fixture.slabs != previous:
+			layers.configure(fixture.slabs)
+			previous = fixture.slabs
+		h._check(layers.unit_level(fixture.spec, Vector2(fixture.point[0], fixture.point[1])) == int(fixture.result), "Original _unitLev hero/NPC policy")
+	for fixture: Dictionary in fixtures.structureClient:
+		layers.configure([], fixture.decks, fixture.tunnels)
+		var point: Vector3 = h._reference_vector(fixture.point)
+		var planar := Vector2(point.x, point.z)
+		var deck: Variant = layers.deck_height(planar, Content.balance.structure.deckMargin)
+		h._check((deck == null) == (fixture.deck == null), "Original client deck query presence: " + fixture.name)
+		if deck != null and fixture.deck != null:
+			h._near(deck, fixture.deck, "Original client deck height")
+		var tunnel := layers.tunnel_at(planar)
+		h._check(tunnel.is_empty() == fixture.tunnel.is_empty(), "Original client lowest tunnel/open-ramp selection")
+		if not tunnel.is_empty() and not fixture.tunnel.is_empty():
+			h._near(tunnel.floor, fixture.tunnel.floor, "Original tunnel floor interpolation")
+			h._near(tunnel.ceil, fixture.tunnel.ceil, "Original tunnel ceiling interpolation")
+			h._check(tunnel.open == fixture.tunnel.open, "Original open approach tag")
+		h._check(layers.player_level(point, fixture.surface, fixture.ground) == int(fixture.result.level), "Original client bridge/tunnel/rooftop level")
+		h._near(layers.player_reference(point, fixture.surface, fixture.ground), fixture.result.reference, "Original client standing-height reference")
+	for fixture: Dictionary in fixtures.structureWorlds:
+		h._check(Content.structures.has(fixture.key), "Imported native map structure profile exists")
+		layers.configure(Content.structures[fixture.key])
+		h._check(layers.slabs.size() == int(fixture.count), "Original uploader and accepted slab count")
+		for probe: Dictionary in fixture.probes:
+			var point := Vector2(probe.point[0], probe.point[1])
+			h._check(layers.inferred_level(point) == int(probe.level), "Native map source ribbon precedence: " + fixture.key)
+			h._check(layers.separated(2, point, point, 0) == probe.separation, "Native map source blast-grid registration")
+
+static func blasts(h: Node, fixtures: Array) -> void:
+	var sim := BattleSimulation.new()
+	h.add_child(sim)
+	var map_data := Content.map_variant(0, 1)
+	map_data.erase("native_world")
+	await sim.setup(map_data, [], {"time": "day", "weather": "clear"}, true)
+	sim.set_physics_process(false)
+	for unit: BattleUnit in sim.units.values():
+		unit.side = "STEEL"
+	var owner := BattleUnit.new()
+	owner.side = "STEEL"
+	for fixture: Dictionary in fixtures:
+		sim.world.layers.configure(fixture.slabs)
+		var targets := {}
+		for spec: Dictionary in fixture.targets:
+			var target := sim.spawn({"kind": "soldier", "side": spec.side, "lane": 0, "position": Vector3(spec.point[0], 0, spec.point[1])})
+			target.hp = 1000
+			target.armor = 0
+			target.shield = 0
+			targets[int(spec.id)] = target
+		sim.blast(owner, {"dmg": 20.0, "r": 30.0, "pen": 0.0}, Vector3(fixture.impact[0], 1, fixture.impact[1]), fixture.friendly, true, int(fixture.level))
+		for id: int in targets:
+			var expected := 0.0
+			for hit: Dictionary in fixture.hits:
+				if int(hit.id) == id:
+					expected = hit.amount
+			h._check(absf((1000 - targets[id].hp) - expected) < 0.001, "Original layered blast target/damage: " + fixture.name)
+			sim.units.erase(targets[id].entity_id)
+			targets[id].queue_free()
+	owner.free()
+	sim.queue_free()
+	await h.get_tree().process_frame
+
+static func physics(h: Node) -> void:
+	var sim := BattleSimulation.new()
+	h.add_child(sim)
+	var map_data := Content.map_variant(0, 1)
+	map_data.erase("native_world")
+	await sim.setup(map_data, [
+		{"peer": 901, "side": "STEEL", "character": "t03", "bot": false},
+		{"peer": 902, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	sim.set_physics_process(false)
+	var owner: BattleUnit = sim.pilots[901]
+	var target: BattleUnit = sim.pilots[902]
+	owner.position = Vector3(0, 0.1, 20)
+	target.position = Vector3(0, 10.1, 0)
+	var deck := {"x1": -40.0, "z1": 0.0, "y1": 10.0, "x2": 40.0, "z2": 0.0, "y2": 10.0, "hw": 8.0}
+	sim.world.layers.configure([[-40.0, 0.0, 40.0, 0.0, 8.0, 1, 0]], [deck])
+	var platform := StaticBody3D.new()
+	platform.collision_layer = 1 | 16
+	platform.position = Vector3(0, 9.5, 0)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(80, 1, 16)
+	collision.shape = shape
+	platform.add_child(collision)
+	sim.world.add_child(platform)
+	await h.get_tree().physics_frame
+	await h.get_tree().physics_frame
+	h._check(sim._unit_level(target) == 1, "Authority derives a human hero's bridge layer from native support")
+	h._check(absf(sim._missile_target_altitude(target) - 0.1) < 0.001, "Bridge height reference remains the standing deck")
+	target.shield = 0
+	var health := target.hp
+	sim.blast(owner, {"dmg": 20.0, "r": 30.0}, Vector3(0, 1, 0), false, true, 0)
+	h._near(target.hp, health, "Ground blast directly below the same bridge cannot cross its layer")
+	sim.blast(owner, {"dmg": 20.0, "r": 30.0}, Vector3(0, 1, 12), false, true, 0)
+	h._check(target.hp < health, "Source side overflow still reaches bridge heroes")
+	target.hp = health
+	sim.blast(owner, {"dmg": 20.0, "r": 30.0}, Vector3(0, 1, 0), false, true, -1)
+	h._check(target.hp < health, "Absent impact level deliberately bypasses structural separation")
+	target.hp = health
+	var tower := sim.spawn({"kind": "tower", "side": "SWARM", "lane": 0, "position": Vector3(0, 10, 0)})
+	tower.shield = 0
+	var tower_health := tower.hp
+	var def: Dictionary = Content.weapon(owner.character, "heavy").duplicate(true)
+	def.dmg = 20.0
+	def.r = 30.0
+	def.pen = 0.0
+	var round := ProjectileMotion.ballistic(Vector3(4, 20, 0), Vector3(0, -200, 0), 100)
+	round.actor = owner.entity_id
+	round.side = owner.side
+	round.definition = def
+	sim.projectiles.append(round)
+	sim._tick_projectiles(0.1)
+	h._check(sim.projectiles.is_empty() and tower.hp < tower_health, "Physical bridge impact reports source level zero and reaches bridge structures")
+	h._near(target.hp, health, "Physical bridge impact retains source hero layer isolation")
+	sim.world.layers.configure([])
+	h._check(sim._unit_level(target) == 0 and absf(sim._missile_target_altitude(target) - 10.1) < 0.001, "Rooftop without a matching deck uses terrain height reference")
+	sim.queue_free()
+	await h.get_tree().process_frame
+
+static func tunnel_impacts(h: Node) -> void:
+	var sim := BattleSimulation.new()
+	h.add_child(sim)
+	var map_data := Content.map_variant(0, 1)
+	map_data.erase("native_world")
+	await sim.setup(map_data, [
+		{"peer": 911, "side": "STEEL", "character": "t03", "bot": false},
+		{"peer": 912, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	sim.set_physics_process(false)
+	var owner: BattleUnit = sim.pilots[911]
+	var target: BattleUnit = sim.pilots[912]
+	for unit: BattleUnit in sim.units.values():
+		unit.position = Vector3(400, 0, 400)
+	owner.position = Vector3(0, 0.1, 40)
+	target.position = Vector3(0, 0.1, 0)
+	var tunnel := {"x1": -40.0, "z1": 0.0, "fy1": 0.0, "x2": 40.0, "z2": 0.0, "fy2": 0.0, "hw": 8.0, "cy1": 4.0, "cy2": 4.0, "open": false}
+	# Native positive Z is the source negative-lateral gallery side (bit 2).
+	sim.world.layers.configure([[-40.0, 0.0, 40.0, 0.0, 8.0, 2, 2]], [], [tunnel])
+	var gallery := sim.spawn({"kind": "soldier", "side": "SWARM", "lane": 0, "position": Vector3(0, 0.1, 12)})
+	var solid := sim.spawn({"kind": "soldier", "side": "SWARM", "lane": 0, "position": Vector3(0, 0.1, -12)})
+	var portal := sim.spawn({"kind": "soldier", "side": "SWARM", "lane": 0, "position": Vector3(50, 0.1, 0)})
+	for unit in [target, gallery, solid, portal]:
+		unit.hp = 1000
+		unit.shield = 0
+		unit.armor = 0
+	await h.get_tree().physics_frame
+	await h.get_tree().physics_frame
+	h._check(sim._unit_level(target) == 2, "Authority classifies a human below a covered ceiling")
+	target.position.y = 4
+	h._check(sim._unit_level(target) == 0, "Human at the ceiling has exited the tunnel layer")
+	target.is_bot = true
+	h._check(sim._unit_level(target) == 2, "Source bots retain inferred ribbon level without a human report")
+	target.is_bot = false
+	target.position.y = 0.1
+	sim.blast(owner, {"dmg": 20.0, "r": 80.0}, Vector3(0, 1, 0), false, true, 2)
+	h._check(target.hp < 1000 and gallery.hp < 1000, "Same tunnel and open gallery side receive blast")
+	h._near(solid.hp, 1000, "Solid tunnel flank prevents cross-layer blast")
+	h._near(portal.hp, 1000, "Tunnel portal allows sight but prevents cross-layer blast")
+	for unit in [target, gallery, solid]:
+		unit.hp = 1000
+	# Exercise the real physical warhead endpoint, not a direct blast call.
+	var def: Dictionary = Content.weapon(owner.character, "heavy").duplicate(true)
+	def.dmg = 20.0
+	def.r = 30.0
+	def.pen = 0.0
+	def.projectile.arm = {}
+	var round := ProjectileMotion.ballistic(Vector3(4, 2, 0), Vector3(0, -200, 0), 100)
+	round.actor = owner.entity_id
+	round.side = owner.side
+	round.definition = def
+	sim.projectiles.append(round)
+	sim._tick_projectiles(0.02)
+	h._check(sim.projectiles.is_empty() and target.hp < 1000 and gallery.hp < 1000, "Physical lob impact settles covered-tunnel layer and relative body bands")
+	h._near(solid.hp, 1000, "Physical lob cannot leak through the solid tunnel side")
+	for unit in [target, gallery, solid]:
+		unit.hp = 1000
+	var missile := {"actor": owner.entity_id, "side": owner.side, "target": target.entity_id,
+		"position": Vector3(0, 1, 1), "origin": Vector3(0, 1, 1), "speed": 110.0,
+		"dmg": 20.0, "pen": 0.0, "r": 30.0, "hp": 1.0, "ttl": 5.0, "range": 100.0}
+	sim._launch_missile(missile)
+	sim._tick_missiles(0.02)
+	h._check(sim.missiles.is_empty() and target.hp < 1000 and gallery.hp < 1000, "SAM proximity fuse inherits target tunnel layer")
+	h._near(solid.hp, 1000, "SAM target-level fuse preserves solid-side isolation")
+	for unit in [target, gallery, solid]:
+		unit.hp = 1000
+	var wall := StaticBody3D.new()
+	wall.collision_layer = 1
+	wall.position = Vector3(0, 1, 0)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.1, 2, 2)
+	collision.shape = shape
+	wall.add_child(collision)
+	sim.world.add_child(wall)
+	await h.get_tree().physics_frame
+	await h.get_tree().physics_frame
+	missile = missile.duplicate(true)
+	missile.erase("components")
+	missile.position = Vector3(-2, 1, 0)
+	missile.lost = true
+	missile.velocity_components = [200.0, 0.0, 0.0]
+	sim._launch_missile(missile)
+	sim._tick_missiles(0.02)
+	h._check(sim.missiles.is_empty() and solid.hp < 1000, "SAM obstacle blast deliberately omits layer separation")
+	sim.queue_free()
+	await h.get_tree().process_frame

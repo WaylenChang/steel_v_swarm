@@ -8,6 +8,12 @@ var ambience: AudioStreamPlayer
 var native_data: Resource
 var ceiling := 110.0
 var hero_spawns: Dictionary
+var arc_preview: MeshInstance3D
+var arc_mesh: ImmediateMesh
+var arc_material: StandardMaterial3D
+var terrain_rids: Array[RID] = []
+var missile_obstruction_rids: Array[RID] = []
+var layers := StructureLayers.new()
 
 func build(map_data: Dictionary, environment: Dictionary) -> void:
 	bounds = map_data.bounds
@@ -18,6 +24,12 @@ func build(map_data: Dictionary, environment: Dictionary) -> void:
 			get_tree().quit(1)
 			return
 		native_data = load(map_data.native_world)
+		var key: String = map_data.native_world.get_file().get_basename()
+		if not Content.structures.has(key):
+			push_error("Required source structure profile is missing: " + key)
+			get_tree().quit(1)
+			return
+		layers.configure(Content.structures[key], native_data.decks, native_data.tunnels)
 		if native_data.bounds != bounds:
 			push_error("Native world bounds do not match the selected map")
 			get_tree().quit(1)
@@ -36,7 +48,8 @@ func build(map_data: Dictionary, environment: Dictionary) -> void:
 	var size := Vector3(bounds.maxX - bounds.minX, 2, bounds.maxZ - bounds.minZ)
 	var center := Vector3((bounds.minX + bounds.maxX) / 2, -1, (bounds.minZ + bounds.maxZ) / 2)
 	if native_data == null:
-		_box(size, center, floor_material, true)
+		var floor_body := _box(size, center, floor_material, true)
+		floor_body.collision_layer = 1 | 8
 	var wall_material := StandardMaterial3D.new()
 	wall_material.albedo_color = Color("27383e")
 	var wall_bottom: float = native_data.min_height - 20 if native_data != null else 0.0
@@ -115,7 +128,7 @@ func _build_road(points: Array) -> void:
 	instance.material_override = material
 	add_child(instance)
 
-func _box(size: Vector3, center: Vector3, material: Material, solid: bool) -> void:
+func _box(size: Vector3, center: Vector3, material: Material, solid: bool) -> StaticBody3D:
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = size
@@ -132,6 +145,18 @@ func _box(size: Vector3, center: Vector3, material: Material, solid: bool) -> vo
 		collision.shape = shape
 		body.add_child(collision)
 		add_child(body)
+		return body
+	return null
+
+func obstruction_hit(start: Vector3, end: Vector3, include_slabs: bool = true) -> Dictionary:
+	var excluded: Array[RID] = terrain_rids if include_slabs else missile_obstruction_rids
+	if excluded.is_empty():
+		for body in find_children("*", "StaticBody3D", true, false):
+			if int(body.collision_layer) & (8 if include_slabs else 8 | 16 | 32 | 64):
+				excluded.append(body.get_rid())
+	var query := PhysicsRayQueryParameters3D.create(start, end, 1, excluded)
+	query.hit_back_faces = true
+	return get_world_3d().direct_space_state.intersect_ray(query)
 
 func spawn_position(side: String, slot: int = 0, flying: bool = false) -> Vector3:
 	var source_position: Array = hero_spawns[side][slot].position
@@ -174,4 +199,36 @@ func tracer(start: Vector3, end: Vector3, side: String) -> void:
 	var tween := create_tween()
 	tween.tween_interval(0.08)
 	tween.tween_callback(beam.queue_free)
+
+func aim_arc(control: Dictionary) -> void:
+	if arc_preview == null and control.is_empty():
+		return
+	if arc_preview == null:
+		arc_preview = MeshInstance3D.new()
+		arc_mesh = ImmediateMesh.new()
+		arc_material = StandardMaterial3D.new()
+		arc_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		arc_preview.mesh = arc_mesh
+		arc_preview.material_override = arc_material
+		arc_preview.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(arc_preview)
+	arc_preview.visible = not control.is_empty()
+	if control.is_empty():
+		return
+	var colors: Dictionary = Content.balance.projectilePreview.colors
+	var color := Color(Content.constants.SIDES[control.side].color)
+	for key in ["close", "blocked", "aa", "high"]:
+		if (not control.ok if key == "blocked" else control.get(key, false)):
+			color = Color.hex((int(colors[key]) << 8) | 0xff)
+			break
+	arc_material.albedo_color = color
+	arc_mesh.clear_surfaces()
+	var points: PackedVector3Array = control.points
+	if points.size() < 2:
+		return
+	arc_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	for index in range(0, points.size() - 1, 2):
+		arc_mesh.surface_add_vertex(points[index])
+		arc_mesh.surface_add_vertex(points[index + 1])
+	arc_mesh.surface_end()
 

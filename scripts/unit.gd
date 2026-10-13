@@ -7,6 +7,7 @@ var side: String
 var kind: String
 var character: String = ""
 var lane: int = 0
+var has_lane := false
 var spawn_slot: int = 0
 var is_bot := false
 var hp := 0.0
@@ -42,9 +43,17 @@ var animation_player: AnimationPlayer
 var path_follower: PathFollow3D
 var reaction_at := 0.0
 var bot_target := 0
+var aim_anchor := 0
+var lock_target := 0
+var lock_at := -100.0
+var lock_check_at := 0.0
+var lock_keep_index := 0
+var aim_off_at := -100.0
+var gun_cooldowns: Array[float] = []
 var animation_until := 0.0
 var movement_shape: CollisionShape3D
 var hit_area: Area3D
+var presentation_visible := true
 
 func configure(info: Dictionary) -> void:
 	entity_id = int(info.id)
@@ -53,6 +62,7 @@ func configure(info: Dictionary) -> void:
 	kind = info.kind
 	character = info.get("character", "")
 	lane = int(info.get("lane", 0))
+	has_lane = info.has("lane")
 	spawn_slot = int(info.get("spawn_slot", 0))
 	is_bot = info.get("bot", false)
 	var unit: Dictionary = Content.constants.UNITS[kind]
@@ -141,6 +151,16 @@ func alive() -> bool:
 
 func eye() -> Vector3:
 	return global_position + Vector3.UP * height * Content.constants.SELF_F.eye
+
+func sight_origin() -> Vector3:
+	return global_position + Vector3.UP * (Content.constants.LOS.TOWER_EYE_M if kind == "tower" else Content.constants.LOS.EYE_M)
+
+func sight_target() -> Vector3:
+	return global_position + Vector3.UP * (Content.constants.LOS.TOWER_EYE_M if kind in ["base", "tower"] else Content.constants.LOS.TGT_M)
+
+func sight_radius() -> float:
+	var reach: float = Content.constants.UNITS[kind].get("sight", 0)
+	return reach * Content.constants.GAME.AIM_SIGHT_MULT if is_hero() and input_state.get("aim", false) else reach
 
 func refresh_collision() -> void:
 	if movement_shape == null or hit_area == null:

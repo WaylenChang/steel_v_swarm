@@ -29,10 +29,13 @@ func _physics_process(delta: float) -> void:
 		fixture_pilot.yaw = fixture_pilot.input_state.get("yaw", 0)
 		fixture_pilot.pitch = fixture_pilot.input_state.get("pitch", 0)
 		if elapsed - started_at > .8 and not air_started:
-			simulation.action(fixture_pilot.peer_id, "morph")
+			# This fixture isolates camera binding; charged movement has its own source oracle.
+			fixture_pilot.flying = true
+			fixture_pilot.refresh_collision()
 			air_started = true
 		elif elapsed - started_at > 1.6 and not ground_restored:
-			simulation.action(fixture_pilot.peer_id, "morph")
+			fixture_pilot.flying = false
+			fixture_pilot.refresh_collision()
 			ground_restored = true
 		return
 	yaw = .7

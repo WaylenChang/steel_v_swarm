@@ -9,6 +9,10 @@ var menu: PanelContainer
 var shop: PanelContainer
 var hud: Control
 var stats: Label
+var scoreboard: VBoxContainer
+var score_rows: Dictionary = {}
+var feed: BattleFeed
+var civilian_prompt: Label
 var ammo_label: Label
 var notice: Label
 var room_label: Label
@@ -17,6 +21,7 @@ var side_select: OptionButton
 var character_select: OptionButton
 var time_select: OptionButton
 var weather_select: OptionButton
+var season_select: OptionButton
 var size_select: SpinBox
 var address: LineEdit
 var port: SpinBox
@@ -29,6 +34,8 @@ var pitch := 0.0
 var held_jump := false
 var overlay_open := false
 var shop_buttons: Dictionary = {}
+var creep_buttons: Array[Button] = []
+var creep_shop_column: VBoxContainer
 var smoke := false
 var capture := false
 var smoke_time := 0.0
@@ -132,13 +139,21 @@ func _build_ui() -> void:
 	_row(column, "character", character_select)
 	side_select.item_selected.connect(func(_index): _refresh_characters())
 	_refresh_characters()
+	season_select = OptionButton.new()
+	for key: String in Content.constants.ENV.seasons:
+		season_select.add_item(Content.constants.ENV.seasons[key].name)
+		season_select.set_item_metadata(season_select.item_count - 1, key)
+	season_select.select(1)
+	_row(column, "season", season_select)
 	time_select = OptionButton.new()
-	for key in ["day", "dusk", "night"]:
-		time_select.add_item(Content.label(key))
+	for key in ["day", "dusk", "night", "dawn"]:
+		time_select.add_item(Content.constants.ENV.times[key].name)
+		time_select.set_item_metadata(time_select.item_count - 1, key)
 	_row(column, "time", time_select)
 	weather_select = OptionButton.new()
-	for key in ["clear", "fog"]:
-		weather_select.add_item(Content.label(key))
+	for key: String in Content.constants.ENV.weathers:
+		weather_select.add_item(Content.constants.ENV.weathers[key].name)
+		weather_select.set_item_metadata(weather_select.item_count - 1, key)
 	_row(column, "weather", weather_select)
 	address = LineEdit.new()
 	address.text = "127.0.0.1"
@@ -171,11 +186,26 @@ func _build_ui() -> void:
 	stats = _label("", 22)
 	stats.position = Vector2(24, 20)
 	hud.add_child(stats)
+	scoreboard = VBoxContainer.new()
+	scoreboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(scoreboard)
+	feed = BattleFeed.new()
+	hud.add_child(feed)
+	feed.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	feed.position = Vector2(-730, 20)
+	feed.size = Vector2(420, 0)
+	feed.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ammo_label = _label("", 22)
 	ammo_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	ammo_label.position = Vector2(24, -105)
 	ammo_label.size = Vector2(950, 80)
 	hud.add_child(ammo_label)
+	civilian_prompt = _label("", 16)
+	civilian_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	civilian_prompt.position = Vector2(-300, -50)
+	civilian_prompt.size = Vector2(600, 40)
+	civilian_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud.add_child(civilian_prompt)
 	var crosshair := _label("+", 28)
 	crosshair.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	crosshair.position = Vector2(-8, -20)
@@ -197,7 +227,11 @@ func _build_ui() -> void:
 	shop = _panel(Vector2(700, 610))
 	var shop_column := VBoxContainer.new()
 	shop_column.add_theme_constant_override("separation", 12)
-	shop.add_child(shop_column)
+	var shop_scroll := ScrollContainer.new()
+	shop_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	shop.add_child(shop_scroll)
+	shop_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_scroll.add_child(shop_column)
 	shop_column.add_child(_label(Content.label("shop"), 26))
 	shop_column.add_child(_label(Content.label("shop_hint"), 15))
 	for item in Content.constants.ECON.UPGRADES:
@@ -205,6 +239,10 @@ func _build_ui() -> void:
 		var button := _button(Content.constants.ECON.UPGRADES[item].name, func(): Session.act("buy", track))
 		shop_column.add_child(button)
 		shop_buttons[item] = button
+	shop_column.add_child(_label(Content.label("creep_hint"), 14))
+	creep_shop_column = VBoxContainer.new()
+	creep_shop_column.add_theme_constant_override("separation", 8)
+	shop_column.add_child(creep_shop_column)
 	shop_column.add_child(_button(Content.label("close"), func(): _overlay(shop, false)))
 	root.add_child(shop)
 	shop.hide()
@@ -272,7 +310,8 @@ func _start_mode(mode: String) -> void:
 		error = Session.join(address.text.strip_edges(), int(port.value))
 	else:
 		var settings := {"map_index": map_select.selected, "team_size": int(size_select.value),
-			"env": {"time": ["day", "dusk", "night"][time_select.selected], "weather": ["clear", "fog"][weather_select.selected]}}
+			"env": {"season": season_select.get_item_metadata(season_select.selected), "time": time_select.get_item_metadata(time_select.selected),
+				"weather": weather_select.get_item_metadata(weather_select.selected)}}
 		error = Session.host(settings, int(port.value), mode)
 	if error != OK:
 		_status("host_failed" if mode != "join" else "failed")
@@ -297,6 +336,7 @@ func _begin_battle(settings: Dictionary, players: Array) -> void:
 	add_child(simulation)
 	var map_data := Content.map_variant(int(settings.map_index), int(settings.team_size))
 	await simulation.setup(map_data, players, settings.env, Session.multiplayer.is_server())
+	_refresh_creep_shop()
 	Session.simulation = simulation
 	if simulation.authoritative and not Session.dedicated:
 		simulation.apply_presentation_view(simulation.snapshot(multiplayer.get_unique_id()))
@@ -309,6 +349,7 @@ func _begin_battle(settings: Dictionary, players: Array) -> void:
 	lobby.hide()
 	hud.show()
 	notice.text = ""
+	feed.clear()
 	if not Session.dedicated:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
@@ -342,6 +383,13 @@ func _process(delta: float) -> void:
 	if simulation.authoritative:
 		simulation.world.sync_projectile_view(simulation.projectile_view(pilot))
 	simulation.world.step_projectile_visuals(delta)
+	simulation.world.sync_fogs(simulation._fog_snapshot() if simulation.authoritative else simulation.fog_view, pilot.side, clock)
+	simulation.world.update_mine_view(pilot.global_position, clock)
+	var civilian := simulation.nearest_civilian(pilot)
+	civilian_prompt.visible = civilian != null and not overlay_open
+	if civilian != null:
+		var appearance := CivilianRules.appearance(civilian.entity_id, int(civilian.special.profession))
+		civilian_prompt.text = Content.label("civilian_prompt") % [appearance.occupation, Content.side_info(civilian.special.civil_side).name]
 
 func _unhandled_input(event: InputEvent) -> void:
 	if simulation == null or Session.dedicated:
@@ -365,12 +413,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		Session.act("cast", "def")
 	if event.is_action_pressed("attack"):
 		Session.act("cast", "atk")
-	if event.is_action_pressed("morph"):
-		Session.act("morph")
+	if event.is_action_pressed("defend"):
+		var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+		if pilot != null:
+			Session.act("defend", "off" if pilot.defending else "on")
 	if event.is_action_pressed("map"):
 		minimap.size = Vector2(600, 520) if minimap.size.x < 300 else Vector2(250, 220)
 		minimap.position.x = -minimap.size.x - 20
 		minimap.queue_redraw()
+	for action_name: String in ["civ_follow", "civ_away"]:
+		if event.is_action_pressed(action_name):
+			var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+			if pilot != null:
+				var civilian := simulation.nearest_civilian(pilot)
+				if civilian != null:
+					Session.act(action_name, str(civilian.entity_id))
 	if event.is_action_pressed("rise"):
 		held_jump = true
 
@@ -384,6 +441,7 @@ func _physics_process(delta: float) -> void:
 	var command := {"move": Input.get_vector("left", "right", "forward", "back") if not overlay_open else Vector2.ZERO,
 		"yaw": yaw, "pitch": pitch, "vertical": Input.get_axis("descend", "rise") if not overlay_open else 0.0,
 		"jump": held_jump and not overlay_open, "fire": Input.is_action_pressed("fire") and not overlay_open,
+		"jump_held": Input.is_action_pressed("rise") and not overlay_open,
 		"slot": selected_slot, "aim": Input.is_action_pressed("aim") and not overlay_open,
 		"sprint": Input.is_action_pressed("sprint") and not overlay_open}
 	held_jump = false
@@ -450,11 +508,15 @@ func _receive_state(state: Dictionary) -> void:
 	if Session.multiplayer.is_server():
 		simulation.apply_presentation_view(state)
 		for event in state.events:
+			if event.type == "lightning_strike":
+				simulation.world.present_lightning(event.points)
 			if event.type == "shot":
 				simulation.present_shot(event)
 	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
 	if pilot == null:
 		return
+	for event: Dictionary in state.events:
+		_supply_notice(event, pilot)
 	simulation.apply_footprint({} if shop.visible else state.get("footprint", {}), state.get("lock", {}))
 	var control: Dictionary = state.get("fire_control", {})
 	if network_kinetic_test:
@@ -487,6 +549,35 @@ func _receive_state(state: Dictionary) -> void:
 		Content.label("hp"), pilot.hp, pilot.max_hp, Content.label("shield"), pilot.shield, pilot.max_shield,
 		Content.label("power"), pilot.power, Content.label("credits"), pilot.money,
 		Content.label("score"), pilot.score, Content.label("wave"), int(state.wave)]
+	stats.text += "\n%s %.0f/%.0f" % [Content.label("lift"), maxf(0, pilot.lift), Content.constants.FLIGHT.LIFT_MAX]
+	if pilot.defending:
+		stats.text += " · " + Content.label("defending")
+	for slot: String in ["def", "atk"]:
+		var ability := Content.ability(pilot.character, slot, int(pilot.upgrades[slot]) + 1)
+		var cooldown: float = pilot.cooldowns.get(slot, 0)
+		var remaining := 1 if cooldown <= state.clock else 0
+		if int(ability.charges) > 1:
+			var charge: Dictionary = pilot.ability_charges.get(slot, {})
+			var deadlines: Array = charge.get("recharge_at", []).filter(func(deadline): return float(deadline) > state.clock)
+			remaining = maxi(0, int(ability.charges) - deadlines.size())
+			cooldown = deadlines.min() if remaining == 0 and not deadlines.is_empty() else 0.0
+		stats.text += "\n%s · %s %d/%d" % [ability.name, Content.label("charges"), remaining, int(ability.charges)]
+		if cooldown > state.clock:
+			stats.text += " · %.1f" % (cooldown - state.clock)
+	if not pilot.cast_state.is_empty():
+		stats.text += "\n%s %.1f" % [Content.label("casting"), maxf(0, float(pilot.cast_state.start) + float(pilot.cast_state.duration) - state.clock)]
+	scoreboard.position = Vector2(stats.position.x, stats.position.y + stats.get_minimum_size().y + 12)
+	var standings: Dictionary = state.get("stats", {})
+	for side: String in standings:
+		if not score_rows.has(side):
+			var row := _label("", 16)
+			row.add_theme_color_override("font_color", Color(Content.side_info(side).color))
+			scoreboard.add_child(row)
+			score_rows[side] = row
+		var total: Dictionary = standings[side]
+		score_rows[side].text = Content.label("match_stats") % [Content.side_info(side).name, int(total.kills), int(total.assists), int(total.creepKills), int(total.deaths)]
+	for side: String in score_rows:
+		score_rows[side].visible = standings.has(side)
 	var definition := Content.weapon(pilot.character, selected_slot, int(pilot.upgrades.lw if selected_slot == "light" else pilot.upgrades.hw) + 1)
 	ammo_label.text = "%s\n%s %d/%d" % [definition.name, Content.label("ammo"), int(pilot.ammo.get(selected_slot, 0)), int(definition.mag)]
 	if pilot.reload_at.has(selected_slot):
@@ -515,7 +606,26 @@ func _receive_state(state: Dictionary) -> void:
 		else:
 			var step: Dictionary = Content.constants.ECON.UPG_STEPS[level]
 			button.text = "%s Lv%d · $%d · %s %d" % [def.name, level, int(step.price), Content.label("score"), int(step.score)]
-			button.disabled = pilot.money < step.price or pilot.score < step.score or pilot.position.distance_to(simulation.world.bases[pilot.side]) > Content.constants.GAME.HERO_HEAL_RADIUS
+			button.disabled = pilot.money < step.price or pilot.score < step.score
+	var levels: Array = simulation.creep_upgrades.get(pilot.side, [])
+	for lane in range(creep_buttons.size()):
+		var button: Button = creep_buttons[lane]
+		var level: int = int(levels[lane]) if lane < levels.size() else 0
+		var rule: Dictionary = Content.constants.CREEP_UPG
+		button.text = "%s %d · Lv%d · $%d" % [Content.label("creep_upgrade"), lane + 1, level, int(rule.PRICE)]
+		button.disabled = lane >= levels.size() or not simulation.upgrades_maxed(pilot) or level >= int(rule.MAX) or pilot.money < rule.PRICE
+
+func _refresh_creep_shop() -> void:
+	if creep_shop_column == null:
+		return
+	creep_buttons.clear()
+	for child: Node in creep_shop_column.get_children():
+		child.queue_free()
+	for lane in range(simulation.world.paths.size()):
+		var selected_lane := lane
+		var button := _button(Content.label("creep_upgrade"), func(): Session.act("buy_creep", str(selected_lane)))
+		creep_shop_column.add_child(button)
+		creep_buttons.append(button)
 
 func _overlay(panel: Control, show_panel: bool) -> void:
 	menu.hide()
@@ -529,6 +639,57 @@ func _overlay(panel: Control, show_panel: bool) -> void:
 func _result(winner: String) -> void:
 	notice.text = Content.label("victory" if winner == Session.chosen_side else "defeat")
 	_overlay(menu, true)
+
+func _supply_notice(event: Dictionary, pilot: BattleUnit) -> void:
+	var own := int(event.get("peer", 0)) == pilot.peer_id or int(event.get("actor", 0)) == pilot.entity_id
+	match event.type:
+		"civact":
+			if own:
+				feed.push_message(Content.label("civilian_away" if event.action == "away" else "civilian_follow"))
+		"civfree":
+			if own:
+				feed.push_message(Content.label("civilian_freed") % int(event.count))
+		"civaid":
+			if own:
+				var name := CivilianRules.appearance(int(event.civilian), int(event.profession)).occupation
+				var reward := Content.label("civilian_medkit") % [int(event.hp), int(event.shield)] if event.reward == "medkit" else Content.label("civilian_battery") % [int(event.power), float(event.cooldown)] if event.reward == "battery" else Content.label("civilian_money") % int(event.value)
+				feed.push_message(Content.label("civilian_aid") % [name, reward])
+		"civkill":
+			if own:
+				var who := Content.label("civilian_enemy_spy" if event.spy and event.civil_side != pilot.side else "civilian_own_spy" if event.spy else "civilian_enemy" if event.civil_side != pilot.side else "civilian_own")
+				feed.push_message(Content.label("civilian_killed") % [who, int(event.value)])
+		"airfall":
+			feed.push_message(Content.label("airfall") % int(event.count))
+		"airdrop":
+			if own:
+				var size_name := Content.label("airdrop_size_" + str(event.size))
+				match event.reward:
+					"medkit": feed.push_message(Content.label("airdrop_medkit") % [size_name, int(event.hp), int(event.shield)])
+					"battery": feed.push_message(Content.label("airdrop_battery") % [size_name, int(event.power), float(event.cooldown)])
+					_: feed.push_message(Content.label("airdrop_money") % [size_name, int(event.value)])
+			elif event.side != pilot.side:
+				feed.push_message(Content.label("airdrop_enemy") % Content.side_info(event.side).name)
+		"loot":
+			if not own:
+				return
+			if event.get("ammo", false):
+				feed.push_message(Content.label("loot_ammo"))
+			elif event.get("affix", "") != "":
+				var affix: Dictionary = Content.constants.AFFIXES[event.affix]
+				feed.push_message(Content.label("loot_affix") % [affix.name, affix.desc, float(affix.dur)])
+			else:
+				feed.push_message(Content.label("loot_money") % int(event.value))
+		"relay":
+			if event.side == pilot.side:
+				feed.push_message(Content.label("relay_allied") % int(Content.constants.FIELD.RELAY.VISION_S))
+			else:
+				feed.push_message(Content.label("relay_enemy") % Content.side_info(event.side).name)
+		"sam":
+			if int(event.get("target_peer", 0)) == pilot.peer_id or int(event.get("target", 0)) == pilot.entity_id:
+				feed.push_message(Content.label("ambush_warning"))
+		"mine_blast":
+			if own:
+				feed.push_message(Content.label("mine_warning"))
 
 func _status(key: String) -> void:
 	notice.text = Content.label(key)

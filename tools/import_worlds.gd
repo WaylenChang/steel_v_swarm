@@ -35,6 +35,8 @@ func _run() -> void:
 			if entry.transparent:
 				material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			instance.material_override = material
+			if entry.get("water", false):
+				instance.set_meta("source_water", true)
 			scene_root.add_child(instance)
 			instance.owner = scene_root
 			if entry.terrain:
@@ -88,8 +90,10 @@ func _run() -> void:
 				wall.x2 += normal.x * side * tunnel.hw
 				wall.z2 += normal.y * side * tunnel.hw
 				_wall(wall_body, scene_root, wall, tunnel.fy1, tunnel.fy2, tunnel.get("by1", tunnel.cy1), tunnel.get("by2", tunnel.cy2))
-		for column in data.columns:
+		for index in range(data.columns.size()):
+			var column: Dictionary = data.columns[index]
 			var collision := CollisionShape3D.new()
+			collision.set_meta("source_column_index", index)
 			collision.position = Vector3(column.x, column.y + column.h / 2, column.z)
 			if column.has("hw2") and column.has("hd2"):
 				var box := BoxShape3D.new()
@@ -114,6 +118,11 @@ func _run() -> void:
 		resource.decks = data.decks
 		resource.tunnels = data.tunnels
 		resource.columns = data.columns
+		if not data.has("corridors"):
+			push_error("Missing original corridor clearance capture: " + file)
+			get_tree().quit(1)
+			return
+		resource.corridors = data.corridors
 		resource.probes = data.probes
 		resource.lane_heights = data.laneHeights
 		resource.deck_probes = data.deckProbes
@@ -121,6 +130,13 @@ func _run() -> void:
 		resource.max_height = data.maxH
 		resource.average_height = data.avgH
 		resource.ceiling = data.ceiling
+		if not data.has("heightField") or not data.has("waterProfile"):
+			push_error("Missing original terrain/water capture: " + file)
+			get_tree().quit(1)
+			return
+		resource.terrain_grid = int(data.grid)
+		resource.terrain_heights = PackedFloat32Array(data.heightField)
+		resource.water_profile = data.waterProfile
 		var target := output + "/" + file.get_basename() + ".res"
 		var error := ResourceSaver.save(resource, target, ResourceSaver.FLAG_COMPRESS)
 		scene_root.free()

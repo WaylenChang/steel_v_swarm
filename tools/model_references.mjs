@@ -67,6 +67,8 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
       const THREE = await import('three');
       const d = await import('/js/data.js');
       const { makeUnit } = await import('/js/models.js');
+      const { buildHazard, buildLoot, buildAirdrop, buildMineBump, stepFireVisual } = await import('/js/hazards.js');
+      const { WEATHER_SURFACE } = await import('/js/weatherState.js');
       const { disposeTree } = await import('/js/toon.js');
       const { glowTexture, projectileMesh, stepProjectileFx } = await import('/js/vfx.js');
       const { BattleClient, COCKPIT } = await import('/js/game.js');
@@ -83,6 +85,13 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           result: elevation({ vel: new THREE.Vector3().fromArray(velocity) }, forwardY, d.BALLISTIC) });
       }
       const geometry = { heroes: {}, units: {} }, modelCentres = [], cockpits = {}, cockpitGraphs = {}, cockpitMuzzles = [], cockpitPoses = [], cockpitVisibility = [];
+      const companionGraphs = {}, companionProfiles = {}, companionGeometry = [];
+      const hazardGraphs = {}, hazardProfiles = {};
+      const lootGraphs = {}, lootProfiles = {}, lootVisuals = [];
+      const mineVisuals = [];
+      const sceneCollapsePoses = [];
+      const airdropVisuals = [];
+      const fireVisuals = [];
       const weaponPresentation = [], authorityWeaponPoses = [], burstWeaponPoses = [], muzzleLaunches = [];
       const cockpitFlash = [], flashTick = new Function('dt','Math',flashBody);
       for (const heavy of [false,true]) for (const dt of [0,1/60,.044,.045,.046,.09]) for (const sample of [0,.5,1-Number.EPSILON]) {
@@ -130,6 +139,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           const index = meshes.length;
           meshIds.set(geometry, index);
           meshes.push({ position: Array.from(geometry.attributes.position.array),
+            color: geometry.attributes.color ? Array.from(geometry.attributes.color.array) : [],
             normal: geometry.attributes.normal ? Array.from(geometry.attributes.normal.array) : [],
             uv: geometry.attributes.uv ? Array.from(geometry.attributes.uv.array) : [],
             indices: geometry.index ? Array.from(geometry.index.array) : [], groups: geometry.groups });
@@ -141,6 +151,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
             matrix: node.matrix.toArray(), visible: node.visible };
           if (node.isMesh) {
             result.mesh = meshOf(node.geometry);
+            result.castShadow = !!node.castShadow;
             result.materials = (Array.isArray(node.material) ? node.material : [node.material]).map(materialOf);
             node.geometry.computeBoundingBox();
             const box = node.geometry.boundingBox.clone().applyMatrix4(node.matrixWorld);
@@ -504,8 +515,143 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           geometry.units[kind][side] = capture('', kind, side, key);
         }
       }
+      for(const side of ['GUER','MILI'])for(const kind of [...new Set(['bunker',...d.THIRD.COMP[side]])]) {
+        const key=`${side.toLowerCase()}_${kind}`,modelKey=kind==='bunker'?'bunker':`creep:${kind}`;
+        const body=makeUnit(modelKey,side,{ring:true}).group;
+        body.updateMatrixWorld(true);
+        const graph=graphOf(body,true).data,dimensions=capture('',kind,side,modelKey);
+        geometry.units[kind]??={};geometry.units[kind][side]=dimensions;
+        companionGraphs[key]=graph;
+        companionProfiles[key]={kind,side,modelKey,radius:d.hitR({kind,side}),height:d.hitH({kind,side}),dimensions};
+        companionGeometry.push({key,meshes:graph.nodes.filter(n=>n.mesh!=null).map(n=>({id:n.id,bounds:n.worldBounds})),profile:companionProfiles[key],dimensions});
+        disposeTree(body);
+      }
+      for(const side of ['SWARM','STEEL'])for(let profession=0;profession<d.CIVILIANS.length;profession++) {
+        const key=`${side.toLowerCase()}_civilian_${String(profession).padStart(2,'0')}`,body=makeUnit('civ',side,{ch:profession,appearanceSeed:0,ring:true}).group;
+        body.updateMatrixWorld(true);
+        const graph=graphOf(body,true).data;
+        const dims=measure(THREE,body,'civ',{k:'civilian',s:side,pf:profession},true,new Map());
+        const dimensions={top:dims.dimTop,height:dims.dimH,radius:dims.dimR,centre:dims.dimTop-dims.dimH/2};
+        companionGraphs[key]=graph;
+        companionProfiles[key]={kind:'civilian',side,profession,seed:0,body:d.civilianBody(0),radius:d.hitR({kind:'civilian',civ:true,id:0}),height:d.hitH({kind:'civilian',civ:true,id:0}),dimensions};
+        companionGeometry.push({key,meshes:graph.nodes.filter(n=>n.mesh!=null).map(n=>({id:n.id,bounds:n.worldBounds})),profile:companionProfiles[key],dimensions});
+        disposeTree(body);
+      }
+      for (const kind of ['drone_wingman','assault_rover','heli_squad','main_battle_tank','veteran_squad','carnival_heli','decoy_beacon','decoy','hyper']) {
+        geometry.units[kind] = {};
+        // Source UNIT_KEYS renders the hologram with the dedicated wingman body.
+        const modelKey = ['decoy','hyper'].includes(kind) ? kind : `summon:${kind === 'decoy_beacon' ? 'drone_wingman' : kind}`;
+        for (const side of ['STEEL','SWARM']) {
+          const key = `${side.toLowerCase()}_${kind}`;
+          const body = makeUnit(modelKey, side, {ring:!['decoy','hyper'].includes(kind)}).group;
+          body.updateMatrixWorld(true);
+          const graph = graphOf(body,true).data;
+          companionGraphs[key] = graph;
+          companionProfiles[key] = {kind,side,modelKey,radius:d.hitR({kind,side}),height:d.hitH({kind,side})};
+          geometry.units[kind][side] = capture('',kind,side,modelKey);
+          companionProfiles[key].dimensions = geometry.units[kind][side];
+          companionGeometry.push({key,meshes:graph.nodes.filter(n=>n.mesh != null).map(n=>({id:n.id,bounds:n.worldBounds})),
+            profile:companionProfiles[key],dimensions:geometry.units[kind][side]});
+          disposeTree(body);
+        }
+      }
+      for (const [character,hero] of Object.entries(d.CHARACTERS)) {
+        for (const side of ['STEEL','SWARM']) {
+          const key=`${side.toLowerCase()}_${character}_kami`,modelKey='hero:drone';
+          const body=makeUnit(modelKey,side,{ch:character,ring:false}).group;
+          body.scale.setScalar(d.SQUAD.KAMI.SIZE_F);
+          body.updateMatrixWorld(true);
+          const dims=measure(THREE,body,modelKey,{k:'kami',ch:character,s:side},false,new Map());
+          const dimensions={top:dims.dimTop,height:dims.dimH,radius:dims.dimR,centre:dims.dimTop-dims.dimH/2};
+          const graph=graphOf(body,true).data;
+          companionGraphs[key]=graph;
+          companionProfiles[key]={kind:'kami',side,character,modelKey,radius:d.hitR({kind:'kami',ch:character}),height:d.hitH({kind:'kami',ch:character}),dimensions};
+          companionGeometry.push({key,meshes:graph.nodes.filter(n=>n.mesh != null).map(n=>({id:n.id,bounds:n.worldBounds})),
+            profile:companionProfiles[key],dimensions});
+          disposeTree(body);
+        }
+      }
+      for(const key of [...Object.keys(d.HAZARDS),'aasite','relay','fire_lightning']) {
+        const kind=key==='fire_lightning'?'fire':key, radius=key==='fire_lightning'?WEATHER_SURFACE.strikeR:(d.HAZARDS[kind]?.r??6);
+        const body=buildHazard(kind,0,radius);body.updateMatrixWorld(true);
+        const graph=graphOf(body,true);
+        graph.data.fireFx={flames:(body.userData.flames||[]).map(node=>({id:graph.ids.get(node),height:node.userData.h0,phase:node.userData.ph,
+          origin:node.userData.fireOrigin.toArray(),scale:node.userData.fireScale.toArray(),opacity:node.userData.fireOpacity})),
+          smoke:(body.userData.smoke||[]).map(node=>({id:graph.ids.get(node),origin:node.userData.fireOrigin.toArray(),scale:node.userData.fireScale.toArray(),opacity:node.userData.fireOpacity}))};
+        const bounds=new THREE.Box3().setFromObject(body);
+        const dimensions={radius:Math.max(1,(bounds.max.x-bounds.min.x)/2,(bounds.max.z-bounds.min.z)/2),
+          height:Math.max(1,bounds.max.y-bounds.min.y),top:Math.max(1,bounds.max.y),centre:(bounds.min.y+bounds.max.y)/2};
+        hazardGraphs[key]=graph.data;hazardProfiles[key]={kind,seed:0,radius,dimensions,fx:graph.data.fireFx};
+        if(!graph.data.fireFx.flames.length&&!graph.data.fireFx.smoke.length) {disposeTree(body);continue;}
+        for(const now of [0,.125,1,3.7])for(const weather of [{rain:0,snow:0,wind:0,windDir:[1,0]},
+          {rain:0,snow:0,wind:100,windDir:[.6,-.8]}, {rain:77.5,snow:0,wind:0,windDir:[1,0]}, {rain:100,snow:0,wind:100,windDir:[1,0]}]) {
+          stepFireVisual(body,now,d.fireDotMul(weather),weather);
+          const state=nodes=>nodes.map(node=>({id:graph.ids.get(node),visible:node.visible,position:node.position.toArray(),scale:node.scale.toArray(),
+            rotation:node.rotation.toArray().slice(0,3),opacity:node.material.opacity}));
+          fireVisuals.push({key,now,weather,flames:state(body.userData.flames||[]),smoke:state(body.userData.smoke||[])});
+        }
+        disposeTree(body);
+      }
+      const collapseKind=Object.keys(d.SCENE_STRUCT.TYPE)[0];
+      for(const id of [42,43])for(const instant of [false,true]) {
+        const body=buildHazard(collapseKind,id,d.HAZARDS[collapseKind].r);
+        const scale=[1.2,1.7,.9],rotation=[.13,.21,-.17];
+        body.scale.fromArray(scale);body.rotation.set(...rotation);
+        const ent={id,kind:collapseKind,mesh:body,collapsed:false,colR:12,colH:6,dimH:6,dimR:12};
+        const client={effects:[],damaged:new Set(),scene:new THREE.Scene()};
+        BattleClient.prototype._applyCollapse.call(client,ent,instant);
+        for(const remaining of instant?[0]:[1,.75,.5,.1,0]) {
+          if(!instant)client.effects[0].fade(client.effects[0].obj,remaining);
+          sceneCollapsePoses.push({id,scale,rotation,progress:instant?1:1-remaining**2,
+            result:{scale:body.scale.toArray(),rotation:body.rotation.toArray().slice(0,3)},radius:ent.colR,height:ent.colH});
+        }
+        disposeTree(body);for(const effect of client.effects)disposeTree(effect.obj);
+      }
+      const mine=buildMineBump(),mineGraph=graphOf(mine,true).data;
+      hazardGraphs.mine_bump=mineGraph;hazardProfiles.mine_bump={kind:'mine_bump',imagery:false};
+      mine.position.set(0,.05,0);
+      const mineClient={mineMeshes:new Map([[1,mine]]),_mineCheckAt:-100,pos:new THREE.Vector3()};
+      const M=d.GAME.MINES;
+      for(const [now,x,y] of [[0,M.SEE_M+1,0],[.05,0,0],[.12,M.SEE_M,0],[.24,M.CLEAR_M,0],
+        [.36,(M.SEE_M+M.CLEAR_M)/2,0],[.48,0,M.SEE_M+1],[.6,0,.05]]) {
+        mineClient.pos.set(x,y,0);BattleClient.prototype._updateMines.call(mineClient,now);
+        mineVisuals.push({now,observer:[x,y,0],visible:mine.visible,opacity:mine.material.opacity});
+      }
+      disposeTree(mine);
+      for(const kind of ['cash','ammo','affix']) {
+        const body=buildLoot(kind==='ammo',kind==='affix'),graph=graphOf(body,true);
+        lootGraphs[kind]=graph.data;lootProfiles[kind]={body:graph.ids.get(body.children[0])};
+        body.position.set(12,7,-8);
+        const client={lootMeshes:new Map([[1,body]]),flamers:[],envFx:null};
+        for(const [delta,now] of [[0,0],[.016,.016],[.125,.141],[1,1.141],[0,12]]) {
+          BattleClient.prototype._updateLoot.call(client,delta,now);
+          lootVisuals.push({kind,delta,now,rotation:body.rotation.toArray().slice(0,3),body:body.children[0].position.toArray()});
+        }
+        disposeTree(body);
+      }
+      for(const size of ['S','M','L']) {
+        const key=`airdrop_${size}`,body=buildAirdrop(size),graph=graphOf(body,true);
+        lootGraphs[key]=graph.data;lootProfiles[key]=Object.fromEntries(['crate','chute','groundChute','halo'].map(name=>[name,graph.ids.get(body.userData[name])]));
+        disposeTree(body);
+        for(const landing of [false,true])for(const born of [0,5]) {
+          const mesh=buildAirdrop(size);mesh.position.set(12,7,-8);
+          Object.assign(mesh.userData,{landing,bornT:born,groundY:7});
+          const client={airdropMeshes:new Map([[1,mesh]])};
+          const steps=[];
+          for(const [delta,age] of [[0,0],[.016,.016],[.784,.8],[.8,1.6],[.125,1.725],[1,2.725]]) {
+            const now=born+age;BattleClient.prototype._updateAirdrop.call(client,delta,now);
+            steps.push({delta,now,position:mesh.position.toArray(),rotation:mesh.rotation.toArray().slice(0,3),
+              nodes:Object.fromEntries(['crate','chute','groundChute','halo'].map(name=>{const node=mesh.userData[name];
+                return [name,{visible:node.visible,position:node.position.toArray(),rotation:node.rotation.toArray().slice(0,3)}];}))});
+          }
+          airdropVisuals.push({size,landing,born,steps});disposeTree(mesh);
+        }
+      }
       return { geometry, cockpits, cockpitGraphs, projectileGraphs, projectileVisual: {profiles:projectileProfiles,colors:shotColors,beamColors}, cockpitRules: { ...COCKPIT, kickDecay, flash:flashRules },
-        fixtures: { modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash, authorityWeaponPoses, burstWeaponPoses, muzzleLaunches, projectileGeometry, projectileFx }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
+        hazardGraphs,hazardProfiles,
+        lootGraphs,lootProfiles,
+        companionGraphs, companionProfiles,
+        fixtures: { modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash, authorityWeaponPoses, burstWeaponPoses, muzzleLaunches, projectileGeometry, projectileFx, companionGeometry,fireVisuals,lootVisuals,mineVisuals,sceneCollapsePoses,airdropVisuals }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
     }, { dimensionBody, aimBody: method('_entAimPoint'), poseBody, kickDecay: Number(kickDecay[1]), elevationBody, flashBody, flashRules, cameraProfiles, beamColors });
     return { ...result, inputs: [...sourceInputs].sort() };
   } finally {

@@ -40,6 +40,14 @@ func _run() -> void:
 		var data: Resource = load("res://assets/worlds/" + file)
 		var source: Dictionary = Content.read_json("res://data/worlds/" + file.get_basename() + ".json")
 		_check(data.source == source.source, file + ": native provenance matches the verified source bundle")
+		_check(data.terrain_grid == int(source.grid) and data.terrain_heights == PackedFloat32Array(source.heightField), file + ": original triangular terrain field preserved")
+		_check(data.water_profile == source.waterProfile, file + ": original marine/dry-band/wet-grid water profile preserved")
+		_check(data.corridors == source.corridors, file + ": original authority corridor pruning profile preserved")
+		for probe: Dictionary in source.probes:
+			var height := EnvironmentRules.height_at(data.terrain_heights, data.terrain_grid, data.bounds, probe.x, probe.z)
+			_check(absf(height - float(probe.ground)) < 0.0001, file + ": original terrain water height probe")
+			var dry := EnvironmentRules.in_dry_band(probe.x, probe.z, data.water_profile.dryBands)
+			_check(EnvironmentRules.ground_code(height, data.water_profile.baseY, [], dry) == int(probe.waterCode), file + ": original water classification probe")
 		var scene: Node3D = data.scene.instantiate()
 		add_child(scene)
 		await get_tree().physics_frame
@@ -56,6 +64,7 @@ func _run() -> void:
 		for mesh_index in range(source.meshes.size()):
 			var source_mesh: Dictionary = source.meshes[mesh_index]
 			var native_mesh: MeshInstance3D = scene.get_node("SourceMesh_%d" % mesh_index)
+			_check(native_mesh.get_meta("source_water", false) == source_mesh.get("water", false), file + ": original water/swamp mesh tide binding")
 			var mesh_arrays: Array = native_mesh.mesh.surface_get_arrays(0)
 			var vertices := PackedVector3Array()
 			for i in range(0, source_mesh.positions.size(), 3):

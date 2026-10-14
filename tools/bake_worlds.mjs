@@ -13,12 +13,13 @@ const sourceInputs = {};
 for (const name of (await readdir(join(source, 'public/js'))).filter(name => name.endsWith('.js')).sort()) {
   sourceInputs[`public/js/${name}`] = sha256(await readFile(join(source, 'public/js', name)));
 }
-for (const name of ['tools/elevation_fixture.mjs', 'tools/osm_fixture.mjs', 'tools/venue_field.mjs', 'out/forest_review/three.module.js']) {
+for (const name of ['server/sim.js', 'tools/elevation_fixture.mjs', 'tools/osm_fixture.mjs', 'tools/venue_field.mjs', 'out/forest_review/three.module.js']) {
   sourceInputs[name] = sha256(await readFile(join(source, name)));
 }
 const generatorSha256 = sha256(await readFile(fileURLToPath(import.meta.url)));
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
+const {BattleSim} = await load('server/sim.js');
 const { readSrc, grabFn, grabBlock } = await load('tools/audit_src.mjs');
 const { loadElevationFixture, validateElevationFixture, readOsmCapture } = await load('tools/osm_fixture.mjs');
 const { osmRoadsFromElements, parseOsmFeatureElements } = await load('public/js/osmQuery.js');
@@ -34,8 +35,15 @@ const terrainSource=readSrc('public','js','terrain.js');
 const imagerySeam = 'async function fetchImagery(bbox, onProgress) {';
 if (!terrainSource.includes(imagerySeam)) throw new Error('Source imagery fallback seam missing');
 // No imagery is captured offline; invoke the source's actual missing-service fallback.
-const offlineTerrainSource = terrainSource.replace(imagerySeam,
+let offlineTerrainSource = terrainSource.replace(imagerySeam,
   `${imagerySeam}\nthrow new Error('Offline geometry bake omits imagery');`);
+const dryBandSeam = 'dryBand = (px, pz) => distToSegs(px, pz, segs) <= BAND_R;';
+if (!offlineTerrainSource.includes(dryBandSeam) || !offlineTerrainSource.includes('inDryBand: dryBand,')) {
+  throw new Error('Original terrain dry-band capture seams missing');
+}
+offlineTerrainSource = offlineTerrainSource.replace('let dryBand = null;', 'let dryBand = null; let nativeDryBandSpec = {segments:[],radius:0};')
+  .replace(dryBandSeam, `nativeDryBandSpec = {segments:segs,radius:BAND_R}; ${dryBandSeam}`)
+  .replace('inDryBand: dryBand,', 'inDryBand: dryBand, nativeDryBandSpec,');
 const {TUN}=await load('tools/venue_field.mjs');
 const deckIndexOf=new Function(`${grabFn(biomesSource,'makeDeckIndex')}\nreturn makeDeckIndex;`)();
 const roofSource=biomesSource.split('\n').find(line=>line.startsWith('const tunRoofTop ='));
@@ -52,6 +60,7 @@ const slice = (first, last) => {
   return biomesSource.slice(begin, end);
 };
 const roadAdapter = `
+import {hgtEnc as nativeHeightEncoding} from './data.js';
 export function bakeNativeRoadWorld(cfg, terrain, osmRoads, osmData) {
   const center = cfg.center, mix = cfg.venue?.mix || null, season = cfg.env?.season || 'summer';
   const regionCenter = mapSourceCenter(cfg, 'regional');
@@ -75,7 +84,15 @@ export function bakeNativeRoadWorld(cfg, terrain, osmRoads, osmData) {
     const laneRes = buildRoads(group, laneWetWays, terrain, center, mix, rnd, season, [], true, gradeCorridors);
     for (const key of ['decks','tunnels','cols']) roadRes[key].push(...laneRes[key]);
   }
+  buildSwampSurface(group, terrain);
   return { group, roadRes, gradeCorridors, roofThickness:TUN.ROOF_T };
+}
+${grabFn(mainSource, 'bakeWetGrid')}
+export const bakeNativeWetGrid = bakeWetGrid;
+export function bakeNativeHeightGrid(terrain) {
+  const hgtEnc = nativeHeightEncoding;
+  ${grabFn(mainSource, 'bakeHeightGrid')}
+  return bakeHeightGrid(terrain);
 }
 `;
 const fixtures = [];
@@ -194,7 +211,7 @@ try {
         let previous;
         try { previous=JSON.parse(await readFile(target,'utf8')); }
         catch(error){if(error.code!=='ENOENT')throw error;}
-        if(previous && previous.probes.every(probe=>Object.hasOwn(probe,'collisionGround'))
+        if(previous && previous.waterProfile && previous.heightField && previous.probes.every(probe=>Object.hasOwn(probe,'collisionGround'))
           && previous.source.fingerprint === provenance.fingerprint) {
           const deckAt=deckIndexOf(previous.decks),tunnelAt=tunnelIndexOf(previous.tunnels);
           const heights=previous.sourceGridPositions.filter((_,i)=>i%3===1);
@@ -231,12 +248,15 @@ try {
           meshes.push({ name: object.name || label, positions: Array.from(geometry.attributes.position.array),
             normals: geometry.attributes.normal ? Array.from(geometry.attributes.normal.array) : [],
             colors: geometry.attributes.color ? Array.from(geometry.attributes.color.array) : [], index,
-            albedo: color?.isColor ? [color.r, color.g, color.b] : [1,1,1], terrain: terrainMesh,
+            albedo: color?.isColor ? [color.r, color.g, color.b] : [1,1,1], terrain: terrainMesh, water:!!geometry.attributes.seaFade,
             opacity: material.opacity ?? 1, transparent: material.transparent === true });
           geometry.dispose();
         };
         terrain.mesh.updateWorldMatrix(true, false);
         captureMesh(terrain.mesh, 'Terrain', true);
+        terrain.group.traverse(object => {
+          if(object.geometry?.attributes?.seaFade) captureMesh(object, 'Water');
+        });
         roadWorld.group.updateMatrixWorld(true);
         roadWorld.group.traverse(object => captureMesh(object, 'Road'));
         const ground = terrain.mesh.geometry;
@@ -256,13 +276,27 @@ try {
           const [x,z] = data.llToXZ(...ll,cfg.center);
           probes.push({x,z,ground:terrain.heightAt(x,z),collisionGround:sourceGround(x,z)});
         }
+        if(terrain.sampleColor || terrain.inBorderBand) throw new Error('Source imagery/border classification needs its exact native capture path');
+        const heightField=Array.from(new Float32Array(Array.from({length:data.TERRAIN.GRID_N**2},(_,index)=> {
+          const row=Math.floor(index/data.TERRAIN.GRID_N),col=index%data.TERRAIN.GRID_N;
+          return terrain.heightAt(terrain.minX+terrain.worldW*col/(data.TERRAIN.GRID_N-1),terrain.minZ+terrain.worldH*row/(data.TERRAIN.GRID_N-1));
+        })));
+        const waterProfile={baseY:terrain.baseWaterY,isMarine:terrain.isMarine,dryBands:terrain.nativeDryBandSpec,
+          wetGrid:biomes.bakeNativeWetGrid(terrain),heightGrid:biomes.bakeNativeHeightGrid(terrain),imagery:false,borderBands:false};
+        const rd=value=>Math.round(value*10)/10;
+        const weatherOcc=roadWorld.roadRes.cols.slice(0,data.LOS.MAX_OCC).map(b=>b.hw2!=null
+          ? [rd(b.x),rd(-b.z),rd(Math.min(60,Math.hypot(b.hw2,b.hd2))),rd(Math.min(300,b.h)),rd(b.hw2),rd(b.hd2),Math.round(-b.ry*1000)/1000,null,rd(b.y)]
+          : [rd(b.x),rd(-b.z),rd(Math.min(60,b.r)),rd(Math.min(300,b.h))]);
+        const weatherCor=roadWorld.gradeCorridors.slice(0,data.LOS.MAX_CORR)
+          .map(c=>[rd(c.x1),rd(-c.z1),rd(c.x2),rd(-c.z2),rd(c.hw),c.kind==='tun'?1:0]);
+        for(const probe of probes) probe.waterCode=biomes.terrainEnvCode(terrain,probe.x,probe.z);
         const result = { meshes, decks: roadWorld.roadRes.decks, tunnels: roadWorld.roadRes.tunnels,
           columns: roadWorld.roadRes.cols, probes,
           minH: terrain.minH, maxH: terrain.maxH, avgH:terrain.avgH,
           ceiling: data.worldCeilY(terrain.avgH,terrain.maxH), bounds:data.battleRect(cfg), grid:data.TERRAIN.GRID_N,
           collision:{deckThickness:0,roofThickness:roadWorld.roofThickness},
           laneHeights:cfg.lanes.map(lane=>lane.map(ll=>laneHeight(...data.llToXZ(...ll,cfg.center)))),
-          sourceGridPositions:positions, sourceGridIndex:Array.from(ground.index.array) };
+          sourceGridPositions:positions, sourceGridIndex:Array.from(ground.index.array),heightField,waterProfile,weatherOcc,weatherCor };
         for (const group of [terrain.group,roadWorld.group]) group.traverse(object => {
           object.geometry?.dispose();
           const materials = Array.isArray(object.material) ? object.material : [object.material];
@@ -271,6 +305,15 @@ try {
         return result;
       }, { cfg: map.variants[String(size)].config, raw: Array.from(raw), roads, osm });
       bundle.collision.deckThickness=Number(deckMatch[1]);
+      const authority=new BattleSim(map.variants[String(size)].config);
+      // No camps are present in this native road-only bake; preserve the source no-camp ingest branch.
+      authority.camps=[];
+      bundle.corridors=[];
+      authority._pruneCorridors=cor=>{bundle.corridors=cor;};
+      authority.setWorld({occ:JSON.parse(JSON.stringify(bundle.weatherOcc)),cor:bundle.weatherCor,wet:bundle.waterProfile.wetGrid,hgt:bundle.waterProfile.heightGrid});
+      bundle.waterProfile.obstacles=authority.worldOcc.map(shape=>({shape:Array.from(shape),baseY:shape.baseY??null,...(shape.buildingKey?{buildingKey:shape.buildingKey}:{})}));
+      delete bundle.weatherOcc;
+      delete bundle.weatherCor;
       bundle.source = provenance;
       await writeFile(target,JSON.stringify(bundle));
       console.log(`${map.id}/${size}: ${bundle.meshes.length} meshes, ${bundle.decks.length} decks, ${bundle.tunnels.length} tunnels`);

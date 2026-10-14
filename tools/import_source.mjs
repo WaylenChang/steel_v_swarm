@@ -13,6 +13,20 @@ import { modelReferences } from './model_references.mjs';
 import { footprintReferences } from './footprint_references.mjs';
 import { cameraReferences } from './camera_references.mjs';
 import { burstReferences } from './burst_references.mjs';
+import { statusReferences } from './status_references.mjs';
+import { movementReferences } from './movement_references.mjs';
+import { fieldReferences } from './field_references.mjs';
+import { companionReferences } from './companion_references.mjs';
+import { carrierReferences } from './carrier_references.mjs';
+import { npcReferences } from './npc_references.mjs';
+import { waveReferences } from './wave_references.mjs';
+import { weatherReferences } from './weather_references.mjs';
+import { environmentReferences } from './environment_references.mjs';
+import { sceneryReferences } from './scenery_references.mjs';
+import { sceneReferences } from './scene_references.mjs';
+import { supplyReferences } from './supply_references.mjs';
+import { thirdReferences } from './third_references.mjs';
+import { matchReferences } from './match_references.mjs';
 
 // Offline migration only: evaluate the source's settlement seams instead of copying derived numbers.
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -20,11 +34,17 @@ const source = resolve(process.argv[2] || join(root, '..', 'steel_vs_swarm'));
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const v = await load('public/js/venues.js');
-const { BattleSim } = await load('server/sim.js');
+const { BattleSim, cumLen, pointAt } = await load('server/sim.js');
 const { mulberry32 } = await load('public/js/rng.js');
 const buildings = await load('public/js/mapBuilding.js');
 const narrative = await load('public/js/story.js');
+const civilianContent = await load('public/js/civilianContent.js');
 const gameSource = await readFile(join(source, 'public/js/game.js'), 'utf8');
+const mainSource = await readFile(join(source, 'public/js/main.js'), 'utf8');
+const feedBody = /feed: \(text\) => \{([\s\S]*?)\n    \},/.exec(mainSource.replace(/\r\n/g, '\n'))?.[1];
+const feedLimit = /feedBox.children.length > (\d+)/.exec(feedBody || '');
+const feedLifetime = /setTimeout\(\(\) => div.remove\(\), (\d+)\)/.exec(feedBody || '');
+if (!feedLimit || !feedLifetime) throw new Error('Source HUD feed rules missing');
 const sprintMatch = /const boost = ax\.boost \? ([\d.]+) : 1/.exec(gameSource);
 if (!sprintMatch) throw new Error('Source sprint seam not found');
 const arcPoints = /const ARC_MAXP = (\d+);/.exec(gameSource);
@@ -74,8 +94,14 @@ for (const venue of v.VENUES.filter(item => !item.story)) {
   for (let size = d.TEAM.MIN; size <= d.TEAM.MAX; size++) {
     const cfg = v.venueConfig(venue, size);
     const sim = new BattleSim(cfg);
+    const wavePrefill = [];
+    sim._spawnLaneWave = (lane,side,wave,lead) => wavePrefill.push({lane,side,wave,lead});
+    sim._prefillLanes();
     variants[size] = {
       config: cfg, bounds: d.battleRect(cfg),
+      authority_bounds: {minX:sim.bounds.minX,maxX:sim.bounds.maxX,minZ:-sim.bounds.maxZ,maxZ:-sim.bounds.minZ},
+      wave_prefill: wavePrefill,
+      lane_turns:sim.lanes.map(lane=>d.laneTacticsXZ(lane).turns),
       bases: Object.fromEntries(Object.entries(cfg.bases).map(([side, ll]) => [side, d.llToXZ(...ll, cfg.center)])),
       lanes: cfg.lanes.map(lane => lane.map(ll => d.llToXZ(...ll, cfg.center))),
       hero_spawns: Object.fromEntries(['SWARM','STEEL'].map(side => [side,
@@ -91,18 +117,36 @@ for (const venue of v.VENUES.filter(item => !item.story)) {
   maps.push({ id: venue.id, name: venue.name, variants });
 }
 const rng = mulberry32(123456789);
-const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object.fromEntries(['SWARM','STEEL'].map(side=>
+const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object.fromEntries(['SWARM','STEEL','GUER','MILI'].map(side=>
   [side,{radius:d.hitR({kind,side}),height:d.hitH({kind,side})}]))]));
 const missileReference = await missileReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource);
 const structureReference = await structureReferences(d, BattleSim, maps[0].variants['1'].config, source, root, gameSource);
 const reachabilityReference = await reachabilityReferences(d, gameSource, source);
 const cameraReference = await cameraReferences(d, source, gameSource);
 const modelReference = await modelReferences(source, gameSource, cameraReference.profiles);
+const carrierReference = carrierReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32);
+const npcReference = await npcReferences(d, BattleSim, maps[0].variants['1'].config, source);
+const waveReference = waveReferences(d, BattleSim, maps[0].variants['1'].config, cumLen, pointAt, mulberry32);
+const weatherReference = await weatherReferences(d, BattleSim, maps[0].variants['1'].config, source);
 const glowOpacity = /opacity: warn \? ([\d.]+) : ([\d.]+)/.exec(gameSource);
 const glowColor = /color: warn \? (0x[\da-f]+) : sideInfo\(this.side\).color/.exec(gameSource);
 const glowSize = /sp.scale.setScalar\(Math.max\(([\d.]+), Math.max\(h, r \* 2\) \* ([\d.]+)\)\)/.exec(gameSource);
 if (!glowOpacity || !glowColor || !glowSize) throw new Error('Source weapon glow style seams missing');
 const fixtures = {
+  ...carrierReference.fixtures,
+  ...npcReference.fixtures,
+  ...waveReference.fixtures,
+  ...weatherReference.fixtures,
+  ...await environmentReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource),
+  ...sceneryReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32, weatherReference.rules.surface),
+  ...sceneReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
+  ...supplyReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
+  ...await thirdReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32, source),
+  ...matchReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
+  ...companionReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
+  ...await fieldReferences(d, BattleSim, maps[0].variants['1'].config, source),
+  ...await movementReferences(d, source, gameSource),
+  ...statusReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
   ...burstReferences(d, gameSource),
   ...await footprintReferences(d, gameSource, source),
   ...modelReference.fixtures,
@@ -146,6 +190,17 @@ for (const [name, value] of Object.entries({ balance: { constants, heroes, unitV
   cockpit: modelReference.cockpits,
   cockpitRules: modelReference.cockpitRules,
   projectileVisual: modelReference.projectileVisual,
+  companions: modelReference.companionProfiles,
+  hazard_visuals: modelReference.hazardProfiles,
+  loot_visuals: modelReference.lootProfiles,
+  hud_feed: {maximum:Number(feedLimit[1]),lifetime:Number(feedLifetime[1])/1000},
+  side_unknown: serialize(d.sideInfo(null)),
+  civilian_appearance: {occupations:serialize(civilianContent.CIVILIAN_OCCUPATIONS),options:serialize(civilianContent.CIVILIAN_OPTIONS)},
+  hazard_volumes: Object.fromEntries([...Object.keys(d.HAZARDS),'aasite','relay'].map(kind=>[kind,{radius:d.hitR({kind}),height:d.hitH({kind})}])),
+  carrier: carrierReference.rules,
+  npc: npcReference.rules,
+  wave_rules: waveReference.rules,
+  weather: weatherReference.rules,
   cameraProfiles: cameraReference.profiles, cameraRules: cameraReference.rules,
   footprintGlow: { warningOpacity: Number(glowOpacity[1]), opacity: Number(glowOpacity[2]),
     warningColor: Number(glowColor[1]), minimumSize: Number(glowSize[1]), sizeFactor: Number(glowSize[2]) },
@@ -169,6 +224,15 @@ for (const [character, graph] of Object.entries(modelReference.cockpitGraphs))
 await mkdir(join(root, 'data/projectiles'), { recursive: true });
 for (const [key, graph] of Object.entries(modelReference.projectileGraphs))
   await writeFile(join(root, 'data/projectiles', `${key}.json`), JSON.stringify(graph));
+await mkdir(join(root, 'data/companions'), { recursive: true });
+for (const [key, graph] of Object.entries(modelReference.companionGraphs))
+  await writeFile(join(root, 'data/companions', `${key}.json`), JSON.stringify(graph));
+await mkdir(join(root, 'data/hazards'), { recursive: true });
+for(const [key,graph] of Object.entries(modelReference.hazardGraphs))
+  await writeFile(join(root, 'data/hazards', `${key}.json`), JSON.stringify(graph));
+await mkdir(join(root, 'data/loot'), { recursive: true });
+for(const [key,graph] of Object.entries(modelReference.lootGraphs))
+  await writeFile(join(root, 'data/loot', `${key}.json`), JSON.stringify(graph));
 await cp(join(source, 'public/audio'), join(root, 'assets/audio'), { recursive: true });
 await cp(join(source, 'LICENSE'), join(root, 'LICENSE'));
 const inputs = ['public/js/data.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];

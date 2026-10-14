@@ -12,8 +12,11 @@ static func run(h: Node, fixtures: Array) -> void:
 				actor.free()
 			actor = BattleUnit.new()
 			h.add_child(actor)
+			var special := {}
+			if Content.balance.get("companions", {}).has(fixture.side.to_lower() + "_" + fixture.kind):
+				special.role = "hologram" if fixture.kind == "decoy_beacon" else "summon"
 			actor.configure({"id": 99001, "kind": fixture.kind, "character": fixture.character,
-				"side": fixture.side, "position": Vector3.ZERO})
+				"side": fixture.side, "position": Vector3.ZERO, "special": special})
 			previous = key
 		actor.position = h._reference_vector(fixture.position)
 		var expected: Vector3 = h._reference_vector(fixture.point)

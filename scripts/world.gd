@@ -2,6 +2,8 @@ class_name BattleWorld
 extends Node3D
 
 var paths: Array[Path3D] = []
+var lane_points: Array = []
+var lane_distances: Array = []
 var bases: Dictionary
 var bounds: Dictionary
 var ambience: AudioStreamPlayer
@@ -15,6 +17,159 @@ var terrain_rids: Array[RID] = []
 var missile_obstruction_rids: Array[RID] = []
 var layers := StructureLayers.new()
 var projectile_visuals: ProjectilePresentation
+var skill_fields: SkillFieldPresentation
+var weather_visuals: WeatherPresentation
+var water_y: Variant = null
+var water_meshes: Array[MeshInstance3D] = []
+var authority_height_grid: Dictionary = {}
+var fire_visuals: FirePresentation
+var loot_visuals: LootPresentation
+var mine_visuals: MinePresentation
+var airdrop_visuals: AirdropPresentation
+var active_columns: Array = []
+var weather_obstacles: Array = []
+var cleared_camps: Array[Dictionary] = []
+var cleared_camp_keys: Dictionary = {}
+
+func clear_camp_columns(camps: Array) -> void:
+	if native_data == null:
+		push_error("Camp clearance requires original native world content")
+		return
+	var changed := false
+	for camp: Dictionary in camps:
+		var key := "%d,%d" % [int(floorf(float(camp.x) + 0.5)), int(floorf(float(camp.z) + 0.5))]
+		if not cleared_camp_keys.has(key):
+			cleared_camp_keys[key] = true
+			cleared_camps.append({"x": camp.x, "z": camp.z})
+			changed = true
+	if not changed:
+		return
+	var obstacles: Array = native_data.water_profile.get("obstacles", [])
+	var clearance := CampRules.clearance(obstacles, cleared_camps)
+	var removed := {}
+	for index in range(native_data.columns.size()):
+		var column: Dictionary = native_data.columns[index]
+		var key: String = column.get("buildingKey", "")
+		# Source presentation keeps unkeyed bridge and vegetation pillars.
+		if not key.is_empty() and clearance.buildings.has(key):
+			removed[index] = true
+	for shape: CollisionShape3D in find_children("*", "CollisionShape3D", true, false):
+		if shape.has_meta("source_column_index") and removed.has(int(shape.get_meta("source_column_index"))):
+			shape.set_deferred("disabled", true)
+	active_columns = []
+	for index in range(native_data.columns.size()):
+		if not removed.has(index):
+			active_columns.append(native_data.columns[index])
+	weather_obstacles = []
+	for index in range(obstacles.size()):
+		if index not in clearance.removed:
+			weather_obstacles.append(obstacles[index])
+
+func sync_airdrops(states: Array, now: float) -> void:
+	if Session.dedicated or DisplayServer.get_name() == "headless":
+		return
+	if airdrop_visuals == null and states.is_empty():
+		return
+	if airdrop_visuals == null:
+		airdrop_visuals = AirdropPresentation.new()
+		add_child(airdrop_visuals)
+	var poses: Array = []
+	for state: Dictionary in states:
+		var height := source_height(state.x, state.z)
+		if not is_finite(height):
+			push_error("Airdrop has no original terrain anchor")
+			continue
+		poses.append({"id": state.id, "position": Vector3(state.x, height, state.z), "size": state.size, "landing": state.landing})
+	airdrop_visuals.sync(poses, now)
+
+func sync_mines(states: Array) -> void:
+	if Session.dedicated or DisplayServer.get_name() == "headless":
+		return
+	if mine_visuals == null and states.is_empty():
+		return
+	if mine_visuals == null:
+		mine_visuals = MinePresentation.new()
+		add_child(mine_visuals)
+	var poses: Array = []
+	for state: Dictionary in states:
+		var surface := source_height(state.x, state.z)
+		if not is_finite(surface):
+			push_error("Mine has no source terrain anchor")
+			continue
+		poses.append({"id": state.id, "position": Vector3(state.x, surface + 0.05, state.z)})
+	mine_visuals.sync(poses)
+
+func update_mine_view(observer: Vector3, now: float) -> void:
+	if mine_visuals != null:
+		mine_visuals.update_view(observer, now)
+
+func sync_loots(states: Array, now: float) -> void:
+	if Session.dedicated or DisplayServer.get_name() == "headless":
+		return
+	if loot_visuals == null and states.is_empty():
+		return
+	if loot_visuals == null:
+		loot_visuals = LootPresentation.new()
+		add_child(loot_visuals)
+	loot_visuals.sync(states, now)
+
+func sync_fires(states: Array, now: float, dynamics: Dictionary) -> void:
+	if Session.dedicated or DisplayServer.get_name() == "headless":
+		return
+	if fire_visuals == null and states.is_empty():
+		return
+	if fire_visuals == null:
+		fire_visuals = FirePresentation.new()
+		add_child(fire_visuals)
+	fire_visuals.sync(states, now, dynamics)
+
+func authority_height(x: float, z: float) -> Variant:
+	return EnvironmentRules.authority_height(authority_height_grid, x, z)
+
+func source_height(x: float, z: float) -> float:
+	if native_data == null:
+		return NAN
+	return EnvironmentRules.height_at(native_data.terrain_heights, native_data.terrain_grid, bounds, x, z)
+
+func water_code(x: float, z: float) -> int:
+	if native_data == null or native_data.water_profile.is_empty():
+		return 0
+	var dry := EnvironmentRules.in_dry_band(x, z, native_data.water_profile.dryBands)
+	return EnvironmentRules.ground_code(source_height(x, z), water_y, [], dry)
+
+func wet_at(x: float, z: float) -> int:
+	return EnvironmentRules.wet_at(native_data.water_profile.wetGrid, x, z) if native_data != null and not native_data.water_profile.is_empty() else 0
+
+func water_plane(x: float, z: float) -> Variant:
+	var code := water_code(x, z)
+	return float(water_y) + (float(Content.constants.WATER.SWAMP_BAND) if code == 2 else 0.0) if code > 0 and water_y != null else null
+
+func sync_weather(dynamics: Dictionary, _surface: Dictionary, hour: float, schedule: Dictionary, season: String, seed_value: int = 0) -> void:
+	if dynamics.is_empty():
+		return
+	if native_data != null and native_data.water_profile.get("baseY") != null:
+		var shift := EnvironmentRules.tide(hour, schedule.lunarDay, native_data.water_profile.isMarine)
+		water_y = float(native_data.water_profile.baseY) + shift
+		for mesh: MeshInstance3D in water_meshes:
+			mesh.position.y = shift
+	if weather_visuals == null:
+		weather_visuals = WeatherPresentation.new()
+		add_child(weather_visuals)
+		weather_visuals.configure(seed_value)
+	var span := maxf(float(bounds.maxX) - float(bounds.minX), float(bounds.maxZ) - float(bounds.minZ))
+	weather_visuals.sync(dynamics, hour, schedule, season, span)
+
+func present_lightning(points: Array) -> void:
+	if weather_visuals != null:
+		weather_visuals.strike(points)
+
+func sync_fogs(states: Array, side: String, now: float) -> void:
+	if skill_fields == null and states.is_empty():
+		return
+	if skill_fields == null:
+		skill_fields = SkillFieldPresentation.new()
+		add_child(skill_fields)
+	skill_fields.sync_fogs(states, side, now)
 
 func ensure_projectile_visuals() -> ProjectilePresentation:
 	if projectile_visuals == null:
@@ -37,7 +192,7 @@ func visual_collision(start: Vector3, end: Vector3) -> Dictionary:
 	query.hit_back_faces = true
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
-func build(map_data: Dictionary, environment: Dictionary) -> void:
+func build(map_data: Dictionary, _environment: Dictionary) -> void:
 	bounds = map_data.bounds
 	hero_spawns = map_data.hero_spawns
 	if map_data.has("native_world"):
@@ -46,6 +201,8 @@ func build(map_data: Dictionary, environment: Dictionary) -> void:
 			get_tree().quit(1)
 			return
 		native_data = load(map_data.native_world)
+		active_columns = native_data.columns.duplicate(true)
+		weather_obstacles = native_data.water_profile.get("obstacles", []).duplicate(true)
 		var key: String = map_data.native_world.get_file().get_basename()
 		if not Content.structures.has(key):
 			push_error("Required source structure profile is missing: " + key)
@@ -56,7 +213,21 @@ func build(map_data: Dictionary, environment: Dictionary) -> void:
 			push_error("Native world bounds do not match the selected map")
 			get_tree().quit(1)
 			return
-		add_child(native_data.scene.instantiate())
+		if native_data.terrain_grid < 2 or native_data.terrain_heights.size() != native_data.terrain_grid * native_data.terrain_grid or native_data.water_profile.is_empty():
+			push_error("Required original terrain/water profile is missing; regenerate native worlds")
+			get_tree().quit(1)
+			return
+		var source_scene: Node3D = native_data.scene.instantiate()
+		add_child(source_scene)
+		for mesh: MeshInstance3D in source_scene.find_children("*", "MeshInstance3D", true, false):
+			if mesh.get_meta("source_water", false):
+				water_meshes.append(mesh)
+		water_y = native_data.water_profile.baseY
+		authority_height_grid = EnvironmentRules.decode_height_grid(native_data.water_profile.get("heightGrid", {}))
+		if authority_height_grid.is_empty() or not native_data.water_profile.has("obstacles"):
+			push_error("Original weather height/obstacle profile is missing; regenerate native worlds")
+			get_tree().quit(1)
+			return
 		ceiling = native_data.ceiling
 		await get_tree().physics_frame
 		await get_tree().physics_frame
@@ -82,6 +253,8 @@ func build(map_data: Dictionary, environment: Dictionary) -> void:
 		_box(Vector3(size.x + 4, wall_height, 4), Vector3(center.x, wall_bottom + wall_height / 2, z), wall_material, true)
 	for lane_index in range(map_data.lanes.size()):
 		var lane: Array = map_data.lanes[lane_index]
+		lane_points.append(lane.duplicate(true))
+		lane_distances.append(WaveRules.cumulative(lane))
 		var path := Path3D.new()
 		path.curve = Curve3D.new()
 		path.curve.bake_interval = 2.0
@@ -93,32 +266,6 @@ func build(map_data: Dictionary, environment: Dictionary) -> void:
 		add_child(path)
 		if native_data == null:
 			_build_road(lane)
-	var environment_node := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	var sky := Sky.new()
-	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color("16314b")
-	sky_material.sky_horizon_color = Color("9caeab")
-	sky.sky_material = sky_material
-	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("b3c4d6")
-	env.ambient_light_energy = 0.5
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.fog_enabled = environment.get("weather", "clear") == "fog"
-	env.fog_density = 0.004 if env.fog_enabled else 0.0
-	if environment.get("time", "day") == "night":
-		env.ambient_light_energy = 0.2
-		sky_material.sky_top_color = Color("050c1c")
-		sky_material.sky_horizon_color = Color("1d3240")
-	environment_node.environment = env
-	add_child(environment_node)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48, -30, 0)
-	sun.light_energy = 1.4 if environment.get("time", "day") == "day" else 0.4
-	sun.shadow_enabled = true
-	add_child(sun)
 	if not Session.dedicated and DisplayServer.get_name() != "headless" and ResourceLoader.exists("res://assets/audio/amb/base.ogg"):
 		ambience = AudioStreamPlayer.new()
 		ambience.stream = load("res://assets/audio/amb/base.ogg")

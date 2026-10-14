@@ -3,29 +3,462 @@
 This ledger distinguishes imported source content from implemented native
 behavior. A passing math fixture does not establish full match equivalence.
 
+Current status/ability/movement/companion/carrier/NPC/economy/wave/weather/environment/scenery/field-threat/loot/supply/camp/civilian/match-stat work is unverified. At the user's request,
+fixture generation, Godot compilation, runtime/render smoke checks and transport
+tests are deferred until all migration implementation is complete. The new
+source-oracle modules and native suites are written but have not been executed;
+the saved fixtures and validation results below still describe the earlier build.
+
 | System | Native status | Remaining parity work |
 | --- | --- | --- |
 | Project/runtime | GDScript main scene and autoloads; no runtime JS | Platform exports and delivery builds |
 | Character content | All 32 pilots, four weapon/ability tiers, chassis stats | Some mechanics below remain unavailable |
 | Art | Original reference/combat/faction glTF and audio imported; native animation playback; all 32 source-built FPV cockpits, source gun-root/mirror/burst/flash poses; 128 source projectile scenes with age/speed opacity/tail animation, private owner poses and FPV echo shell/thin-tracer flight | Combat attachments, full morph/body/view reaction, remote/TPS projectile mounts and interpolation, muzzle/impact particles, toon/outline shaders, damage states |
-| Map layouts | 18 qualified presets, all five team sizes, source lane subsets/tower pairs; 90 native terrain/road resources | Satellite imagery, OSM buildings/facilities, habitat objects, water and hazards; complete geography-service behavior |
+| Map layouts | 18 qualified presets, all five team sizes, source lane subsets/tower pairs; 90 native terrain/road resources; original triangular terrain field, dry-band/wet-grid profiles and water/swamp geometry capture are prepared but ungenerated | Satellite imagery, OSM buildings/facilities, habitat objects, complete water appearance and hazards; complete geography-service behavior |
 | Map generation/services | Verified captures drive offline terrain resources; missing runtime resources reject explicitly | Mixed geographic layers, procedural random recipes, authored story arenas, live source preparation/qualification, cache refresh and relay fallback |
 | World | Source terrain vertices/topology/portal holes; graded roads, bridge slabs, tunnels, roofs, gallery openings and columns; native Jolt collision | Full scenery, texture/shader appearance, edge geometry, environmental LOS and complete traversal equivalence |
-| Movement | Native authority physics; ground, flight, jump, sprint, explicit morph toggle; source-derived per-seat spawn positions/headings retained on respawn | Charged jumping, automatic morph transitions, flight budget/drain, surface penalties, recoil movement |
-| Combat math | Source-fixture parity for RNG, shield overflow, range envelope, falloff, fan bins, planar line body bands, independent penetration budgets and blast body bands; source hero/NPC target volumes and hero ground/air movement cylinders | Evasion, suppression, directional defensive shields and status effects |
+| Movement | Native authority physics and source spawn positions/headings; charged jump, automatic morph launch/landing, lift budgets, hover/altitude bounds, damage-proportional sinking, source shallow/full/frozen immersion, marine tide lift reference and ice floor/ceiling constraints are implemented but unverified | Complete source integration/order, slope support, climbing, complete surface/hazard effects, recoil movement and traversal certification |
+| Combat math | Verified RNG, shield overflow, range/falloff, fan/line/blast geometry and target volumes; evasion, suppression, directional defensive shields, critical modifiers and elemental statuses are implemented but unverified | Final source-oracle/integration verification; complete environmental and special-entity interactions |
 | Weapons | Authority ammo, reload, fire cadence and native hit queries; source beam/rail instant attacks; source 3D fan body spans, per-bin nearest targets, deterministic ties and building caps; team-vision/LOS gates for direct, fan and line attacks; intentional blast coverage retained; guided/FNF flight with launch spread/climb, guidance distance, fixed laser point, chase fuel, swept proximity and native segment collision; launcher crosshair AA selection; 45-degree ground lob, low-solution charge ladder, terrain clamp and private authority arc preview; flat gun flight with first-body direct hits and terminal planar penetration settlement; hero-only acquisition cone, confirmed-anchor hysteresis, target-dependent launch ranges, quarter-second authority lock checks and in-flight FNF continuation; base missile flight and interception by instant, kinetic and penetrating attacks; source bridge/tunnel/gallery blast-layer separation and rooftop height references | Complete muzzle/model-centre and reachability envelopes, full status/buff interactions, missile decoy/phase/reflect behavior, ability interception, recoil and source-specific reports remain pending |
-| Abilities | Imported definitions; basic buff/heal/self-boost paths only | Carriers, summons, persistent fields, revive, CC, multi-charge timing and full effect matrix; unsupported paths reject before spending resources |
-| Economy | Eight tracks, funds + score eligibility, bounded bounty, supply-radius purchase gate | Assists, death penalties, loot, creep upgrades, full shop rules and balance preferences |
-| Waves/NPCs | Source compositions, native path sampling, infantry/armor/air waves, structure attacks; independent dual base missile guns with planar centre acquisition, hero bias and air ceiling | Spawn prefill/spacing, creep scaling, complete NPC AoE and target priorities, AA-ambush producers, neutral forces/civilians |
+| Abilities | Source cast channels, squared interruption fractions, independent charges, buffs/heals/auras, EMP/CC, stealth/alpha, rally/revive/recon, interception, reflection, phase exit, shield bash, siege mode, tactical fog, six-panel cube fields, clones, autonomous summons, holograms and point-delivery carrier flight/arrival/interception are implemented but unverified; source scene export/packing and original oracles are prepared | Other special/support fields and full interactions; source carrier/companion model generation, climate and NPC targeting, skill lock/presentation, owner disconnect cleanup and populated transport/render verification; unsupported paths reject before spending resources; final source/integration verification |
+| Economy | Eight tracks, source remote/dead purchase eligibility, shared lane creep upgrades, permanent damage assists, bounded score, bounty modifiers, death penalties, scene salvage/cash/ammo/affix loot, timed airdrop rewards, civilian aid and civilian/spy kill credits are implemented but unverified; battery overcharge/charge deadlines and item/skill healing source gates are written | Balance preferences, full shop/campaign eligibility integration and final purchase/death/assist/loot/supply/civilian verification |
+| Waves/NPCs | Source compositions, ordered prefill recipes, mirrored spawn jitter/floors, planar progress, wave cohesion, control/push rules, 8 Hz NPC stepping and dual base missile guns; NPC target gates/priorities/cache, captured creep damage/durability, per-target blast settlement and AA-ambush producers are implemented but unverified | Native traversal/support and weather integration, complete squad body rosters and complete NPC tick/transport verification |
+| Camps/civilians | Source camp sampling/rosters, garrison healing/protection, tether/aggro movement, bunker/member respawns, first-clear liberation, civilian/spy seeding, follow/away/wander/aid/death/respawn rules and private spy identity are written; camp obstacle clearance and native G/H interaction are implemented but unverified | Per-ID civilian mesh/centre variation, rig animation/marks, full geography/building visual clearance and populated render/transport/integration verification; source companion resources remain ungenerated |
 | Bots | Shared human movement/collision, source reaction/view-angle/turn limits, push/retreat/fire | Source tactical/role/policy AI, alert bearings, error distribution, skill/heavy decisions |
-| Match outcome | Authority core destruction, hero respawn, result screen | Full statistical ledger and replay parity |
+| Match outcome | Authority core destruction, hero respawn and result screen; source faction kills/deaths/paid assists/weighted creep last hits, public snapshots and native HUD rows are written but unverified | Complete per-body/squad/mode statistical integration, damage/leaderboards and replay parity |
 | Networking | Shared solo/ENet/WebSocket authority; lobby registration, roster, start, snapshots, disconnect handling; large snapshots use a separate reliable native channel | PIN/discovery, spectators, reconnect/late join, snapshot bandwidth/loss profiling, mobile/Web export QA, production hosting |
-| Visibility | Shared planar team sight and hero aiming bonus; source observer/target LOS heights; side-filtered snapshots and shot events also drive offline/host rendering without removing authority actors | Full environmental vision effects, fog/stealth/blindness, source grazing-obstacle tolerance and event audibility |
+| Visibility | Shared planar team sight and source LOS heights; skill pulses, stealth/blind gates, tactical fog sight/protection and cube-plane LOS are implemented but unverified | Full environmental vision effects, source grazing-obstacle tolerance, event audibility and final status/field visibility verification |
 | Story | Original narrative/chapter content exported | Campaign flow, boss/siege rules, scene staging/dialogue UI and saves |
-| Environment | Native static day/dusk/night sky and fog selection | Dynamic climate, rain/snow, deposits, lightning/fire, source weather gameplay |
-| Input/UI | Chinese native lobby, HUD, shop, menu, minimap; basic controller bindings; authority lob arc, AA/charge/blocked status and minimum-range warning; private confirmed-lock and target reachability HUD status; private multi-victim weapon footprints with pooled source-texture glows | Native touch UI, gyro, source control restrictions, spectator controls, settings/persistence; full source aiming presentation, confirmed-lock and skill glows |
+| Environment | Source seven-dimensional climate, independent seed, solar/lunar schedules, thermal freeze/thaw history, rain/snow/sand surface state, movement/lift/jump/cadence/reload/cooldown/damage/accuracy effects, probabilistic freeze and entity/scenery lightning/shockwaves are implemented but unverified; native dynamic sky/depth fog/light, precipitation particles and strike flashes; water/swamp classification, marine tides, immersion and proportional frozen-fluid burn; four fire kinds, expiry/quench/DOT and original fire/smoke scene export/animation paths; source hazard/vehicle/mine/AA/relay seeding, lane connectivity, corridor pruning, physical rubble/fire/salvage, flood movement/jumps and mine proximity presentation are written; four seasons/times and eight starting weather choices | Cloud/fog-bank and precipitation detail layers, contact effects, rendered deposits/permanent scorch, complete scenery roster, source damage/cracks/debris, per-entity hazard/fire geometry variation, water waves/shore/underwater appearance and full environmental/render/transport certification |
+| Input/UI | Native Chinese lobby/HUD/shop/minimap and weapon advice/glows; F shield stance, held jump input, cast countdown, lift, ability charges, civilian G/H prompts and source-limited supply/loot/relay/threat/civilian notices are implemented but unverified; minimap excludes source neutral actors | Native touch UI, gyro, complete source control restrictions, spectator controls, settings/persistence; full source aiming presentation, confirmed-lock and skill glows, complete combat feed; final HUD/render/transport verification |
 
 ## Verification boundary
+
+Current source routing audit finds 64 authored slots across 32 characters, all
+with native effect paths written; carrier/companion paths still require their
+ungenerated source resources. Legacy storm/boomerang/tree/moon/harpoon/link/mine/
+infection/support helper branches have no current `heroCast` producer in the
+authored roster. Keep those branches unavailable unless another active source
+producer is found. This routing audit is not feature-parity certification:
+climate, body/visibility/projectile interactions, aiming/UI and full integration
+still require implementation and final verification.
+
+Unexecuted status references call the original `_castEffect`, `_interruptCast`,
+`_readyCharges`, `_dodgeP`, `_damage`, `_applyHitEmp`, `_applyHitElem`,
+`_tickElemBuildup` and `_tickPhaseShift` methods, plus original shield-bash and
+NPC-fire tick blocks. They cover all authored tiers admitted by the native
+effect gate, fractional/once-only effects, charge deadlines, motion/altitude
+gates, elemental stacking/decay, defense sectors, reflection, freeze, vamp and
+interrupted healing before shield overflow. Ungenerated carrier content and remaining
+special-entity producers stay outside the gate. Native suites also preserve source RNG draw
+counts and distinguish explicit entity effect radii from computed hit volumes.
+These prepared cases do not establish passing results or full ability parity.
+
+Unexecuted companion references call original `_spawnClones`, `_despawnClones`,
+`_autoTarget`, `_tickClones`, `_spawnAutonomousSummon`, `_tickSummons`,
+`_tickDecoyBeacons`, `_castEffect` and `_damage`. Cases retain current-stat clone
+HP/shields/armor, current owner weapon tiers, independent crit/cadence, additive
+target priorities, extended owner focus, stable ties, zero-fraction summons,
+per-spawn combat RNG draws, owner death, expiry transfer and lethal donor removal.
+Source expiry swaps use solid placement; lethal swaps bypass horizontal collision.
+The original recast helper clears newly assigned clone/reload timers even when
+the previous roster is empty; this source behavior is intentionally preserved.
+Clone bodies retain hero damage rules while remaining outside player input,
+camera, pilot binding, regeneration and respawn loops. Hits to clones interrupt
+their owner's cast, and clone damage uses relative height frames and the owner's
+fluid state. The newer non-hero summon kinds retain the source distinction
+between their actual flight altitude and their ground-based damage/LOS target
+bands; prepared frame fixtures compare original `_bodySpan`, `_sightY`, `_eyeY`
+and `_tgtY`. Summon/decoy hits stamp owner assists and focus; clone hits keep
+independent focus. Summon kills pay the owner's assist share. Clone kills do not
+transfer full bounty or kill score to the owner; source undefined clone money
+is represented by a non-spendable native zero balance rather than a NaN snapshot.
+
+Holograms retain captured light range/rate, current owner light damage at 0.3,
+direct horizontal movement and confusion on corpse/expiry detonation. Autonomous
+summons have no invented lifetime and can keep fighting after their owner dies.
+The offline exporter now captures both factions of six dedicated source summon
+graphs plus the original hologram wingman alias; `--companions` packs them into
+native scenes without resizing their visual graph to the separate hit volume.
+Missing companion resources reject before ability spending. These graphs and
+fixtures have not been generated or packed. A prepared native wire-encoding case
+checks that clone snapshots sharing an owner's peer ID cannot replace or remove
+the owner's pilot binding. Climate factors, full NPC attraction,
+source visual animation, carriers and populated transport/render cases remain
+pending; the prepared companion suite has not run.
+
+Unexecuted carrier references call original `_launchOrigin`, `_launchAtkCarrier`,
+`_tickDecoys`, `_tickKamis`, `_tickHypers`, `_atkArrive`, `_castEffect` and `_damage`.
+Native point delivery keeps separate bomber/kamikaze/hypersonic actor rosters,
+source-derived HP, zero armor/shields and shootable native areas. It shares the
+existing effect settlement instead of adding a generic warhead. Authority aim
+derives the source decimetre point and planar range clamp; attack launch uses
+the nearest living allied tower/base with stable ties and the source hull fallback.
+The minimum leg is measured from this origin while fuel retains the original
+unextended distance. Scalar flight remains independent of world movement
+collision and the pilot altitude ceiling; actual scene positions are synchronized
+from those scalars before delivery/removal.
+
+Dedicated s01 formations, m06 timed drops, t01 single warheads, t09 concentric
+scatter and m07 delayed progressive scatter retain original RNG draws and
+fractional/integer budgets. In particular, overridden actor counts do not change
+the original chassis divisor used by `atkPartN`. Native effect settlement now
+accepts an explicit integer count so a zero budget cannot invent another strike
+or summon. Bomber expiry does not deliver outstanding drops; intercepted actors
+pay the source NPC kill reward and cancel their effect without a generic blast.
+Delivery accepts an existing dead owner but rejects an absent pilot binding.
+Hypersonic ascent, apex transition, one-time terminal tracking and contracting
+horizontal spiral have prepared original tick sequences, including deferred
+launch, stale/dead targets and the closed antipodal turn boundary.
+
+Offline scene export now includes both faction bomber/hypersonic bodies and
+character-specific half-size kamikaze forge graphs. The prepared carrier suite
+covers producers, flight laws, origins, shared arrival, strike budgets and
+interception. Carrier HP metadata, graphs and fixture rows have not been
+generated, packed or executed. Missing carrier content keeps casts unavailable
+before spending. Full source aiming/confirmed-lock UI, source flight VFX/body
+reaction, complete NPC targeting, disconnect cleanup and populated terrain,
+render and transport integration remain pending.
+
+Unexecuted NPC/economy references call original `_tgBlockedD`, `_acquireTarget`,
+`_acquireCached`, `_buildTickIndex`, `_damage`, `buy` and `_buyCreepUpg`. The offline
+import reads actual targeting cell/rescan constants from source code rather than
+stale explanatory comments. Native NPC selection uses source planar eligibility,
+weapon-height/fog envelopes, upward-fire compensation, hologram/hero/weapon
+weights and lazy LOS checks. Its temporary sorted cells preserve original
+cell-x/cell-z/insertion ordering; direct calls outside the NPC phase retain the
+original full scan. Native physics validates held targets every frame while
+preference rescans use the original server tick period. Pilot movement is now
+settled before the NPC targeting phase. Combined source frame-order and actual
+obstruction integration remain unverified.
+
+Creep upgrade levels belong to faction lanes, unlock after all eight tracks are
+maxed, charge one fixed payment and affect newly spawned waves. Existing bodies
+retain their captured multiplier. Hero attacks ignore the creep durability
+upgrade; non-hero attacks use the original per-penetration EHP conversion.
+Creep outgoing damage scales only against non-hero victims, including each blast
+recipient; source bounty stays unchanged. Shared lane levels and actor multipliers
+are included in native snapshots. The shop uses a native scroll container and
+per-lane upgrade buttons. Its native action payload requires a decimal integer
+lane and rejects malformed encodings instead of coercing them to lane zero.
+
+Source upgrade purchasing is available remotely and while waiting to respawn.
+The previous invented base-distance/alive gates were removed; purchasing HP or
+shield capacity during death changes caps without resurrecting the body. Source
+purchase oracles are prepared for all eight tracks and faction lane rules. These
+fixture rows have not been generated or executed. Wave prefill/spacing/cohesion,
+complete source movement, balance preferences, boss/super upgrade routes and
+populated UI/transport validation remain pending.
+
+Unexecuted wave references call original `_spawnLaneWave`, `_prefillLanes`,
+`_waveAnchors`, `_advance`, `cumLen` and `pointAt`. Placement/movement coefficients
+are extracted from those source methods; composition and steady wave spacing use
+the original data helpers. Every offline map/team variant now has a source
+prefill-recipe export path, including original lane/side order and negative
+prefill wave IDs. Actor spawning preserves two combat RNG draws per member,
+mirrored north/south jitter, the source six-metre tail spacing and the base
+spawn-progress floor. Terrain grade does not inflate planar progress or prefill
+spacing. Regular waves advance their index before spawning and retain the
+original first-wave deadline.
+
+Native NPC logic now steps at the original server period while pilot physics
+remains native. This preserves source constant per-step lane convergence and
+countdown fire cadence. Wave anchors exclude dead, hero, laneless and previously
+engaged members. Stun halts progress, slow scales it and confusion reverses it;
+held members still converge and resolve sequential structure/hazard/ally pushes.
+The current native integration uses the original structure/ally rules plus
+Godot body sweeps and native deck/tunnel standing layers. Captured structures
+retain source tick lifetime; removed/dead allies stop pushing. Source hazard
+rosters, complete wind/surface integration, physical traversal/support, crowd collisions,
+populated rendering and transport still need complete integration. Prepared
+scalar/reference suites do not certify these combined physical cases.
+
+Wave metadata, all 90 prefill recipes and the prepared source fixture rows have
+not been regenerated or executed. The constructor explicitly reports missing
+source prefill/rule data instead of silently inventing a wave layout.
+
+Unexecuted weather references call original `weatherVectorAt`,
+`computeSolarSchedule`, `resolveWeatherDynamics`, `stepWeatherSurface`,
+weather movement/lift/accuracy helpers, `resolveWeatherVisuals`, `_tickWeather`,
+`_lightningShockwave`, `_reloadT` and `_damage`. Native climate advances on the
+original server period and uses independent deterministic snow/lightning draws.
+Surface history retains the source exponential capacities/drying and delayed
+cover thresholds; freeze retains its 18-second hold and partial-step melting.
+Airborne precipitation does not slow flight in the current source. Raw weather
+intensities still govern lift/cooldown/damage even when cloud gates suppress
+visible precipitation. Ground cadence uses deposited sand, while airborne
+cadence uses the original intensity precedence. Rain applies only to attacks
+with source weapon definitions and is not applied again to reflected damage.
+
+The source authority has no client-global solar schedule: its weather-vector
+bias uses fixed phase anchors and its night accuracy uses the offline solar
+orbit. The native renderer uses the latitude/season solar schedule, preserving
+that source distinction. Native `WorldEnvironment` depth fog, procedural sky,
+directional light and GPU particles consume exported source palettes and
+precipitation profiles. Complete source clouds, fog banks, veil/fine layers,
+contacts, deposit/scorch appearance and celestial body visuals remain pending.
+Weather vector/dynamics/surface history are authority snapshot state for all
+transports. Visible lightning points are filtered with the recipient roster.
+
+Prepared snow/lightning cases cover threshold gates, once-per-second draws,
+per-actor cooldowns, selection without replacement, planar shockwaves, scorch
+clearing and unchanged combat RNG. Prepared damage/reload cases exercise the
+original authority seams. Scenery strikes/fire now have source grid/obstacle
+capture and native rule paths; the complete geography/hazard roster remains
+pending. Weather metadata/fixtures have
+not been regenerated; no compilation, tests or rendering have been performed
+for this implementation. Combined entity lifecycle, controller/physics,
+traversal, visibility and network certification remain required.
+
+Unexecuted environmental references execute original `terrainEnvCode`,
+`envTrigger`, `_envAt`, `_terrainSlowF`, `_terrainJumpVelocityF`, triangular
+terrain sampling, dry-band distance, `_ingestWorldWet`/`_wetAt`, tide/fire
+helpers, ice surface/ceiling branches and `_fireBurn`. Source world baking now
+captures the actual height field and dry-band capsules, original 20m mirrored
+wet grid, marine/base-water profile and source water/swamp meshes. Native world
+resources require these captures explicitly; the earlier saved resources have
+not been regenerated. Current offline baking uses the original missing-imagery
+path and rejects an uncaptured image-color or border-band classifier. Full
+imagery/geography and rendered border-band producers remain pending.
+
+Player immersion is derived from authority position, full body height and
+standing surface. It preserves shallow-water speed caps, gradual marsh depth,
+jump/air exemptions, full immersion reduction and partial submerged freezing.
+Native ice constraints supplement Godot solid collision: submerged feet cannot
+descend through the frozen floor, nearby feet mount the plane and deep feet
+retain an ice ceiling. Water height follows the original marine-only lunar
+tide; coarse neutral-avoidance grids remain the original starting-time capture.
+Current source water/swamp geometry follows tide displacement, while its wave,
+shore, underwater and ice appearance still require native presentation.
+
+Frozen fluid DOT uses the source proportional HP/shield burn and stamps combat
+time without armor, rain, fluid or phase damage reductions; invulnerability and
+garrison gates remain distinct. Weapon damage and raw burn share one authority
+death helper, including clone transfers, attribution, assists and outcomes.
+Prepared burn fixtures include simultaneous shield/HP loss, exhausted shields,
+zero/negative amounts, protection gates and prior bleed killer attribution.
+Scenery lightning/fire now use source height/obstacle capture; the complete
+geography, hazard seeding and collapse lifecycle remain pending. No environmental fixtures, world resources,
+compilation, tests or render/transport checks have been executed for this work.
+
+Unexecuted scenery references call original `_ingestHgt`, `_hgtAt`,
+`_strikeWeatherSurface`, `_tickHazards`, `_rebuildAvoidZones` and
+`stepFireVisual`. Authority height preserves original cell-center ASCII
+quantization, Float32 decoding and bilinear sampling, independently of the
+player's precise triangular terrain field. Original wet/height grids and
+normalized collision-column profiles are captured in offline road-world
+resources. Original authority bounds are exported separately from terrain
+coverage. The current road-only capture follows the source no-camp ingest
+branch. Runtime camp clearance now follows the original legacy-centre and
+grouped-building rules; complete scenery/building visual clearance and
+geographic rosters remain pending.
+
+Scenery lightning uses two independent location draws, mirrored coordinates,
+source circle/oriented-box top selection, wet/slab exclusion, four-point ring
+boundaries, grade threshold, precipitation gate and global live-fire cap.
+Scorch footprints deduplicate in three dimensions. Its shockwave uses existing
+authority settlement, while the fire's visible ground anchor uses the precise
+terrain field. Fire expiry, effective-precipitation extinguishing, raw-weather
+quench/wind boost, source ground-jump and smoke-height eligibility, event
+throttling, proportional burn and neutral avoidance are written. Fire/scar
+records share the existing authority snapshot path; scenery strike points carry
+their original absolute-world marker. Complete event/visibility certification
+remains pending.
+
+Offline hazard export includes every source hazard, AA site, relay, the original
+missing-imagery mine bump and the actual-radius lightning fire scene. `--hazards` packs them through the native scene importer,
+which now retains source vertex-color AO. Native fire/smoke poses follow the
+original flicker, scale, wind lean/drift and opacity functions; mesh/material
+resources are private per visual instance. Prepared pose fixtures execute the
+original visual function. These initial graphs use canonical seed zero;
+per-entity source geometry variation and variable-radius collapse shapes remain
+required. Permanent scorch/deposit appearance is not yet rendered. Hazard
+graphs, grid captures, fixtures, compilation and full render/runtime/transport
+verification have not been generated or executed.
+
+Unexecuted scene references call original `_seedMines`, `_seedHazards`,
+`_seedVehicles`, `_ensureConnectivity`, `_seedAASites`, `_seedRelays`,
+`_pruneCorridors`, `_collapseScene`, `_tickMines`, `_tickAmbush`, `_tickRelays`,
+`_spawnLoot`, `_tickHazards`, `_applyCollapse`, `_updateLoot` and `_updateMines`.
+Native scenery generation consumes a separate seeded stream in the original
+order. It retains biome weighting, conditional turn/midpoint draws, short-wall
+overlap exemptions, radius-aware lane clearance, wet exclusions, parked-car/ship
+placement and the twelve-removal connectivity limit. Four-way `AStarGrid2D`
+replaces only the source reachability traversal; sample/blocker/removal order
+remains source-derived. Corridor profiles come from the original upload ingest,
+including its width clamps and count limit. They clear scene bodies from bridge
+and tunnel corridors, while only tunnel corridors clear mines.
+
+Physical scenery has original hash/HP/armor, invulnerability and EV metadata.
+Destruction retains blocking rubble, changes only the first co-located blocker,
+uses source collapse pose/parity and bounded fire duration, then rolls original
+salvage through the combat RNG. Neutral kills do not award battle score. Cash,
+ammo and timed-affix loot retains rare-tier overflow, mirrored scatter, expiry
+before pickup, insertion-order winners, inclusive altitude/radius limits,
+reload cancellation and same-affix deadline refresh. `--loot` packs original
+cash/ammo/affix scenes; native presentation preserves root rotation and first
+child bobbing. Loot and mines share authority snapshots.
+
+Mines retain primary-pilot trigger gates, ordinary/charged jump thresholds,
+reverse mine order, planar blast falloff without target-radius expansion and
+the source airborne-hero exclusion. AA ambush retains the flight/corridor/
+stealth gates, shared 180-second threat cooldown, stable nearest-site selection,
+combat RNG draw order and one active ambush missile limit. Its launches use
+the existing shootable/interceptable missile path. Relays preserve reverse
+capture order, contested/empty decay, side-switch reset, whole-team vision and
+one-time removal. The original corridor prune removes relay actors but leaves
+their capture roster; the native authority retains this behavior explicitly.
+Full squad-body coverage and combined missile decoy/phase/reflect behavior
+remain pending.
+
+Flood zones compose their first matching speed cap with terrain slowing and
+override terrain jump velocity with the source water square-root factor; flight
+and off-ground movement are exempt. Prepared original flood cases cover those
+gates. Mine presentation uses the original no-imagery model, full 3D proximity,
+opacity ramp and 0.12-second throttle. Per-location imagery color, full damage
+deformation/cracks/debris, per-entity seeded hazard geometry, conforming flood/
+pothole meshes, relay progress/strike visuals and complete scenery content remain
+pending. No new scene/flood/loot fixture, asset, compilation, runtime, render or
+transport validation has been executed.
+
+Unexecuted supply references call original `_rollAirdropSize`, `_airdropPoint`,
+`_spawnAirdropWave`, `_tickAirdrops`, `_grantReward`, `_openAirdrop`, `_frame`,
+`_healBody`, `bossSegCapF` and the original power-regeneration tick block. Native
+airdrop scheduling retains the first sixty-second deadline and current-time
+rescheduling, player-count batches, live-box cap, forty-attempt placement,
+lane/base/obstacle/terrain rejection and source combat draw order. Failed points
+do not invent a replacement or consume a size draw. Boxes retain original
+expiry-before-landing/pickup order, reverse box iteration, inclusive pickup
+height/radius, insertion-order winners and equal-probability reward selection.
+Public snapshots preserve mirrored decimetre half-tie rounding and landing
+flags without exposing future rewards.
+
+Medical supplies report actual restored HP and the original nominal shield
+amount. Batteries may exceed maximum power, shorten absolute ability cooldowns
+with a zero floor and move charge-recharge deadlines no earlier than current
+time. Regeneration now preserves overcharge until spent, matching the original
+tick block. Allied civilian follow timers now produce shared authority rewards.
+Healing respects hero-only amplification and
+the source boss skill-only reduction/remaining-segment ceiling; these helper
+rules do not establish campaign/boss lifecycle parity.
+
+Offline `--loot` packing now includes original S/M/L airdrop graphs and their
+crate/parachute/ground-parachute/halo node bindings. Native descent preserves
+the source first-seen clock, quadratic height, zero-clock branch, descent-only
+root rotation and landed crate spin/bob. First seeing an already landed box
+starts its ground presentation immediately. Complete populated/late-join
+transport timing and rendered effects remain unverified.
+
+Supply, loot, relay and threat feedback uses native `VBoxContainer`/`Label`
+nodes. Feed limits and lifetime are captured from the source HUD (newest first,
+five rows, six seconds); Traditional Chinese messages belong in `data/ui.json`.
+Public airdrop/relay events survive actor visibility/removal filtering, while
+neutral scene bodies remain absent from the minimap as in the source. Prepared
+supply cases cover placement exhaustion, caps, deadline/radius/height edges,
+reward/charge/overcharge behavior, item/boss healing, snapshots, public events,
+authority rejection and original descent node poses. Source graphs, fixture
+generation, Godot compilation, UI/render/runtime smoke checks and transport
+verification have not been executed.
+
+Unexecuted third-party references call original `setWorld`, `_seedCamps`,
+`_campHome`, `_tpBehave`, `_tpAggroTarget`, `_tpMove`, `_tickCamps`,
+`_onThirdDeath`, `_freeCampCivilians`, `_damage`, `_seedCivilians`, `_spawnCiv`,
+`_civPoint`, `_civWander`, `_moveCiv`, `_tickCivilians`, `civInteract`, `_kill`,
+`civilianBody`, `generateCivilian`, `civSpeed` and the original client
+`_clearAroundBunker`. Camp placement preserves
+source lane/side order, two sampling rounds, stable candidate ties and the
+separate scene RNG. Legacy obstacle clearance tests the pillar centre against
+the strict sixteen-metre radius; keyed multi-volume buildings use their shared
+oriented bounds and are removed as a group. Captured obstacle metadata retains
+building identity for this rule. Native physical/camera clearance preserves
+unkeyed bridge/vegetation pillars, matching the client distinction. Replicas
+clear keyed buildings on first bunker discovery, retaining the source rounded
+position cache across hide/reveal and respawns. Weather obstacle metadata uses
+server clearance; native LOS still needs to compose server-only legacy removal
+with retained physical pillars during full environmental integration.
+
+Authority camp actors keep source faction compositions, slot arcs, helicopter
+altitudes and the existing NPC firing path. Soldiers seek a living bunker at
+half HP, respect three garrison slots, recover three percent of maximum HP per
+second and leave only at full HP or when the bunker disappears. Garrison actors
+are hidden and immune, with disabled body/hit layers; initial snapshots still
+create their collision shape. Retreat, pursuit, aggro expiry, terrain-edge
+escape and ordered blocker pushing retain source gates. Member respawn clocks
+pause while a bunker is absent, including its rebuild tick. Complete clearance
+releases four civilians once, with source attacker/nearest-living-owner choice.
+Super/third mutual immunity exits before aggro/assist/focus settlement;
+incidental damage between third factions remains possible.
+
+Civilian seeding preserves source side order, spy slots and placement/profession/
+pause combat draws. Respawns preserve allegiance and spy identity, reroll the
+profession and retry failed placement without dropping the queue entry. Flee
+precedes follow and wander; expiry removes a civilian without a death reward or
+respawn. Lost/dead/distant owners release followers, and only allied followers
+produce profession supplies. Signed civilian/spy kill credits retain source
+rounding and zero-money clamping without battle kill scores. Liberated civilians
+never respawn. Replicas cannot advance these clocks, generate actors or settle
+interactions/rewards. Public snapshots never expose spy or private path state;
+identity is revealed only by the source kill report.
+
+Independent body and appearance RNG preserve the source height/waist/hit-volume
+rules, age/gender draw short circuits and profession titles. Offline export
+prepares original camp graphs and forty canonical civilian graphs across the
+two factions and twenty professions; source team rings remain faction-specific.
+Those civilian graphs use seed zero and are scaled to the exact per-ID body
+dimensions. Full per-ID clothing/parts/palette geometry, measured mesh centres,
+source rig motion/overhead marks and building visual clearance remain pending.
+The authority lifecycle and native G/H prompts/reports are written, but their
+source resources, fixture generation, compilation, populated rendering,
+runtime smoke and transport checks have not run. This stage is not full parity.
+
+Unexecuted match-stat references call original `_kill` for hero, creep,
+tower/base, third-party, neutral scenery, civilian and carrier targets, with
+hero/NPC/third/ally/environment killers and near/far contributors. The native
+authority owns regular-match faction counters. Every settled hero death raises
+its faction deaths; an enemy killer raises kills only when its faction has a
+counter column. GUER/MILI therefore raise a victim's deaths without inventing
+third-faction scoreboard rows. Assist counters rise only after a nonzero bounty
+is actually paid, preserving source range, killer exclusion and zero-bounty
+score distinctions. Creep last hits retain `UNITS[kind].bounty || 1` weighting;
+neutral/civilian/carrier early returns do not fabricate last hits.
+
+Counters are copied into public snapshots and detached again on replicas;
+stale packets and incoming authority packets cannot overwrite them. Native HUD
+rows use source faction colors and Traditional Chinese data labels. Prepared
+cases cover initial columns, death settlement, snapshot copy isolation and
+replica authority rejection. Full squad body rosters, super/story/mode
+producers, leaderboards and replay integration remain pending. Fixture
+generation, compilation, HUD/render/runtime smoke and transport validation
+have not been executed.
+
+Unexecuted persistent-field references evaluate original `_castEffect`,
+`_tickCubicSlabs`, `_tickFogs`, `_visionSources`, `_visibleTo`,
+`_skillBarriersBlocked` and `spawnFogVFX`. Cube fields retain six panels, rounded
+fractional HP, unscaled lifetime, partial destruction, corpse/expiry removal,
+raw continuous damage and the source distinction between explicit effect radii,
+computed damage bands, visible boxes and logical LOS planes. They do not add
+movement walls or a bounty for destroyed skill objects. Casting rejects an
+unverified panel standing surface before spending resources.
+
+Fog retains unscaled duration/corrosion at zero interruption fraction, explicit
+recipient radius, deterministic poison buildup, a single 0.333 sight multiplier,
+and insertion-order selection of the first protecting allied field. Private
+actor rosters use these same visibility gates; public fog records contain only
+their presentation geometry/time/side. Native fog uses the original disk/five
+rings, faction-relative palettes, rotations and final-fifth disk fade, including
+the source absolute 0.5-metre anchor. Slab renderers retain the original bronze
+and rune box dimensions and rotations. Shader appearance, full visual-mesh
+integration, field transport and populated-scene rendering remain unverified;
+no persistent-field fixture has been generated or executed yet.
+
+Unexecuted movement references call original `_stepLift`, `_chargeJump` and
+`_morphLaunch` with source Three.js vectors and the original cost/sink helpers.
+They isolate flight power, altitude cost, descent recharge, unbalance locks,
+charged launch velocity and resource spending. Native collision/traversal,
+combined weather/water, source bot movement and full frame-order equivalence
+still require final integration cases. The removed explicit morph command is
+replaced by charged launch/automatic landing; the existing camera transport
+fixture now selects forms directly to keep camera binding isolated.
 
 Automated tests cover source-derived numerical contracts, authority rejection,
 purchase eligibility, lazy magazine refill, duplicate fire/lethal handling,
@@ -344,7 +777,8 @@ expanded circle/rotated-box skin, inside/tangent/parallel boundaries, vertical
 rejection, below-deck filtering, dynamic obstacles, 3D cuts, ridge samples and
 non-finite surfaces. Maximum observed vector error is 0.000003815 metres against
 a 0.0001-metre tolerance. The camera's original 0.5-metre near plane is retained.
-Crouch inputs certify the camera formula only; charged-jump gameplay is pending.
+Crouch inputs certify the camera formula only; the new charged-jump gameplay
+implementation remains unverified.
 
 Authority reticle/cone/launch queries, absolute hero-eye height frames and local
 rendering now use the original eye ratios and body-forward offsets. The flight
@@ -529,7 +963,17 @@ source NPC surface-following policy remains pending.
    remote/heavy presentation, then
    confirmed-lock/skill presentation.
 3. Implement the complete ability matrix, status/shield/evasion behavior,
-   carriers and summons with source simulation reference fixtures.
+   carriers and summons with source simulation reference fixtures. Core status,
+   non-carrier effects, cast/charge lifecycle and dedicated flight power are
+   implemented with unexecuted source oracles. Clone, autonomous summon and
+   hologram lifecycle/settlement, source graph export and prepared references are
+   now in place. Point carrier launch/flight/arrival/interception, native scene
+   export and prepared original references are in place. Next finish remaining
+   decoy/support fields, source aiming/lock presentation,
+   climate/attraction/animation integration and full special-entity interactions.
+   Cube/fog authority rules, native geometry and unexecuted source references are
+   in place. Retain the
+   final verification deferral until the complete implementation is ready.
 4. Port full wave/economy/bot rules, then compare seeded complete matches.
 5. Port campaign/boss/dialogue progression, dynamic environment and UI controls.
 6. Verify platform exports, transport failure/recovery and production hosting.

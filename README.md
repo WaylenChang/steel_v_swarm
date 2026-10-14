@@ -22,12 +22,123 @@ your IP on UDP port 8620, then start the match. All peers need this Godot projec
 the browser game's websocket protocol is different.
 
 WASD moves, mouse looks, left mouse fires, right mouse zooms, 1/2 changes weapon,
-Space jumps/ascends, C descends, Shift sprints, R reloads, Q/E requests abilities,
-B opens the supply shop, M expands the map, and Escape opens the battle menu.
+Hold/release Space charges a ground jump or morph launch; Space/C ascends/descends
+in flight. F toggles the defensive shield stance, Shift sprints, R reloads, Q/E requests abilities,
+B opens the supply shop, M expands the map, G requests a nearby civilian to
+follow, H sends them away, and Escape opens the battle menu.
 Basic controller movement/look and action buttons use Godot's InputMap.
 
 Only explicitly implemented abilities are available. The UI reports an
 unavailable ability instead of inventing substitute behavior.
+
+Tactical fog and cube fields now share authority lifecycle/visibility rules.
+Fog contracts enemy sight and hides allies from observers outside its first
+protecting field; toxic variants apply continuous corrosion and poison buildup.
+Cube panels are independently destructible and retain distinct visual boxes,
+damage bands and LOS planes. These implementations and their source-reference
+suites remain unverified during the current migration work.
+
+Clone, autonomous summon and hologram lifecycle/settlement are now implemented
+with prepared source oracles. Dedicated source companion graphs have an offline
+export and native scene packing path. They have not been generated or validated;
+missing companion scenes keep the associated abilities unavailable. Climate,
+NPC attraction, animation and remaining special fields are still pending.
+
+Point-delivery carriers now have authority launch, scalar flight, fractional
+arrival budgets and interception cancellation with prepared original tick
+references. Source bomber, hypersonic and character-specific kamikaze scenes
+have an offline export path. Their HP metadata, scenes and fixtures remain
+ungenerated and unverified; missing content keeps carrier casts unavailable.
+
+NPC source target priorities, hologram attraction and target-cache cadence now
+have prepared source oracles. Shared lane creep upgrades unlock after all eight
+tracks are maxed and apply to future waves. The native scrollable shop also
+allows source remote/dead purchases; durability purchases do not revive a dead
+pilot. These changes remain unverified, with wave prefill/cohesion, climate and
+full NPC movement still pending.
+
+Source prefill recipes, wave spawn jitter/spacing, planar progress, cohesion and
+control/push rules now have native implementations and prepared original
+references. NPC logic uses the original server period alongside native pilot
+physics. Their migration data remains ungenerated; combined physical traversal,
+climate, rendering and transport verification are still pending.
+
+Dynamic source climate and persistent rain/snow/sand surface history now feed
+authority movement, lift, cadence, reload/ability deadlines, rain damage,
+fog/night accuracy, snow freezing and entity lightning/shockwaves. Weather uses
+an independent seed and shared transport snapshots. Native sky, depth fog,
+lighting and precipitation consume source palettes/profiles; the lobby exposes
+all seasons, times and starting weather. Original weather/effect/damage/reload
+oracles are prepared but unexecuted. Complete scenery/hazards, water appearance, detailed
+cloud/precipitation layers, rendered deposits and complete integration remain
+pending. Weather data generation, compilation and tests remain deferred.
+
+Original triangular terrain sampling, water/swamp classification, dry corridors,
+mirrored neutral-avoidance grids, marine tides, immersion/jump rules and frozen
+fluid damage now have native paths and prepared source oracles. World baking
+also captures original water/swamp meshes and profiles. Ice constraints preserve
+the source floor/ceiling rules alongside native collision. Weapon and raw-burn
+deaths share authority settlement. These world resources and references remain
+ungenerated/unverified; full imagery/border classification, water appearance and
+the complete scenery hazard roster is still pending.
+
+Scenery lightning now uses the original quantized authority height grid,
+wet/slab/obstacle/ring gates, independent location RNG and source live-fire cap.
+Fire fields support original expiry, effective rain/snow extinguishing,
+raw-weather damage intensity, proportional burn and neutral avoidance. Original
+fire/smoke graph packing and animation references are prepared; canonical fire
+graphs still need per-entity source geometry variation and full damage states.
+Fire/scar snapshots, data/asset generation and all verification remain
+unexecuted; permanent scorch rendering and the full scenery roster are pending.
+
+Scene hazard/vehicle/mine/AA/relay generation, source HP/armor/EV rules, native
+four-way lane connectivity and source corridor pruning now have unexecuted
+reference paths. Authority destruction retains source rubble/fire/salvage.
+Mines and AA ambush share the source threat cooldown; relays retain contested
+decay, side-switch reset and one-time team vision. Flood zones preserve their
+movement and jump effects. Source cash/ammo/affix loot uses authority settlement,
+expiration and pickup order, with native source-scene rotation/bobbing. Mine
+proximity visibility uses the original no-imagery visual and 3D distance ramp.
+Original scene/loot/mine/collapse and flood fixtures are prepared but unexecuted.
+Per-entity hazard geometry, damage/cracks/debris, full squad bodies and
+complete scenery/presentation integration remain pending.
+
+Timed airdrops now have source batch/placement/landing/pickup/reward paths and
+unexecuted reference suites. Batteries preserve overcharge and shorten ability
+and charge deadlines; medical supplies share source-aware authority healing,
+including boss item rejection and remaining-segment caps. Allied civilian
+followers now produce profession supplies; the complete boss/campaign
+lifecycle remains pending. Original S/M/L crate/parachute
+graphs, first-seen descent clocks and landed crate animation have an offline
+export/native packing path. Native supply/loot/relay/threat notifications retain
+the captured source HUD limit/lifetime. Public supply events survive missing
+actor filtering, and the minimap excludes neutral scene bodies. These fixtures,
+assets, HUD/render/runtime checks and transport cases remain ungenerated and
+unverified.
+
+Third-party camps and civilians now have authority lifecycle paths and prepared
+original reference suites. Camps preserve garrison protection/healing, tethered
+aggro, bunker/member respawn ordering and once-only civilian liberation.
+Civilian/spy seeding, wandering, follow/away interaction, allied aid, signed kill
+credits and retryable respawns retain source draw order; spy identity and private
+AI state stay out of snapshots. Camp clearance uses original legacy-pillar and
+grouped-building rules. Offline companion export prepares original camp models
+and forty faction/profession civilian graphs. Per-ID body/appearance metadata
+and hit volumes are source-derived, while full per-ID civilian mesh variation,
+rig animation/marks and building visual clearance remain pending. All new
+fixtures/assets, compilation, runtime, render and transport checks are deferred.
+
+Regular-match faction counters now record original hero kills/deaths, paid
+assists and weighted creep last hits in authority settlement. Public snapshots
+copy these counters; replicas reject stale or unauthorized updates. Native HUD
+rows retain source faction colors and Chinese labels. Original death-settlement
+cases and snapshot isolation checks are prepared but unexecuted. Complete
+squad/mode statistics, leaderboards and replay integration remain pending.
+
+After the deferred source import, `tools/import_cockpits.tscn -- --hazards` packs
+hazards/AA/relays/mines and `-- --loot` packs cash/ammo/affix loot plus S/M/L airdrops. These generation
+steps, Godot compilation and all final validations remain deferred until the
+complete migration implementation is ready.
 
 Laser-guided launchers freeze the firing-time aim point. Fire-and-forget missiles
 acquire the firing-time exact-ray target or an eligible hero in the source aim
@@ -56,7 +167,7 @@ meshes; local gun recoil follows the private simulation clock. Physical rounds
 capture the shooter's original height frame for delayed settlement. Burst echoes
 now advance source barrel/recoil/flash poses and pure visual shells/tracers without
 additional combat spending. Native source projectile models follow private owner
-poses and preserve source tail/opacity animation. Full morph transitions,
+poses and preserve source tail/opacity animation. Complete morph/body presentation,
 remote/impact effects, client flight interpolation and TPS/super/recoil camera behavior
 and final toon appearance are pending.
 
@@ -90,6 +201,11 @@ The dedicated lobby starts two seconds after the first player registers; empty
 seats become bots. Late joins are rejected; a disconnected pilot becomes a bot.
 
 ## Validation
+
+Status/ability/movement implementation and its new source-oracle suites are
+currently unverified. Fixture regeneration, compilation and test execution are
+deferred until the migration implementation is complete, as requested. Earlier
+validation results do not certify these changes; see `MIGRATION.md` for scope.
 
 ```powershell
 godot --headless --path . res://tests/run.tscn

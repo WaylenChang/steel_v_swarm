@@ -19,7 +19,7 @@ static func damage_falloff(definition: Dictionary, distance: float) -> float:
 	if definition.get("fan", false):
 		var reach: float = definition.get("range", 0)
 		return maxf(c.FAN_FLOOR, c.FAN_MUZZLE * (1.0 - distance / reach)) if reach > 0 else 1.0
-	var floor_value: float = c.FALLOFF.FLOOR.get(definition.type, 0)
+	var floor_value: float = c.FALLOFF.FLOOR.get(definition.get("type", ""), 0)
 	if floor_value == 0:
 		return 1.0
 	var delta: float = distance - definition.get("range", 0) * c.FALLOFF.PLATEAU
@@ -57,6 +57,18 @@ static func direct_in_range(reach: float, delta: Vector3, radius: float) -> bool
 
 static func target_class(kind: String) -> String:
 	return Content.constants.TARGET_CLASS.get(kind, "armor")
+
+static func trajectory_class(definition: Dictionary) -> String:
+	if definition.is_empty():
+		return ""
+	var type: String = definition.get("type", "")
+	if type in ["beam", "rail", "plasma"] or definition.get("fan", false):
+		return "line"
+	if type == "missile":
+		return "fnf"
+	if definition.get("guide", false):
+		return "guide"
+	return "lob" if type == "launcher" else "flat"
 
 static func vs_multiplier(definition: Dictionary, kind: String) -> float:
 	var factor: float = definition.get("vs", {}).get(target_class(kind), 1.0)
@@ -146,10 +158,13 @@ static func altitude_range(definition: Dictionary, height_gap: float) -> float:
 	if height_gap <= 0:
 		return 1.0
 	var altitude: Dictionary = Content.constants.ALTITUDE
-	var tier: float = Content.constants.TARGET_H.tower
-	var strength := clampf((height_gap - tier) / (tier * (altitude.TIERS - 1)), 0, 1)
+	var strength := altitude_strength(height_gap)
 	var heavy: bool = definition.get("id", definition.get("slot", "")) in ["heavy", "atk", "ult"]
 	return 1.0 + altitude.RANGE * (altitude.RANGE_HEAVY_MUL if heavy else 1.0) * strength
+
+static func altitude_strength(height_gap: float) -> float:
+	var tier: float = Content.constants.TARGET_H.tower
+	return clampf((height_gap - tier) / (tier * (Content.constants.ALTITUDE.TIERS - 1)), 0, 1)
 
 static func lance_zones(offset: Vector2, radius: float, beam_radius: float) -> Array[int]:
 	var core: float = beam_radius * Content.constants.LANCE.CORE_F

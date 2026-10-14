@@ -43,14 +43,23 @@ func map_variant(index: int, size: int) -> Dictionary:
 	variant.native_world = "res://assets/worlds/%s_%d.res" % [entry.id, clampi(size, 1, 5)]
 	return variant
 
+func side_info(side: String) -> Dictionary:
+	if constants.SIDES.has(side):
+		return constants.SIDES[side]
+	if constants.THIRD.SIDES.has(side):
+		return constants.THIRD.SIDES[side]
+	if side == constants.SUPER_SIDE:
+		return constants.SUPER_INFO
+	return balance.side_unknown
+
 func label(key: String) -> String:
 	return str(text.get(key, key))
 
 func _install_input() -> void:
 	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D,
 		"rise": KEY_SPACE, "descend": KEY_C, "sprint": KEY_SHIFT, "reload": KEY_R,
-		"shop": KEY_B, "map": KEY_M, "defense": KEY_Q, "attack": KEY_E,
-		"morph": KEY_F, "pause": KEY_ESCAPE, "slot_light": KEY_1, "slot_heavy": KEY_2}
+		"shop": KEY_B, "map": KEY_M, "defense": KEY_Q, "attack": KEY_E, "civ_follow": KEY_G, "civ_away": KEY_H,
+		"defend": KEY_F, "pause": KEY_ESCAPE, "slot_light": KEY_1, "slot_heavy": KEY_2}
 	for action in keys:
 		InputMap.add_action(action)
 		var event := InputEventKey.new()

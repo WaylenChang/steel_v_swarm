@@ -6,12 +6,15 @@ func _ready() -> void:
 func _import() -> void:
 	var selection := OS.get_cmdline_user_args()
 	var projectiles := selection.has("--projectiles")
-	var folder := "projectiles" if projectiles else "cockpits"
-	var catalog: Dictionary = Content.balance.projectileVisual.profiles if projectiles else Content.heroes
+	var companions := selection.has("--companions")
+	var hazards := selection.has("--hazards")
+	var loot := selection.has("--loot")
+	var folder := "loot" if loot else "hazards" if hazards else "companions" if companions else "projectiles" if projectiles else "cockpits"
+	var catalog: Dictionary = Content.balance.loot_visuals if loot else Content.balance.hazard_visuals if hazards else Content.balance.companions if companions else Content.balance.projectileVisual.profiles if projectiles else Content.heroes
 	DirAccess.make_dir_recursive_absolute("res://assets/" + folder)
 	var count := 0
 	for character: String in catalog:
-		if not projectiles and not selection.is_empty() and character not in selection:
+		if not projectiles and not companions and not hazards and not loot and not selection.is_empty() and character not in selection:
 			continue
 		var data: Dictionary = Content.read_json("res://data/%s/%s.json" % [folder, character])
 		var textures: Array[ImageTexture] = []
@@ -61,7 +64,7 @@ func _import() -> void:
 				node.owner = nodes[0]
 			if spec.has("mesh"):
 				node.mesh = _mesh(data.meshes[int(spec.mesh)], spec.materials, data.materials, materials)
-				node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if (companions or hazards or loot) and spec.get("castShadow", false) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var scene := PackedScene.new()
 		if scene.pack(nodes[0]) != OK or ResourceSaver.save(scene, "res://assets/%s/%s.scn" % [folder, character], ResourceSaver.FLAG_COMPRESS) != OK:
 			push_error("Cannot pack source cockpit: " + character)
@@ -69,7 +72,7 @@ func _import() -> void:
 			return
 		nodes[0].free()
 		count += 1
-	print("PROJECTILE_IMPORT_PASS profiles=" if projectiles else "COCKPIT_IMPORT_PASS characters=", count)
+	print("LOOT_IMPORT_PASS profiles=" if loot else "HAZARD_IMPORT_PASS profiles=" if hazards else "COMPANION_IMPORT_PASS profiles=" if companions else "PROJECTILE_IMPORT_PASS profiles=" if projectiles else "COCKPIT_IMPORT_PASS characters=", count)
 	get_tree().quit()
 
 func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials: Array[StandardMaterial3D]) -> ArrayMesh:
@@ -79,6 +82,10 @@ func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials
 	var normals := PackedVector3Array()
 	for i in range(0, spec.normal.size(), 3):
 		normals.append(Vector3(spec.normal[i], spec.normal[i + 1], spec.normal[i + 2]))
+	var colors := PackedColorArray()
+	var raw_colors: Array = spec.get("color", [])
+	for i in range(0, raw_colors.size(), 3):
+		colors.append(Color(raw_colors[i], raw_colors[i + 1], raw_colors[i + 2]))
 	var raw: Array = spec.indices
 	if raw.is_empty():
 		raw = range(vertices.size())
@@ -106,6 +113,9 @@ func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials
 			arrays[Mesh.ARRAY_NORMAL] = normals
 		if uv.size() == vertices.size():
 			arrays[Mesh.ARRAY_TEX_UV] = uv
+		if colors.size() == vertices.size():
+			arrays[Mesh.ARRAY_COLOR] = colors
+			materials[material_id].vertex_color_use_as_albedo = true
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, materials[material_id])
 	return mesh

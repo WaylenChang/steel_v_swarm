@@ -4,6 +4,20 @@ const MuzzleTests = preload("res://tests/muzzle_suite.gd")
 const CameraTests = preload("res://tests/camera_suite.gd")
 const BurstTests = preload("res://tests/burst_suite.gd")
 const ProjectileVisualTests = preload("res://tests/projectile_visual_suite.gd")
+const StatusTests = preload("res://tests/status_suite.gd")
+const MovementTests = preload("res://tests/movement_suite.gd")
+const FieldTests = preload("res://tests/field_suite.gd")
+const CompanionTests = preload("res://tests/companion_suite.gd")
+const CarrierTests = preload("res://tests/carrier_suite.gd")
+const NpcTests = preload("res://tests/npc_suite.gd")
+const WaveTests = preload("res://tests/wave_suite.gd")
+const WeatherTests = preload("res://tests/weather_suite.gd")
+const EnvironmentTests = preload("res://tests/environment_suite.gd")
+const SceneryTests = preload("res://tests/scenery_suite.gd")
+const SceneTests = preload("res://tests/scene_suite.gd")
+const SupplyTests = preload("res://tests/supply_suite.gd")
+const ThirdTests = preload("res://tests/third_suite.gd")
+const MatchTests = preload("res://tests/match_suite.gd")
 
 var failures: Array[String] = []
 var assertions := 0
@@ -133,6 +147,20 @@ func _run() -> void:
 	await CameraTests.run(self, fixtures)
 	await BurstTests.run(self, fixtures)
 	await ProjectileVisualTests.run(self, fixtures)
+	StatusTests.run(self, fixtures)
+	await MovementTests.run(self, fixtures)
+	FieldTests.run(self, fixtures)
+	CompanionTests.run(self, fixtures)
+	CarrierTests.run(self, fixtures)
+	NpcTests.run(self, fixtures)
+	WaveTests.run(self, fixtures)
+	WeatherTests.run(self, fixtures)
+	EnvironmentTests.run(self, fixtures)
+	SceneryTests.run(self, fixtures)
+	SceneTests.run(self, fixtures)
+	SupplyTests.run(self, fixtures)
+	ThirdTests.run(self, fixtures)
+	MatchTests.run(self, fixtures)
 	if failures.is_empty():
 		print("TEST_PASS assertions=", assertions)
 		print("FAN_REFERENCE_PASS cases=", fixtures.fanHits.size(), " maximumDamageError=", maximum_fan_error)
@@ -1396,14 +1424,14 @@ func _settlement_tests() -> void:
 	var enemy: BattleUnit = sim.pilots[2]
 	await get_tree().physics_frame
 	var starting_money := player.money
-	_check(sim.buy(player, "lw"), "First tier purchase in supply radius")
+	_check(sim.buy(player, "lw"), "First tier purchase with source eligibility")
 	_near(player.money, starting_money - Content.constants.ECON.UPG_STEPS[0].price, "Server charges exactly once")
 	_check(not sim.buy(player, "lw"), "Score threshold rejects a second tier")
 	_near(player.score, 0, "Purchase does not spend battle score")
 	player.money = 10000
 	player.score = 100
 	player.position = Vector3.ZERO
-	_check(not sim.buy(player, "hp"), "Remote supply purchase rejected")
+	_check(sim.buy(player, "hp"), "Source upgrade purchases remain available away from the base")
 	_check(not sim.buy(player, "forged_item"), "Unknown upgrade rejected")
 	sim.submit_input(1, {"move": Vector2(1000, -1000), "yaw": 0.0, "pitch": 100.0})
 	_check(player.input_state.move.length() <= 1.000001, "Movement magnitude clamped")

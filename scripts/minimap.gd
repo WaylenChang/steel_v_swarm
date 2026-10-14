@@ -14,9 +14,9 @@ func _draw() -> void:
 			points.append(_project(Vector3(point[0], 0, point[1])))
 		draw_polyline(points, Color("748690"), 2, true)
 	for unit in state.get("units", []):
-		if unit.hp <= 0:
+		if unit.hp <= 0 or unit.get("special", {}).get("neutral", false):
 			continue
-		var color := Color(Content.constants.SIDES[unit.side].color)
+		var color := Color(Content.side_info(unit.side).color)
 		var radius := 4.0 if unit.kind in ["base", "tower"] else 2.0
 		draw_circle(_project(unit.position), radius, color)
 

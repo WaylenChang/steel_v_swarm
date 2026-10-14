@@ -9,7 +9,7 @@ export async function projectileReferences(d, gameSource, source) {
   if (!arcPoints) throw new Error('Missing source arc point budget');
   const env = { THREE, ...d, ARC_MAXP: arcPoints, starburst() {}, stepProjectileFx() {}, raySolid: () => true,
     _TMP_A: new THREE.Vector3(), _TMP_B: new THREE.Vector3(), _TMP_C: new THREE.Vector3(),
-    _TMP_D: new THREE.Vector3(), _FWD_Z: new THREE.Vector3(0, 0, 1) };
+    _TMP_D: new THREE.Vector3(), _TMP_E: new THREE.Vector3(), _TMP_F: new THREE.Vector3(), _FWD_Z: new THREE.Vector3(0, 0, 1) };
   const method = (name, overrides = {}) => {
     const start = text.indexOf(`\n  ${name}(`), end = text.indexOf('\n  }\n', start);
     if (start < 0 || end < 0) throw new Error(`Missing source projectile method: ${name}`);
@@ -19,6 +19,52 @@ export async function projectileReferences(d, gameSource, source) {
   };
   const update = method('_updateBullets');
   const guidedLaunch = method('_guidedLaunchVel');
+  const spawnVisual = method('_spawnVisShell');
+  const updateVisual = method('_updateVisShells', {starburst:(_,effects,x,y,z)=>effects.push([x,y,z])});
+  const visualShells = [];
+  const fadeLine = text.split('\n').find(line=>line.startsWith('function _tracerFade('));
+  const effectCap = Number(/const FX_MAX = (\d+)/.exec(text)?.[1]);
+  if (!fadeLine || !effectCap) throw new Error('Missing source tracer fade seams');
+  const fadeTracer = new Function(fadeLine+'\nreturn _tracerFade;')();
+  const updateEffects = method('_updateEffects',{FX_MAX:effectCap});
+  const tracer = method('_tracer'), tracerPresentation = [];
+  for (const ttl of [.1,.35]) for (const delta of [0,.01,.099999,.1,.349999,.35,.4]) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+    const line = new THREE.Line(geometry,new THREE.LineBasicMaterial({transparent:true}));
+    const ctx={scene:new THREE.Scene(),effects:[],_tracerPool:{acquire:()=>line},
+      _pushTracerFx:(obj,duration)=>ctx.effects.push({obj,ttl:duration,age:0,fade:fadeTracer}),_freeEffect:e=>{e.obj.visible=false;}};
+    tracer.call(ctx,new THREE.Vector3(1,2,3),new THREE.Vector3(-4,5,-6),0x4fc3f7,ttl);
+    updateEffects.call(ctx,delta);
+    tracerPresentation.push({ttl,delta,vertices:[...line.geometry.attributes.position.array],color:line.material.color.getHex(),opacity:line.material.opacity,visible:line.visible});
+    geometry.dispose();line.material.dispose();
+  }
+  for (const character of Object.keys(d.CHARACTERS)) for (const slot of ['light','heavy']) for (let level=1;level<=4;level++) {
+    const definition = d.heroWeapon(character,slot,level);
+    for (const scenario of [
+      {name:'ground target',origin:[0,2,0],target:[25,0,-90]},
+      {name:'air target and speed override',origin:[0,60,0],target:[25,40,-80],speed:d.shotV0(definition,true)*.8},
+      {name:'collision wins range',origin:[0,2,0],target:[0,2,-.1],hit:0},
+      {name:'zero target and small segments',origin:[0,80,0],target:[0,80,0],delta:.001},
+    ]) {
+      let frame=0;
+      const origin=new THREE.Vector3().fromArray(scenario.origin),target=new THREE.Vector3().fromArray(scenario.target);
+      const ctx={scene:new THREE.Scene(),effects:[],_visShells:[],terrain:{heightAt:()=>0},_surf:()=>0,
+        _shotV0:d.shotV0,_shotCols:()=>({col:0}),_guidedLaunchVel:guidedLaunch,_lobVel:method('_lobVel'),_lob45Vel:method('_lob45Vel'),_lobSolve:method('_lobSolve'),
+        _recPool:{acquire:()=>({pos:new THREE.Vector3(),origin:new THREE.Vector3(),target:new THREE.Vector3(),vel:new THREE.Vector3()})},
+        _takeProjectile:()=>new THREE.Object3D(),_dropBullet(){},_layerHitT:(x,y,z,ex,ey,ez)=>frame===scenario.hit?new THREE.Vector3(ex-x,ey-y,ez-z).length()*.6:null};
+      const direction=spawnVisual.call(ctx,origin,target,definition,'STEEL',character,scenario.speed ?? null,slot==='heavy');
+      const state=ctx._visShells[0],initial={position:state.pos.toArray(),velocity:state.vel.toArray(),range:state.max,guided:state.guided,launch_distance:state.launchDist};
+      const steps=[],delta=scenario.delta || 1/60;
+      while (ctx._visShells.length && frame<600) {
+        updateVisual.call(ctx,delta);
+        steps.push({position:state.pos.toArray(),velocity:state.vel.toArray(),age:state.age,terminal:!ctx._visShells.length,hit:ctx.effects.length>0});frame++;
+      }
+      if (ctx._visShells.length) throw new Error(`Visual shell did not terminate: ${character}/${slot}/${scenario.name}`);
+      visualShells.push({character,slot,level,name:scenario.name,origin:scenario.origin,target:scenario.target,speed:scenario.speed ?? null,
+        ground:0,surface:0,hitFrame:scenario.hit ?? -1,delta,direction:direction.toArray(),initial,steps});
+    }
+  }
   const rolls = [.37, .8];
   let rollIndex = 0;
   const armSpread = method('_armSpread', { Math: Object.assign(Object.create(Math), { random: () => rolls[rollIndex++] }) });
@@ -254,5 +300,5 @@ export async function projectileReferences(d, gameSource, source) {
       }
     }
   }
-  return { projectileLaunches: launches, projectileFlight: cases, lobControl, lobFlight, kineticFlight };
+  return { projectileLaunches: launches, projectileFlight: cases, lobControl, lobFlight, kineticFlight, visualShells, tracerPresentation };
 }

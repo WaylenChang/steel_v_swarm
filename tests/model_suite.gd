@@ -43,7 +43,7 @@ static func acquisition(h: Node) -> void:
 	actor.position = Vector3(0, 80, 0)
 	target.position = Vector3(0, 80, -100)
 	actor.input_state = {"aim": true, "slot": "heavy"}
-	var offset := target.aim_point() - actor.eye()
+	var offset := target.aim_point() - actor.view_origin()
 	actor.yaw = 0
 	actor.pitch = atan2(offset.y, -offset.z) + Content.balance.targeting.coneAngle - 0.0005
 	await h.get_tree().physics_frame
@@ -52,7 +52,7 @@ static func acquisition(h: Node) -> void:
 	h._check(sim._projectile_aim(actor, maximum).target == null, "Measured-centre boundary fixture misses the exact physical ray")
 	h._check(sim._aim_target(actor, maximum) == target, "Native cone includes the original measured centre at its angular boundary")
 	var proxy := {"id": target.entity_id, "hero": true, "point": target.position + Vector3.UP * target.height / 2}
-	h._check(TargetingMath.cone_acquire(actor.position, actor.eye(), actor.aim_direction(), maximum, [proxy]) == 0,
+	h._check(TargetingMath.cone_acquire(actor.position, actor.view_origin(), actor.aim_direction(), maximum, [proxy]) == 0,
 		"Normalized cylinder midpoint would incorrectly reject the same source target")
 	var advice: Dictionary = sim.snapshot(801).reachability
 	h._check(not advice.is_empty() and advice.target == target.entity_id and advice.ok,

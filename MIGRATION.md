@@ -7,7 +7,7 @@ behavior. A passing math fixture does not establish full match equivalence.
 | --- | --- | --- |
 | Project/runtime | GDScript main scene and autoloads; no runtime JS | Platform exports and delivery builds |
 | Character content | All 32 pilots, four weapon/ability tiers, chassis stats | Some mechanics below remain unavailable |
-| Art | Original reference/combat/faction glTF and audio imported; native animation playback; all 32 source-built FPV cockpit graphs packed as native scenes, with source gun-root reload/kick/lob poses, aim/FOV/morph visibility, weapon-binding mirrors, barrel progression and additive muzzle flashes | Combat attachments, full morph poses and transition continuity, burst echoes, toon/outline shaders, VFX, damage states |
+| Art | Original reference/combat/faction glTF and audio imported; native animation playback; all 32 source-built FPV cockpits, source gun-root/mirror/burst/flash poses; 128 source projectile scenes with age/speed opacity/tail animation, private owner poses and FPV echo shell/thin-tracer flight | Combat attachments, full morph/body/view reaction, remote/TPS projectile mounts and interpolation, muzzle/impact particles, toon/outline shaders, damage states |
 | Map layouts | 18 qualified presets, all five team sizes, source lane subsets/tower pairs; 90 native terrain/road resources | Satellite imagery, OSM buildings/facilities, habitat objects, water and hazards; complete geography-service behavior |
 | Map generation/services | Verified captures drive offline terrain resources; missing runtime resources reject explicitly | Mixed geographic layers, procedural random recipes, authored story arenas, live source preparation/qualification, cache refresh and relay fallback |
 | World | Source terrain vertices/topology/portal holes; graded roads, bridge slabs, tunnels, roofs, gallery openings and columns; native Jolt collision | Full scenery, texture/shader appearance, edge geometry, environmental LOS and complete traversal equivalence |
@@ -165,8 +165,9 @@ ENet/WebSocket checks cover clear/warning transitions, HUD text, global-snapshot
 privacy and hidden-target removal. Flat rounds and frozen laser points require
 an exact-ray target for advice; cone acquisition cannot promise a physical hit.
 A populated native map's status is rendered
-and inspected. These checks use the current eye-origin and source measured
-visual bands with authority hit radii; muzzle placement, moving-target hit
+and inspected. Native advice now uses source gun-local ports composed with the
+source FPV camera, source measured visual bands and authority hit radii.
+Moving-target hit
 prediction, confirmed-lock and skill glow visuals remain pending.
 
 Model-centre references execute the original `makeUnit`, `_spawnUnit` dimension
@@ -183,7 +184,7 @@ an angular-boundary case where the old cylinder midpoint incorrectly rejects
 the original centre. ENet/WebSocket private advice also targets a mercenary
 whose measured centre differs from its authority cylinder midpoint. Neither
 authority target volumes nor balance values are retuned. Animated visual-mesh
-collision, full native pose/attachment rendering, muzzle placement, boss/super
+collision, full native pose/attachment rendering, TPS/bot mounts, boss/super
 scaling and complete animated visual-mesh envelopes remain pending.
 
 Weapon-footprint references execute the original `_shotVictims`,
@@ -211,7 +212,7 @@ blast coverage behind a wall with shared team sight, front/rear penetration,
 independent fan bins, cached lob controls, privacy and no resource/RNG spending.
 ENet/WebSocket checks transmit an actual two-victim roster, normal/warning
 materials, shop clearing and hidden-target removal; a populated native map's
-two glows are rendered and inspected. Muzzle/parallax origins, source visual-mesh
+two glows are rendered and inspected. TPS/super/recoil camera behavior, source visual-mesh
 ray endpoints, moving-target prediction, skill footprints, confirmed-lock glows,
 siege locks and full status/environment interactions remain pending.
 
@@ -239,9 +240,9 @@ reload pose, private lob elevation, zoom hiding, death hiding and absent server
 cockpit allocation. Four populated-map renders (two robot and two morph pilots)
 are inspected. These fixtures certify rest geometry and gun-root pose,
 not world visual-mesh hits or full toon/outline appearance. Dynamic weapon
-presentation references are described below. The runtime still launches/queries
-combat from the existing eye origin; adopting FPV launch ports requires the
-authority pose/clock integration and immutable shooter height frames.
+presentation references are described below. Scalar source gun ports now drive
+combat launch/query origins. Authority pose/clock, immutable shooter height
+frames and the remaining world camera/body placement boundary are described below.
 
 Weapon-presentation references execute original `_markFire`,
 `fireReferenceWeapon`, `stepCombatFx`, full `stepLocomotion`,
@@ -270,8 +271,161 @@ also rejects non-finite presentation times and verifies no presentation damage,
 ammo refill or combat/spread RNG consumption. Separate-process ENet/WebSocket
 checks now receive the actual serial-driven sequence and flash. Three additional
 accepted-fire renders cover finger, payload and no-cloned-emitter weapons.
-Burst echoes, continuous morph/body pose, full status interactions, authority
-muzzle origins, visual-mesh collision and final shaders remain pending.
+Burst muzzle/impact particles and body/view reaction, continuous morph/body pose, full status interactions, TPS/super/recoil
+camera behavior, visual-mesh collision and final shaders remain pending.
+
+Authority weapon-pose references execute the original `_selfMuzzle`,
+`_cockpitEmission`, `_markFire`, `_syncCockpitWeapon`, complete weapon animation
+steps and gun-root render block. All 32 pilots contribute 48 sequences, 1,732
+frames and 628 pre-fire ports, including both morph endpoints and repeated form
+switches. Imported scalar transform paths reproduce the ports without allocating
+FPV meshes or scene nodes on the authority. Variable intervals, simultaneous
+distinct events, next-barrel selection before animation advancement, reload
+clamps, elevation, recoil and shared fallback aliases retain source ordering.
+Port tolerance is 0.0001 metres; maximum observed error is 0.000008534 metres.
+
+Private snapshots carry the simulation clock, serial, slot, form, gun transform,
+recoil and current port. Local gun recoil follows this clock, so repeated render
+frames cannot decay it twice. Accepted-fire feedback carries the pre-fire next
+port. Global snapshots omit private pose state, dead pilots clear it, and stale
+clocks/events reject without mutating sequences or aliases. Authority death
+ticks keep recoil decay running. Pose calculation cannot spend ammunition, power
+or either combat RNG stream; dedicated servers keep no cockpit geometry.
+
+All physical player rounds capture immutable body position, relative altitude,
+absolute hero eye and relative sight height at launch. The existing 98 original
+`_altRange` cases additionally verify those frames after shooter movement and
+with a distinct muzzle origin; live range modifiers still apply at settlement.
+Native rooftop checks preserve the source terrain reference separately from the
+physical launch surface. Kinetic direct/line settlement uses the captured height
+frame, and direct missile interception uses its captured relative body position.
+ENet/WebSocket checks carry actual native pose transforms and accepted ports,
+bind the private pose to the local cockpit and verify death/privacy behavior.
+These checks establish the authority prerequisites; gun-local FPV origin
+adoption is described below.
+
+Muzzle launch references execute the original complete `_tryFire` method with
+source cockpit ports, `_resolveAim`, `_selfMuzzle`, `_lobAim` and launch laws.
+All 32 pilots, both slots, four tiers and both morph forms contribute 960 cases,
+including 552 physical launches. Current-port advice remains distinct from the
+next-barrel launch sample. Reticle and acquisition rays stay camera-based;
+flat rounds leave the muzzle along camera forward, frozen laser points retain
+the reticle endpoint, and instant lines connect muzzle to that endpoint.
+Reload/recoil/elevation roots and native Jolt plane/wall queries exercise the
+whole source launch seam. Maximum observed position/velocity vector error is
+0.000068240; position tolerance is 0.0001 metres, velocity/reticle tolerance 0.001.
+Visual effects, audio and burst echoes are stubbed in this launch oracle; it does
+not certify complete source recoil/charge timing or impact reports.
+
+Another 2,200 original `terrain.surfaceAt` cases verify registered terrain,
+reachable stacked decks, low bridge boarding, covered tunnels, open approaches
+and exposed roof selection at the muzzle. Native physical support must still
+exist before launch spending. The sampler handles ports below verified terrain
+without replacing missing ground. Scenery rooftops and frozen water remain
+outside this registered-layer fixture. Fan and line settlement keep target body
+bands in relative source frames while static collision queries remain in the
+native world frame. Shooter eye/range state remains separate from muzzle height.
+
+Native integration verifies accepted-port/physical-origin identity, a narrow
+wall blocking the muzzle while clearing the reticle, preserved flight after
+shooter movement/turning and advice that cannot mutate fallback aliases.
+ENet/WebSocket transport checks now match the first actual heavy flight segment
+to the accepted port and retain private lob origins. All existing transport
+fixtures pass, and the populated lob arc/HUD is rendered and inspected.
+These checks now compose source gun-local geometry with source `heroView` FPV
+anchors, described below. Continuous morph poses, TPS/super/recoil camera
+behavior and TPS/bot body mounts remain pending. They do not establish complete
+source world muzzle placement or animated visual-mesh hits.
+
+FPV camera references execute original `heroView`, `selfH`, `_eyeH`,
+`_cameraDeClip` and `_cameraPullSegment` seams. All 32 pilots contribute 576
+anchor cases across ground/air, yaw and crouch inputs; 54 clipping cases cover
+expanded circle/rotated-box skin, inside/tangent/parallel boundaries, vertical
+rejection, below-deck filtering, dynamic obstacles, 3D cuts, ridge samples and
+non-finite surfaces. Maximum observed vector error is 0.000003815 metres against
+a 0.0001-metre tolerance. The camera's original 0.5-metre near plane is retained.
+Crouch inputs certify the camera formula only; charged-jump gameplay is pending.
+
+Authority reticle/cone/launch queries, absolute hero-eye height frames and local
+rendering now use the original eye ratios and body-forward offsets. The flight
+eye sits at body height zero and keeps its source nose offset. Camera de-clipping
+uses registered source column bounds, native non-terrain/non-slab collision and
+the shared registered-layer surface sampler. Per-physics-frame pose caches
+avoid repeated queries, invalidate on pose changes and cannot spend ammunition,
+power, HP or combat/spread RNG. Body motion remains separate from camera pullback.
+
+Snapshots retain clipped offsets in the body's yaw frame, including a valid
+zero offset, while replicas interpolate body position/heading. Native tests
+verify authority/render origin and orientation, replica identity and a thin-wall
+pullback. Separate-process ENet/WebSocket checks verify ground-to-air-to-ground
+camera offsets, source near-plane values and actual camera binding; all existing
+transport fixtures pass. Three populated native FPV accepted-fire renders are
+inspected. The 960 complete launch cases now begin at original uncharged FPV
+anchors, including hover-height flight forms and original camera pullback.
+Full geographic blockers, dynamic obstacle producers, TPS/super scaling and
+view recoil/roll/shake remain outside this fixture.
+
+Burst-presentation references execute original `fireBurstN`, `fireBurstGap`,
+`_queueBurst`, `_tickBurstFx` and `_burstEchoSelf`. All 256 weapon definitions
+contribute 513 queue sequences and 1,594 steps, including exact inclusive
+deadlines, repeated ticks, backward insertion order after a hitch, mixed batches,
+captured tiers and consumed callback failures. Exact boundary probes reconstruct
+native deadline arithmetic to avoid a one-ULP JSON decimal conversion difference;
+the runtime retains the original comparison without an epsilon.
+
+Another 48 source sequences cover all pilots, both morph endpoints and switching
+forms across 1,732 complete frames. Target queries and view/body recoil are
+isolated in this pose oracle; the original echo still selects the next actual
+gun port before marking fire and refreshing recoil/flash. Source mirrors,
+fallback aliases, current ports and subsequent accepted launch ports match within
+0.0001 metres (maximum vector error 0.00002398 metres). Separate acceptance and
+presentation serials preserve immutable-event deduplication after echoes advance
+the barrel sequence. Death consumes due self echoes without marking fire.
+
+Native authority keeps only this scalar bookkeeping; local FPV presentation
+shares the schedule and source flash lifetime. Integration and separate-process
+ENet/WebSocket tests verify one damaging round and one ammunition/power spend per
+accepted shot, no echo combat events or combat/spread RNG use, slot/tier capture,
+private pose serials, duplicate rejection and the next accepted shot. Two native
+echo-flash renders are inspected. Source projectile and thin-tracer presentation
+references are described below. Muzzle/impact particles, remote/TPS/body mounts
+and view/movement reaction remain explicitly unimplemented; scheduling/pose
+certification does not establish complete burst visual or recoil equivalence.
+
+Projectile-presentation references execute original `projectileMesh` and
+`stepProjectileFx` with the actual combat asset registry. All 32 pilots, both
+slots and both faction palettes produce 128 native scenes and 222 mesh nodes.
+Native graph transforms, bounds and vertices retain the source geometry; 3,200
+age/speed cases compare authored opacity pulses, wake scaling and jet flicker.
+The shared scene importer preserves source material groups, alpha/depth flags
+and winding. Outline shells remain excluded until their shader is implemented.
+Each live opacity animation owns its material while mesh resources are shared.
+
+Another 1,024 cases across all weapon tiers execute `_spawnVisShell` and
+`_updateVisShells` for 22,628 frames. Native pure presentation preserves launch
+speed overrides, launcher AA/45-degree priority, launch lift, frozen visual
+targets, ride guidance, gravity, target-sphere range limits, the small-segment
+collision gate and collision-before-range termination. Maximum combined
+position/velocity vector error is 0.00006292 within the 0.001 tolerance. Native
+static sweeps stop at thin walls; range expiry silently recycles the model.
+Fourteen original `_tracer`/`_updateEffects` cases verify endpoints, linear fade
+and inclusive expiry. Accepted FPV light beams/rails and echoes share this thin
+tracer and the original weapon/faction colors.
+
+Accepted physical rounds retain a stable presentation identity and captured
+weapon profile. Owner-only snapshots bind native meshes to authority position,
+velocity and age; global/dedicated views allocate no player projectile models.
+Local authority rendering updates those poses each frame. Actual cockpit echoes
+emit source meshes/tracers into a separate pool and cannot spend HP/ammunition/
+power, append combat events or consume combat/spread RNG. Duplicate/stale fire
+events remain governed by the independent acceptance serial. Native tests verify
+material isolation, variant reuse, snapshot clearing and unused-terrain queries.
+ENet/WebSocket tests verify light/heavy models, moving poses, echo emission and
+clearing. Their slowed flight clock isolates transport binding, so these checks
+do not certify fast-shot latency or client interpolation/prediction. A four-model
+native gallery render is inspected. Remote/TPS/body mounts, full geographic
+collision, source world muzzle/impact particles, heavy beam/fan effects and final
+shader appearance remain pending.
 
 Server missile references execute `_tickMissiles`, `hitMissile`, `heroLance`,
 `_tickBaseGuns`, `_acquireTarget` and `_frame`. Eleven flight sequences cover
@@ -364,9 +518,16 @@ source NPC surface-following policy remains pending.
    Source FPV rest geometry, indexed ports, gun-root poses and visibility are
    also verified and rendered natively. Source weapon-binding mirrors, visual
    barrel progression, fallback-cache aliases and muzzle flashes are in place.
-   Next integrate authority pose/clock and immutable shooter height frames before
-   adopting muzzle launch/query origins; finish burst scheduling, visual-mesh
-   envelopes and impact-report semantics, then confirmed-lock/skill presentation.
+   Scalar authority pose/clock, private recoil presentation and immutable shooter
+   height frames are in place. Source gun-local ports now drive launch, fire
+   control, reachability and footprint origins. Source `heroView` FPV anchors,
+   registered-obstacle de-clipping, near plane and replica offsets are in place.
+   Source burst scheduling, echo barrel/recoil/flash poses and separate accepted
+   and presentation serials are in place. Source projectile scenes, opacity/tail
+   animation, private owner poses and FPV echo shell/thin-tracer flight are in
+   place. Next finish visual-mesh envelopes, source impact/report semantics and
+   remote/heavy presentation, then
+   confirmed-lock/skill presentation.
 3. Implement the complete ability matrix, status/shield/evasion behavior,
    carriers and summons with source simulation reference fixtures.
 4. Port full wave/economy/bot rules, then compare seeded complete matches.

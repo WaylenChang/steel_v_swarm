@@ -1,7 +1,10 @@
 class_name CockpitRig
 extends Node3D
 
+signal echo_fired(definition: Dictionary, origin: Vector3)
+
 var source_root: Node3D
+var character: String
 var profile: Dictionary
 var nodes: Dictionary = {}
 var gun: Node3D
@@ -13,13 +16,17 @@ var cock_air: Node3D
 var kick := 0.0
 var control: Dictionary = {}
 var weapons := WeaponPresentation.new()
+var bursts := BurstPresentationQueue.new()
+var accepted_serial := -1
 var flash_ttl := 0.0
 var flash_heavy := false
 var flash_rng := RandomNumberGenerator.new()
 var muzzle_cache: Dictionary = {}
 var current_cache := 0
+var authority_pose: Dictionary = {}
 
-func configure(character: String) -> void:
+func configure(pilot: String) -> void:
+	character = pilot
 	profile = Content.balance.cockpit[character]
 	weapons.configure(profile)
 	for i in range(profile.muzzleCache.points.size()):
@@ -62,10 +69,25 @@ func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, sim
 	if source_root == null:
 		return
 	visible = unit.alive()
+	for echo: Dictionary in bursts.take_due(simulation_clock):
+		if not unit.alive():
+			continue
+		var fired_slot: String = echo.payload.slot
+		var form := "air" if unit.flying and profile.motion.has("air") else "ground"
+		var sequence: Dictionary = weapons.sequences[form][fired_slot]
+		var index := posmod(int(sequence.index) + 1, sequence.times.size())
+		var id := int(profile.emissions[form][fired_slot][index])
+		if id >= 0:
+			muzzle_cache[current_cache] = gun.to_local(nodes[id].global_position)
+		var origin := gun.to_global(muzzle_cache[current_cache])
+		_mark_fire(weapons.last_serial + 1, fired_slot, simulation_clock)
+		echo_fired.emit(echo.payload.definition, origin)
 	weapons.advance(delta, simulation_clock)
 	apply_mirrors(unit.flying, simulation_clock)
 	sync_visibility(aiming, unit.camera.fov, Content.constants.UNITS[unit.kind].fov, unit.flying)
 	kick = maxf(0, kick - delta * Content.balance.cockpitRules.kickDecay)
+	if not authority_pose.is_empty() and authority_pose.get("visual_serial", authority_pose.serial) == weapons.last_serial and authority_pose.slot == slot and authority_pose.clock <= simulation_clock:
+		kick = maxf(0, authority_pose.kick - (simulation_clock - authority_pose.clock) * Content.balance.cockpitRules.kickDecay)
 	var level := int(unit.upgrades.hw if slot == "heavy" else unit.upgrades.lw) + 1
 	var definition := Content.weapon(unit.character, slot, level)
 	var reload := Vector3.ZERO
@@ -77,12 +99,33 @@ func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, sim
 	sync_emitter(slot, unit.flying)
 	step_flash(delta)
 
+func sync_authority_pose(state: Dictionary) -> void:
+	if state.is_empty():
+		authority_pose = {}
+		return
+	if not is_finite(state.clock) or not is_finite(state.kick) or state.slot not in ["light", "heavy"]:
+		return
+	if not authority_pose.is_empty() and state.clock < authority_pose.clock:
+		return
+	authority_pose = state.duplicate()
+
 func fire_feedback(event: Dictionary) -> void:
-	if weapons.fire(int(event.serial), event.slot, event.clock):
+	if int(event.serial) <= accepted_serial:
+		return
+	if _mark_fire(maxi(int(event.serial), weapons.last_serial + 1), event.slot, event.clock):
+		accepted_serial = int(event.serial)
+		if event.has("level"):
+			var definition := Content.weapon(character, event.slot, int(event.level))
+			bursts.schedule(definition, event.clock, {"slot": event.slot, "definition": definition})
+
+func _mark_fire(serial: int, slot: String, at: float) -> bool:
+	if weapons.fire(serial, slot, at):
 		kick = 1
 		flash.visible = true
 		flash_ttl = Content.balance.cockpitRules.flash.duration
-		flash_heavy = event.slot == "heavy"
+		flash_heavy = slot == "heavy"
+		return true
+	return false
 
 func sync_emitter(slot: String, flying: bool) -> void:
 	var form := "air" if flying and profile.motion.has("air") else "ground"

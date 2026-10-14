@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 
 // Run the original client seams; the native runtime never loads Three.js.
-export async function targetingReferences(d, gameSource, source, BattleSim, config) {
+export async function targetingReferences(d, gameSource, source, BattleSim, config, cameras) {
   const THREE = await import(pathToFileURL(join(source, 'out/forest_review/three.module.js')).href);
   const text = gameSource.replace(/\r\n/g, '\n');
   const method = name => {
@@ -70,7 +70,7 @@ export async function targetingReferences(d, gameSource, source, BattleSim, conf
       { name: 'high air NPC relative elevation', kind: 'heli', y: 0, altitude: 100 },
       { name: 'surface-clamped shooter', kind: 'tank', y: -100, altitude: 0, surface: 40 },
     ]) {
-      const pos = V([0, 40, 0]), eyeHeight = Math.fround(d.heroTargetH(d.CHARACTERS[character].kind, character) * d.SELF_F.eye);
+      const pos = V([0, 40, 0]), eyeHeight = Math.fround(cameras[character].ground.eye);
       const surface = scenario.surface ?? 0;
       const ent = scenario.kind ? { hero: !!scenario.hero, kind: scenario.kind, heroY: scenario.altitude || 0,
         mesh: { position: V([0, scenario.y, -100]) } } : null;
@@ -112,7 +112,7 @@ export async function targetingReferences(d, gameSource, source, BattleSim, conf
   const lockConfirmation = [], sim = new BattleSim(config);
   sim._visibleTo = () => true;
   sim._losBlocked = () => false;
-  const eye = ch => Math.fround(d.hitH({ hero: true, kind: d.CHARACTERS[ch].kind, ch }) * d.SELF_F.eye);
+  const eye = ch => Math.fround(cameras[ch].ground.eye);
   const confirm = (character, level, aiming, scenario) => {
     sim.t = 10;
     const h = { id: 1, pid: 1, hero: true, ch: character, kind: d.CHARACTERS[character].kind,

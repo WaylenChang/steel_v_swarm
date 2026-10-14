@@ -69,6 +69,8 @@ func spawn(info: Dictionary) -> BattleUnit:
 	units[unit.entity_id] = unit
 	if unit.is_hero():
 		unit.yaw = world.spawn_heading(unit.side, unit.spawn_slot)
+		if authoritative:
+			unit.ensure_weapon_pose()
 	if authoritative and unit.speed > 0 and not unit.is_hero():
 		unit.path_follower = PathFollow3D.new()
 		unit.path_follower.loop = false
@@ -134,6 +136,7 @@ func _physics_process(delta: float) -> void:
 	for unit: BattleUnit in units.values():
 		if not unit.alive():
 			fire_controls.erase(unit.entity_id)
+			_tick_weapon_pose(unit, delta)
 			if unit.is_hero() and unit.respawn_at > 0 and clock >= unit.respawn_at:
 				respawn(unit)
 			continue
@@ -158,6 +161,7 @@ func _physics_process(delta: float) -> void:
 			_tick_lock(unit)
 			if unit.input_state.get("fire", false):
 				fire(unit, unit.input_state.get("slot", "light"))
+			_tick_weapon_pose(unit, delta)
 		else:
 			_tick_npc(unit, delta)
 		unit.visible = unit.alive() and unit.presentation_visible
@@ -299,6 +303,17 @@ func reload_weapon(unit: BattleUnit, slot: String) -> void:
 		return
 	unit.reload_at[slot] = clock + def.reload
 
+func _tick_weapon_pose(unit: BattleUnit, delta: float) -> void:
+	if not authoritative or unit.weapon_pose == null:
+		return
+	var slot: String = unit.input_state.get("slot", "light")
+	if slot not in ["light", "heavy"]:
+		return
+	var def := Content.weapon(unit.character, slot, int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1)
+	var control: Dictionary = fire_controls.get(unit.entity_id, {})
+	var elevation := CockpitPose.barrel_elevation(control.velocity, control.direction) if not control.is_empty() and slot == "heavy" and unit.input_state.get("aim", false) else 0.0
+	unit.weapon_pose.advance(delta, clock, slot, unit.flying, def, unit.reload_at.get(slot, NAN), elevation, unit.alive())
+
 func fire(unit: BattleUnit, slot: String) -> void:
 	if not authoritative or over or not unit.alive() or slot not in ["light", "heavy"]:
 		return
@@ -317,16 +332,21 @@ func fire(unit: BattleUnit, slot: String) -> void:
 		return
 	if def.get("needAim", false) and not unit.input_state.get("aim", false):
 		return
+	unit.ensure_weapon_pose()
+	var start := unit.weapon_pose.muzzle(unit.aim_transform(), slot, unit.flying, true, false)
 	var launch_surface := NAN
+	var shooter_frame := {}
 	if def.trajectory in ["guide", "fnf", "lob", "flat"]:
-		launch_surface = _projectile_surface(unit.eye())
-		if not is_finite(launch_surface):
+		launch_surface = _weapon_surface(start)
+		var reference := _height_reference(unit)
+		if not is_finite(launch_surface) or not is_finite(reference):
 			message.emit(unit.peer_id, "unavailable_surface")
 			return
+		shooter_frame = _shooter_frame(unit, reference)
 	var control := {}
 	if def.trajectory == "lob":
 		control = fire_controls.get(unit.entity_id, {})
-		if control.is_empty() or control.clock != clock or control.origin != unit.eye() or control.direction != unit.aim_direction() or control.level != int(unit.upgrades.hw):
+		if control.is_empty() or control.clock != clock or control.camera != unit.aim_transform() or control.pose_clock != unit.weapon_pose.clock or control.direction != unit.aim_direction() or control.level != int(unit.upgrades.hw):
 			control = lob_control(unit, def)
 			fire_controls[unit.entity_id] = control
 		if control.is_empty():
@@ -343,60 +363,68 @@ func fire(unit: BattleUnit, slot: String) -> void:
 	unit.fire_at[slot] = clock + 1.0 / def.rate
 	unit.play_action(slot)
 	unit.fire_serial += 1
-	events.append({"type": "weapon_fire", "actor": unit.entity_id, "slot": slot, "side": unit.side, "serial": unit.fire_serial, "clock": clock})
-	var start := unit.eye()
+	unit.ensure_weapon_pose()
+	var port := unit.weapon_pose.muzzle(unit.aim_transform(), slot, unit.flying)
+	unit.weapon_pose.fire(unit.fire_serial, slot, clock, def)
+	events.append({"type": "weapon_fire", "actor": unit.entity_id, "slot": slot, "side": unit.side,
+		"serial": unit.fire_serial, "clock": clock, "muzzle": port,
+		"level": int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1})
 	if def.trajectory == "flat":
 		var state := ProjectileMotion.ballistic(start, unit.aim_direction() * def.projectile.speed, reach)
 		state.actor = unit.entity_id
 		state.side = unit.side
 		state.definition = def.duplicate(true)
 		state.origin_surface = launch_surface
-		state.shooter_height = unit.position.y - launch_surface
+		state.shooter_frame = shooter_frame
 		state.slot = slot
-		projectiles.append(state)
+		_register_projectile(state)
 		return
 	if def.trajectory == "lob":
 		var state := ProjectileMotion.ballistic(start, control.velocity, control.range)
 		state.actor = unit.entity_id
 		state.side = unit.side
 		state.definition = def.duplicate(true)
-		projectiles.append(state)
+		state.shooter_frame = shooter_frame
+		_register_projectile(state)
 		return
 	if def.trajectory in ["guide", "fnf"]:
 		var aim := _projectile_aim(unit, reach)
-		_launch_guided(unit, def, start, aim.point, aim.hit, launch_surface, reach)
+		_launch_guided(unit, def, start, aim.point, aim.hit, launch_surface, reach, shooter_frame)
 		return
-	var precise := _projectile_aim(unit, reach)
+	var precise := _projectile_aim(unit, reach, def.area == "line")
 	var end: Vector3 = precise.point
 	match def.area:
 		"blast":
 			blast(unit, def, end)
 		"fan":
-			_fire_fan(unit, def)
+			_fire_fan(unit, def, start)
 		"line":
-			var obstruction := _arc_collision(start, start + unit.aim_direction() * reach)
-			_fire_line(unit, def, start, obstruction.position if not obstruction.is_empty() else start + unit.aim_direction() * reach)
+			var reference := _height_reference(unit)
+			if is_finite(reference):
+				_fire_line(unit, def, start, end, reference, _shooter_frame(unit, reference))
 		_:
-			if int(precise.missile) != 0:
+			if int(precise.missile) != 0 and start.distance_to(end) <= def.range * Content.constants.RANGE_TOL:
 				_damage_missile(unit, def, int(precise.missile))
 			var target: BattleUnit = precise.target if precise.target != null else _aim_target(unit, reach) if int(precise.missile) == 0 else null
 			if target != null:
-				var surface := _projectile_surface(unit.position)
+				var surface := _height_reference(unit)
 				var target_surface := _projectile_surface(target.position)
 				if not is_finite(surface) or not is_finite(target_surface):
 					return
 				var target_height: float = target.position.y - target_surface if target.is_hero() else 0.0
 				var offset := Vector3(target.position.x - unit.position.x, target_height - (unit.position.y - surface), target.position.z - unit.position.z)
-				var budget: float = def.range * _settlement_range_factor(unit, def, start, surface, target, target_surface) * Content.constants.RANGE_TOL
-				if visible_to_side(target, unit.side) and visible_to(unit, target) and CombatMath.direct_in_range(budget, offset, target.radius):
+				var budget: float = def.range * _settlement_range_factor(unit, def, start, surface, target, target_surface, _shooter_frame(unit, surface)) * Content.constants.RANGE_TOL
+				var launch_budget: float = _launch_range(unit, def, target) * Content.constants.RANGE_TOL
+				if visible_to_side(target, unit.side) and visible_to(unit, target) and CombatMath.direct_in_range(budget, offset, target.radius) and CombatMath.direct_in_range(launch_budget, target.position - start, target.radius):
 					var amount: float = def.dmg * CombatMath.damage_falloff(def, offset.length())
 					if rng.next() < def.get("crit", 0):
 						amount *= def.get("critX", 1)
 					damage(unit, target, def, amount)
-	events.append({"type": "shot", "actor": unit.entity_id, "start": start, "end": end, "side": unit.side})
+	events.append({"type": "shot", "actor": unit.entity_id, "start": start, "end": end, "side": unit.side,
+		"slot": slot, "weapon_type": def.type, "area": def.area})
 
 func lob_control(unit: BattleUnit, def: Dictionary) -> Dictionary:
-	var origin := unit.eye()
+	var origin := _advisory_origin(unit)
 	var direction := unit.aim_direction()
 	var maximum := TargetingMath.maximum_range(def)
 	var crosshair := _projectile_aim(unit, maximum)
@@ -415,6 +443,8 @@ func lob_control(unit: BattleUnit, def: Dictionary) -> Dictionary:
 		return {}
 	control.clock = clock
 	control.origin = origin
+	control.camera = unit.aim_transform()
+	control.pose_clock = unit.weapon_pose.clock
 	control.direction = direction
 	control.level = int(unit.upgrades.hw)
 	control.target = target.entity_id if target != null else 0
@@ -427,7 +457,7 @@ func _launch_range(unit: BattleUnit, def: Dictionary, target: BattleUnit) -> flo
 	var target_surface := world.ground_height(target.position.x, target.position.z)
 	if not target.is_hero() and (not is_finite(surface) or not is_finite(target_surface)):
 		return NAN
-	return TargetingMath.launch_range(def, unit.position, unit.eye(), surface,
+	return TargetingMath.launch_range(def, unit.position, unit.view_origin(), surface,
 		{"hero": target.is_hero(), "position": target.position, "kind": target.kind,
 		"altitude": target.position.y - target_surface})
 
@@ -444,16 +474,17 @@ func _aim_target(unit: BattleUnit, reach: float) -> BattleUnit:
 	if exact_id != 0:
 		return units.get(exact_id)
 	var candidates: Array = []
+	var camera := unit.view_origin()
 	for target: BattleUnit in units.values():
 		if not target.is_hero() or not target.alive() or target.side == unit.side or not visible_to_side(target, unit.side):
 			continue
 		var point := target.aim_point()
 		if not point.is_finite():
 			continue
-		var obstruction := world.obstruction_hit(unit.eye(), point)
+		var obstruction := world.obstruction_hit(camera, point)
 		candidates.append({"id": target.entity_id, "hero": true, "point": point,
-			"obstruction": INF if obstruction.is_empty() else unit.eye().distance_to(obstruction.position)})
-	return units.get(TargetingMath.cone_acquire(unit.position, unit.eye(), unit.aim_direction(), reach, candidates, unit.aim_anchor))
+			"obstruction": INF if obstruction.is_empty() else camera.distance_to(obstruction.position)})
+	return units.get(TargetingMath.cone_acquire(unit.position, camera, unit.aim_direction(), reach, candidates, unit.aim_anchor))
 
 func _tick_lock(unit: BattleUnit) -> void:
 	if not authoritative or over or not unit.alive():
@@ -509,21 +540,21 @@ func _confirm_lock(unit: BattleUnit, target_id: int) -> void:
 	if not target.is_hero() and target.kind != "heli":
 		delta.y = - (unit.position.y - surface)
 	var multiplier: float = Content.constants.FAN_RANGE_CENTER_F if def.area == "fan" else 1.0
-	var reach: float = def.range * _settlement_range_factor(unit, def, unit.eye(), surface, target, target_surface) * Content.constants.RANGE_TOL * multiplier
+	var reach: float = def.range * _settlement_range_factor(unit, def, unit.view_origin(), surface, target, target_surface, _shooter_frame(unit, surface)) * Content.constants.RANGE_TOL * multiplier
 	if maxf(0, delta.length() - target.radius) > reach:
 		return
 	unit.lock_target = target_id
 	unit.aim_anchor = target_id
 	unit.lock_at = clock
 
-func _projectile_aim(unit: BattleUnit, reach: float) -> Dictionary:
-	var origin := unit.eye()
+func _projectile_aim(unit: BattleUnit, reach: float, pierce: bool = false) -> Dictionary:
+	var origin := unit.view_origin()
 	var end := origin + unit.aim_direction() * reach
 	var excluded: Array[RID] = []
 	for candidate: BattleUnit in units.values():
 		if candidate.side == unit.side or not candidate.alive() or not visible_to_side(candidate, unit.side):
 			excluded.append(candidate.hit_area.get_rid())
-	var query := PhysicsRayQueryParameters3D.create(origin, end, 1 | 2 | 512, excluded)
+	var query := PhysicsRayQueryParameters3D.create(origin, end, 1 if pierce else 1 | 2 | 512, excluded)
 	query.collide_with_areas = true
 	query.hit_back_faces = true
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -538,7 +569,7 @@ func _arc_collision(start: Vector3, end: Vector3) -> Dictionary:
 	query.hit_back_faces = true
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
-func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vector3, hit: Dictionary, surface: float, reach: float) -> void:
+func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vector3, hit: Dictionary, surface: float, reach: float, shooter_frame: Dictionary) -> void:
 	var target_id := 0
 	var launch_def := def.duplicate(true)
 	if def.trajectory == "fnf":
@@ -557,7 +588,44 @@ func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vect
 	state.range = reach
 	# Upgrading or switching weapons cannot retune a warhead already in flight.
 	state.definition = launch_def
+	state.shooter_frame = shooter_frame
+	_register_projectile(state)
+
+func _register_projectile(state: Dictionary) -> void:
+	var unit: BattleUnit = units[state.actor]
+	state.visual_id = "%d/%d" % [unit.entity_id, unit.fire_serial]
 	projectiles.append(state)
+
+func projectile_view(viewer: BattleUnit) -> Array:
+	var states: Array = []
+	if viewer == null:
+		return states
+	for state: Dictionary in projectiles:
+		if state.actor != viewer.entity_id or not state.has("visual_id"):
+			continue
+		var definition: Dictionary = state.definition
+		states.append({"id": state.visual_id, "key": "%s-%s-%s" % [definition.ch, definition.slot, state.side.to_lower()],
+			"position": state.position, "velocity": state.velocity, "age": state.age})
+	return states
+
+func present_echo(definition: Dictionary, origin: Vector3, unit: BattleUnit) -> void:
+	if world == null or over or not unit.alive():
+		return
+	var reach := _launch_range(unit, definition, _aim_target(unit, TargetingMath.maximum_range(definition)))
+	if not is_finite(reach):
+		return
+	var presentation := world.ensure_projectile_visuals()
+	if definition.type in ["beam", "rail"]:
+		var point: Vector3 = _projectile_aim(unit, reach, definition.area == "line").point
+		presentation.tracer(origin, point, _fpv_tracer_color(definition.type, unit.side))
+		return
+	var target := origin + unit.aim_direction() * reach
+	var ground := world.ground_height(target.x, target.z) if definition.type == "launcher" else NAN
+	var surface := _weapon_surface(origin) if definition.trajectory in ["guide", "fnf"] else NAN
+	if (definition.type == "launcher" and not is_finite(ground)) or (definition.trajectory in ["guide", "fnf"] and not is_finite(surface)):
+		return
+	var state := VisualShellMotion.launch(definition, origin, target, ground, surface, definition.projectile.speed)
+	presentation.spawn_shell(state, "%s-%s-%s" % [definition.ch, definition.slot, unit.side.to_lower()])
 
 func _projectile_surface(point: Vector3) -> float:
 	var bottom: float = world.native_data.min_height - 100 if world.native_data != null else -100
@@ -567,6 +635,19 @@ func _projectile_surface(point: Vector3) -> float:
 		query.collision_mask = 1
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return hit.position.y if not hit.is_empty() else NAN
+
+func _weapon_surface(point: Vector3) -> float:
+	var ground := world.ground_height(point.x, point.z)
+	if not is_finite(ground):
+		return NAN
+	var surface := world.layers.projectile_surface(point, ground)
+	var probe := Vector3(point.x, maxf(point.y, surface) + Content.balance.structure.deckStep, point.z)
+	if not is_finite(_projectile_surface(probe)):
+		return NAN
+	var physical := _projectile_surface(point)
+	if is_finite(physical) and physical > surface and point.y >= physical - Content.balance.structure.deckStep:
+		surface = physical
+	return surface
 
 func _tick_projectiles(delta: float) -> void:
 	if not authoritative or over:
@@ -606,7 +687,7 @@ func _tick_projectiles(delta: float) -> void:
 		var endpoint: Vector3 = hit.position if not hit.is_empty() else state.position
 		var terminal := ProjectileMotion.finish(state, def, not hit.is_empty())
 		events.append({"type": "shot", "actor": state.actor, "start": previous, "end": endpoint,
-			"side": state.side, "slot": state.get("slot", "heavy"), "terminal": terminal})
+			"side": state.side, "slot": state.get("slot", "heavy"), "terminal": terminal, "physical": true})
 		if not terminal:
 			continue
 		projectiles.remove_at(index)
@@ -615,19 +696,23 @@ func _tick_projectiles(delta: float) -> void:
 			continue
 		if def.trajectory == "flat":
 			if def.area == "line":
-				_fire_line(attacker, def, state.origin, endpoint, state.origin_surface)
+				_fire_line(attacker, def, state.origin, endpoint, state.origin_surface, state.shooter_frame)
 			elif not hit.is_empty() and hit.collider.has_meta("missile"):
 				if state.origin.distance_to(endpoint) <= def.range * Content.constants.RANGE_TOL:
-					_damage_missile(attacker, def, int(hit.collider.get_meta("missile")))
+					var fired_position: Vector3 = state.shooter_frame.position
+					fired_position.y = state.shooter_frame.altitude
+					_damage_missile(attacker, def, int(hit.collider.get_meta("missile")), fired_position)
 			elif not hit.is_empty() and hit.collider is Area3D and hit.collider.get_parent() is BattleUnit:
 				var victim: BattleUnit = hit.collider.get_parent()
-				var surface := _projectile_surface(victim.position)
+				var surface := _height_reference(victim) if victim.is_hero() else world.ground_height(victim.position.x, victim.position.z)
 				if not is_finite(surface):
 					continue
 				var target_height: float = victim.position.y - surface if victim.is_hero() else 0.0
-				var offset := Vector3(victim.position.x - state.origin.x, target_height - state.shooter_height, victim.position.z - state.origin.z)
-				var reach: float = def.range * _settlement_range_factor(attacker, def, state.origin, state.origin_surface, victim, surface) * Content.constants.RANGE_TOL
-				if visible_to_side(victim, state.side) and _visible_from(state.origin, victim) and CombatMath.direct_in_range(reach, offset, victim.radius):
+				var fired_position: Vector3 = state.shooter_frame.position
+				var offset := Vector3(victim.position.x - fired_position.x, target_height - state.shooter_frame.altitude, victim.position.z - fired_position.z)
+				var reach: float = def.range * _settlement_range_factor(attacker, def, state.origin, state.origin_surface, victim, surface, state.shooter_frame) * Content.constants.RANGE_TOL
+				var launch_budget: float = _launch_range_from_frame(def, state.shooter_frame, victim, surface) * Content.constants.RANGE_TOL
+				if visible_to_side(victim, state.side) and _visible_from(state.origin, victim) and CombatMath.direct_in_range(reach, offset, victim.radius) and CombatMath.direct_in_range(launch_budget, victim.position - state.origin, victim.radius):
 					var amount: float = def.dmg * CombatMath.damage_falloff(def, offset.length())
 					if def.get("crit", 0) > 0 and rng.next() < def.crit:
 						amount *= def.get("critX", 1)
@@ -644,7 +729,7 @@ func _tick_projectiles(delta: float) -> void:
 		var height := maxf(endpoint.y, surface + 1)
 		# Source burst reports quantize height above the standing surface to decimetres.
 		endpoint.y = surface + roundf((height - surface) * 10) / 10
-		var friendly := LobFireControl.friendly_impact(def, state.origin, endpoint)
+		var friendly := LobFireControl.friendly_impact(def, state.shooter_frame.position if state.has("shooter_frame") else state.origin, endpoint)
 		blast(attacker, def, Vector3(endpoint.x, maxf(0, endpoint.y - surface), endpoint.z), friendly, true, level)
 
 func blast(unit: BattleUnit, def: Dictionary, impact: Vector3, friendly: bool = false, relative_heights: bool = false, impact_level: int = -1) -> void:
@@ -667,21 +752,29 @@ func blast(unit: BattleUnit, def: Dictionary, impact: Vector3, friendly: bool = 
 		if factor > 0:
 			damage(unit, target, def, def.get("dmg", 0) * factor, friendly)
 
-func _fire_fan(unit: BattleUnit, def: Dictionary) -> void:
+func _fire_fan(unit: BattleUnit, def: Dictionary, origin: Vector3 = Vector3(INF, INF, INF)) -> void:
+	if not origin.is_finite():
+		origin = _advisory_origin(unit)
+	var reference := _height_reference(unit)
+	if not is_finite(reference):
+		return
+	var frame := _shooter_frame(unit, reference)
 	var candidates: Array = []
-	var range_buff := 1.0
-	for buff in unit.buffs:
-		range_buff *= buff.get("mul", {}).get("range", 1.0)
 	for target: BattleUnit in units.values():
 		if target.side == unit.side or not target.alive():
 			continue
-		if not visible_to_side(target, unit.side) or not visible_to(unit, target):
+		if not visible_to_side(target, unit.side) or not _visible_from(origin, target):
 			continue
-		var target_height: float = target.sight_origin().y if target.is_hero() or target.kind in ["heli", "tower"] else target.sight_target().y
-		var range_factor := CombatMath.altitude_range(def, unit.sight_origin().y - target_height) * range_buff
-		candidates.append({"id": target.entity_id, "kind": target.kind, "position": target.global_position,
+		var surface := _height_reference(target) if target.is_hero() else world.ground_height(target.position.x, target.position.z)
+		if not is_finite(surface):
+			continue
+		var range_factor := _settlement_range_factor(unit, def, origin, reference, target, surface, frame)
+		var position := target.global_position
+		position.y = _missile_target_altitude(target)
+		candidates.append({"id": target.entity_id, "kind": target.kind, "position": position,
 			"radius": target.radius, "height": target.height, "range_factor": range_factor})
-	for hit in CombatMath.fan_hits(def, unit.eye(), unit.aim_direction(), candidates):
+	var relative_origin := Vector3(origin.x, origin.y - reference, origin.z)
+	for hit in CombatMath.fan_hits(def, relative_origin, unit.aim_direction(), candidates):
 		damage(unit, units[hit.id], def, hit.amount)
 
 func _visible_from(origin: Vector3, target: BattleUnit) -> bool:
@@ -689,13 +782,46 @@ func _visible_from(origin: Vector3, target: BattleUnit) -> bool:
 	query.hit_back_faces = true
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
-func _settlement_range_factor(unit: BattleUnit, def: Dictionary, origin: Vector3, origin_surface: float, target: BattleUnit, target_surface: float) -> float:
+func _shooter_frame(unit: BattleUnit, surface: float) -> Dictionary:
+	return {"position": unit.global_position, "altitude": unit.global_position.y - surface,
+		"eye_y": unit.global_position.y + unit.view_eye_height(), "sight_y": unit.global_position.y - surface + Content.constants.LOS.EYE_M, "surface": surface}
+
+func camera_origin(unit: BattleUnit) -> Vector3:
+	var position := unit.global_position
+	var signature: Array = [position, unit.yaw, unit.flying, unit.character]
+	var frame := Engine.get_physics_frames()
+	if unit.camera_cache_frame == frame and unit.camera_cache_signature == signature:
+		return unit.camera_cache_origin
+	var camera := CameraPose.anchor(unit.character, position, unit.yaw, unit.flying)
+	if world == null:
+		return camera
+	var blockers: Array = world.native_data.columns if world.native_data != null else []
+	var surface := _weapon_surface(position)
+	camera = CameraPose.clip(position, camera, unit.view_eye_height(), blockers, [], _unit_level(unit) == 1, surface,
+		func(start: Vector3, end: Vector3): return world.obstruction_hit(start, end, false), _weapon_surface)
+	unit.camera_cache_frame = frame
+	unit.camera_cache_signature = signature
+	unit.camera_cache_origin = camera
+	return camera
+
+func _launch_range_from_frame(def: Dictionary, frame: Dictionary, target: BattleUnit, target_surface: float) -> float:
+	var position: Vector3 = frame.position
+	var eye := Vector3(position.x, frame.eye_y, position.z)
+	return TargetingMath.launch_range(def, position, eye, frame.surface,
+		{"hero": target.is_hero(), "position": target.position, "kind": target.kind,
+		"altitude": target.position.y - target_surface})
+
+func _advisory_origin(unit: BattleUnit) -> Vector3:
+	unit.ensure_weapon_pose()
+	return unit.weapon_pose.current_muzzle(unit.aim_transform())
+
+func _settlement_range_factor(unit: BattleUnit, def: Dictionary, origin: Vector3, origin_surface: float, target: BattleUnit, target_surface: float, shooter_frame: Dictionary = {}) -> float:
 	var gap: float
 	if target.is_hero():
-		gap = origin.y - target.eye().y
+		gap = shooter_frame.get("eye_y", origin.y) - (target.global_position.y + target.view_eye_height())
 	else:
 		# Source compares two absolute hero eyes, otherwise two heights above their own surfaces.
-		var shooter_sight: float = origin.y - origin_surface - unit.height * Content.constants.SELF_F.eye + Content.constants.LOS.EYE_M
+		var shooter_sight: float = shooter_frame.get("sight_y", origin.y - origin_surface - unit.height * Content.constants.SELF_F.eye + Content.constants.LOS.EYE_M)
 		var target_sight: float = Content.constants.LOS.TOWER_EYE_M if target.kind in ["base", "tower"] else target.position.y - target_surface + Content.constants.LOS.EYE_M if target.kind == "heli" else Content.constants.LOS.TGT_M
 		gap = shooter_sight - target_sight
 	var factor := CombatMath.altitude_range(def, gap)
@@ -704,7 +830,7 @@ func _settlement_range_factor(unit: BattleUnit, def: Dictionary, origin: Vector3
 			factor *= buff.get("mul", {}).get("range", 1.0)
 	return factor
 
-func _fire_line(unit: BattleUnit, def: Dictionary, origin: Vector3, endpoint: Vector3, origin_surface: float = NAN) -> void:
+func _fire_line(unit: BattleUnit, def: Dictionary, origin: Vector3, endpoint: Vector3, origin_surface: float = NAN, shooter_frame: Dictionary = {}) -> void:
 	var candidates: Array = []
 	var segment := endpoint - origin
 	if segment.length() < 0.01:
@@ -716,23 +842,27 @@ func _fire_line(unit: BattleUnit, def: Dictionary, origin: Vector3, endpoint: Ve
 		origin_surface = _projectile_surface(origin)
 	if not is_finite(origin_surface):
 		return
+	if not shooter_frame.is_empty():
+		origin_surface = shooter_frame.surface
 	for target: BattleUnit in units.values():
 		if target.side == unit.side or not target.alive():
 			continue
 		if not visible_to_side(target, unit.side) or not _visible_from(origin, target):
 			continue
-		var surface := _projectile_surface(target.position)
+		var surface := _height_reference(target) if target.is_hero() else world.ground_height(target.position.x, target.position.z)
 		if not is_finite(surface):
 			continue
 		var relative_sample: float = Content.constants.LOS.TOWER_EYE_M if target.kind in ["tower", "base"] else Content.constants.LOS.TGT_M + (target.position.y - surface if target.is_hero() or target.kind == "heli" else 0.0)
-		candidates.append({"id": target.entity_id, "position": target.position, "radius": target.radius,
-			"height": target.height, "sample_y": target.sight_target().y,
+		var relative_position := target.position
+		relative_position.y = _missile_target_altitude(target)
+		candidates.append({"id": target.entity_id, "position": relative_position, "radius": target.radius,
+			"height": target.height, "sample_y": relative_sample,
 			"relative_y": relative_sample - (origin.y - origin_surface),
-			"range_factor": _settlement_range_factor(unit, def, origin, origin_surface, target, surface)})
-	for hit in CombatMath.line_hits(def, origin, direction, length, candidates):
+			"range_factor": _settlement_range_factor(unit, def, origin, origin_surface, target, surface, shooter_frame)})
+	var relative_origin := Vector3(origin.x, origin.y - origin_surface, origin.z)
+	for hit in CombatMath.line_hits(def, relative_origin, direction, length, candidates):
 		damage(unit, units[hit.id], def, hit.amount)
 	for missile: Dictionary in missiles.duplicate():
-		var relative_origin := Vector3(origin.x, origin.y - origin_surface, origin.z)
 		if missile.side != unit.side and MissileMotion.line_contains(def, relative_origin, direction, length, missile.position):
 			_damage_missile(unit, def, int(missile.id), relative_origin)
 
@@ -1061,7 +1191,17 @@ func snapshot(peer: int = 0) -> Dictionary:
 	return {"clock": clock, "wave": wave, "over": over, "winner": winner,
 		"units": visible_units, "events": visible_events.duplicate(), "fire_control": _control_snapshot(viewer),
 		"lock": _lock_snapshot(viewer), "reachability": _reachability_snapshot(viewer),
-		"footprint": _footprint_snapshot(viewer), "missiles": _missile_snapshot()}
+		"footprint": _footprint_snapshot(viewer), "missiles": _missile_snapshot(), "weapon_pose": _weapon_pose_snapshot(viewer),
+		"projectile_view": projectile_view(viewer)}
+
+func _weapon_pose_snapshot(viewer: BattleUnit) -> Dictionary:
+	if viewer == null or viewer.weapon_pose == null or not viewer.alive() or over:
+		return {}
+	var pose := viewer.weapon_pose
+	if not is_finite(pose.clock):
+		return {}
+	return {"clock": pose.clock, "serial": pose.accepted_serial, "visual_serial": pose.weapons.last_serial, "slot": pose.slot, "form": pose.form,
+		"gun": pose.gun, "kick": pose.kick, "muzzle": pose.current_muzzle(viewer.aim_transform())}
 
 func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
 	if viewer == null or world == null or over or not viewer.alive() or not viewer.is_hero():
@@ -1072,13 +1212,11 @@ func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
 	var definition := Content.weapon(viewer.character, slot, int(viewer.upgrades.hw if slot == "heavy" else viewer.upgrades.lw) + 1)
 	if definition.get("needAim", false) and not viewer.input_state.get("aim", false):
 		return {}
-	var origin := viewer.eye()
+	var origin := _advisory_origin(viewer)
 	var maximum := TargetingMath.maximum_range(definition)
 	var ray: Dictionary
 	if definition.area == "line":
-		var end := origin + viewer.aim_direction() * maximum
-		var obstruction := _arc_collision(origin, end)
-		ray = {"point": obstruction.position if not obstruction.is_empty() else end, "target": null}
+		ray = _projectile_aim(viewer, maximum, true)
 	else:
 		ray = _projectile_aim(viewer, maximum)
 	var targets: Array = []
@@ -1100,7 +1238,7 @@ func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
 		var cached: Dictionary = fire_controls.get(viewer.entity_id, {})
 		if cached.is_empty():
 			return {}
-		if cached.clock != clock or cached.origin != origin or cached.direction != viewer.aim_direction() or int(cached.level) != int(viewer.upgrades.hw):
+		if cached.clock != clock or cached.camera != viewer.aim_transform() or cached.direction != viewer.aim_direction() or int(cached.level) != int(viewer.upgrades.hw):
 			return {}
 		control = {"on": true, "ok": cached.ok, "close": cached.close, "has_impact": cached.arc.has_impact,
 			"impact": cached.arc.impact, "aim": cached.aim}
@@ -1140,7 +1278,7 @@ func _reachability_snapshot(viewer: BattleUnit) -> Dictionary:
 	var dimensions := target.visual_dimensions()
 	if dimensions.is_empty():
 		return {}
-	var advice := ReachabilityMath.evaluate(definition, viewer.eye(),
+	var advice := ReachabilityMath.evaluate(definition, _advisory_origin(viewer),
 		{"position": target.position, "kind": target.kind, "height": dimensions.height, "top": dimensions.top,
 			"radius": target.radius}, reach, _arc_collision)
 	return {"target": target.entity_id, "slot": slot, "ok": advice.ok, "warn": advice.warn}
@@ -1165,7 +1303,7 @@ func _control_snapshot(viewer: BattleUnit) -> Dictionary:
 	var control: Dictionary = fire_controls.get(viewer.entity_id, {})
 	if control.is_empty():
 		return {}
-	return {"points": control.arc.points, "impact": control.arc.impact, "has_impact": control.arc.has_impact,
+	return {"points": control.arc.points, "origin": control.origin, "impact": control.arc.impact, "has_impact": control.arc.has_impact,
 		"ok": control.ok, "aa": control.aa, "high": control.high, "close": control.close, "side": viewer.side,
 		"elevation": CockpitPose.barrel_elevation(control.velocity, control.direction)}
 
@@ -1202,8 +1340,23 @@ func apply_snapshot(data: Dictionary) -> void:
 		units.erase(id)
 	for event in data.events:
 		if event.type == "shot":
-			world.tracer(event.start, event.end, event.side)
+			present_shot(event)
 	if data.over and not over:
 		over = true
 		winner = data.winner
 		result.emit(winner)
+
+func present_shot(event: Dictionary) -> void:
+	var owner: BattleUnit = units.get(int(event.actor))
+	if owner != null and owner.is_hero() and owner.peer_id == multiplayer.get_unique_id():
+		if event.get("physical", false):
+			return
+		if event.get("slot") == "light" and event.get("area") == null and event.get("weapon_type") in ["beam", "rail"]:
+			world.ensure_projectile_visuals().tracer(event.start, event.end, _fpv_tracer_color(event.weapon_type, event.side))
+			return
+	world.tracer(event.start, event.end, event.side)
+
+func _fpv_tracer_color(type: String, side: String) -> Color:
+	var style: Dictionary = Content.balance.projectileVisual
+	var hex: int = style.beamColors[side] if type == "beam" else style.colors[side].col
+	return Color.hex((hex << 8) | 0xff)

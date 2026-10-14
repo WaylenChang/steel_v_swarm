@@ -325,6 +325,9 @@ func _bind_camera(pilot: BattleUnit) -> void:
 		pilot.camera.current = true
 		pilot.model.visible = false
 		pilot.ensure_cockpit()
+		var echo_callback := simulation.present_echo.bind(pilot)
+		if not pilot.cockpit.echo_fired.is_connected(echo_callback):
+			pilot.cockpit.echo_fired.connect(echo_callback)
 
 func _process(delta: float) -> void:
 	if simulation == null or Session.dedicated:
@@ -336,6 +339,9 @@ func _process(delta: float) -> void:
 	var aiming := Input.is_action_pressed("aim") and not overlay_open
 	var clock := simulation.clock if simulation.authoritative else presentation_clock
 	pilot.cockpit.update_view(pilot, selected_slot, aiming, delta, clock)
+	if simulation.authoritative:
+		simulation.world.sync_projectile_view(simulation.projectile_view(pilot))
+	simulation.world.step_projectile_visuals(delta)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if simulation == null or Session.dedicated:
@@ -440,11 +446,12 @@ func _receive_state(state: Dictionary) -> void:
 		return
 	minimap.state = state
 	minimap.queue_redraw()
+	simulation.world.sync_projectile_view(state.get("projectile_view", []))
 	if Session.multiplayer.is_server():
 		simulation.apply_presentation_view(state)
 		for event in state.events:
 			if event.type == "shot":
-				simulation.world.tracer(event.start, event.end, event.side)
+				simulation.present_shot(event)
 	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
 	if pilot == null:
 		return
@@ -461,8 +468,8 @@ func _receive_state(state: Dictionary) -> void:
 	if network_lob_test:
 		if not control.is_empty() and control.points is PackedVector3Array and control.points.size() > 1:
 			var actor_state: Dictionary = state.units.filter(func(actor): return int(actor.peer) == multiplayer.get_unique_id())[0]
-			var expected: Vector3 = actor_state.position + Vector3.UP * Content.heroes[actor_state.character].height * Content.constants.SELF_F.eye
-			if control.points[0].distance_to(expected) > 0.01:
+			var eye: Vector3 = actor_state.position + Vector3.UP * Content.heroes[actor_state.character].height * Content.constants.SELF_F.eye
+			if not control.origin.is_finite() or control.points[0].distance_to(control.origin) > 0.01 or control.origin.distance_to(eye) < 0.1:
 				push_error("NETWORK_LOB_ORIGIN_MISMATCH")
 				get_tree().quit(1)
 			network_lob_control_seen = true
@@ -475,6 +482,7 @@ func _receive_state(state: Dictionary) -> void:
 	for event: Dictionary in state.events:
 		if event.type == "weapon_fire" and int(event.actor) == pilot.entity_id:
 			pilot.cockpit.fire_feedback(event)
+	pilot.cockpit.sync_authority_pose(state.weapon_pose)
 	stats.text = "%s %.0f/%.0f  |  %s %.0f/%.0f  |  %s %.0f\n%s %.0f  |  %s %.0f  |  %s %d" % [
 		Content.label("hp"), pilot.hp, pilot.max_hp, Content.label("shield"), pilot.shield, pilot.max_shield,
 		Content.label("power"), pilot.power, Content.label("credits"), pilot.money,

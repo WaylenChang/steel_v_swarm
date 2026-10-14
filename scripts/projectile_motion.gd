@@ -10,19 +10,25 @@ static func launch(definition: Dictionary, origin: Vector3, direction: Vector3, 
 	var vertical := direction.cross(lateral).normalized()
 	var spread := tan(spread_amount * spec.arm.spread)
 	direction = (direction + lateral * spread * cos(spread_angle * TAU) + vertical * spread * sin(spread_angle * TAU)).normalized()
+	var lift := launch_lift(definition, origin, direction, surface_height, spec.speed)
+	return {"position": origin, "origin": origin, "velocity": lift.velocity, "age": 0.0,
+		"range": definition.range, "launch_distance": lift.distance,
+		"target": target_id, "guide_point": aim, "chase": false, "last_known": false,
+		"home_point": Vector3.ZERO, "home_radius": 0.0, "dud": false}
+
+static func launch_lift(definition: Dictionary, origin: Vector3, direction: Vector3, surface_height: float, speed: float) -> Dictionary:
+	if definition.trajectory not in ["guide", "fnf"]:
+		return {"velocity": direction * speed, "distance": 0.0, "guided": false}
 	var launch_config: Dictionary = Content.constants.GUIDED_LAUNCH
 	var base_pitch: float = launch_config.PITCH_DEG_FNF if definition.trajectory == "fnf" else launch_config.PITCH_DEG
 	var pitch := deg_to_rad(base_pitch * maxf(0, 1 - maxf(0, origin.y - surface_height) / (Content.constants.TARGET_H.tower * launch_config.ZERO_PITCH_TOWER_F)))
-	var velocity: Vector3 = direction * spec.speed
+	var velocity: Vector3 = direction * speed
 	if pitch > 0:
 		var flat := Vector3(direction.x, 0, direction.z)
 		if flat.length_squared() <= 0.000001:
 			flat = Vector3.BACK
-		velocity = flat.normalized() * spec.speed * cos(pitch) + Vector3.UP * spec.speed * sin(pitch)
-	return {"position": origin, "origin": origin, "velocity": velocity, "age": 0.0,
-		"range": definition.range, "launch_distance": spec.launchDistance if pitch > 0 else 0.0,
-		"target": target_id, "guide_point": aim, "chase": false, "last_known": false,
-		"home_point": Vector3.ZERO, "home_radius": 0.0, "dud": false}
+		velocity = flat.normalized() * speed * cos(pitch) + Vector3.UP * speed * sin(pitch)
+	return {"velocity": velocity, "distance": definition.projectile.launchDistance if pitch > 0 else 0.0, "guided": pitch > 0}
 
 static func ballistic(origin: Vector3, velocity: Vector3, reach: float) -> Dictionary:
 	return {"position": origin, "origin": origin, "velocity": velocity, "age": 0.0,

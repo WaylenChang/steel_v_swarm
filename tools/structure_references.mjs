@@ -20,6 +20,10 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
     return Number(match[1]);
   };
   const rules = {
+    deckStep: grab(main, /const DECK_STEP = ([\d.]+)/),
+    deckUnder: grab(main, /const DECK_UNDER = ([\d.]+)/),
+    maximumMechHeight: grab(main, /const MAX_MECH_H = ([\d.]+)/),
+    tunnelRoofThickness: grab(biome, /ROOF_T: ([\d.]+)/),
     deckCell: grab(deckCode, /const CELL = ([\d.]+)/), tunnelCell: grab(tunnelCode, /const CELL = ([\d.]+)/),
     deckPad: grab(deckCode, /const pad = d\.hw \+ ([\d.]+)/), tunnelPad: grab(tunnelCode, /const pad = d\.hw \+ ([\d.]+)/),
     deckLongTolerance: grab(deckCode, /const LONG_TOL = ([\d.]+)/),
@@ -112,6 +116,27 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
       { x1: -40, z1: 0, fy1: -5, cy1: 3, x2: 40, z2: 0, fy2: -5, cy2: 3, hw: 8, open: true },
       { x1: -40, z1: 0, fy1: 0, cy1: 8, x2: 40, z2: 0, fy2: 0, cy2: 8, hw: 8 }] },
   ];
+  const surfaceStart = main.indexOf('    terrain.surfaceAt = (x, z, curY) => {');
+  const surfaceEnd = main.indexOf('\n    };', surfaceStart);
+  if (surfaceStart < 0 || surfaceEnd < 0) throw new Error('Missing source projectile surfaceAt');
+  const surfaceBody = main.slice(main.indexOf('{', surfaceStart) + 1, surfaceEnd);
+  const surfaceAt = new Function('terrain', 'tunnelAt', 'deckY', 'DECK_MARGIN', 'DECK_STEP', 'DECK_UNDER', 'MAX_MECH_H',
+    'blockerTop', 'BLK_MARGIN', 'roofPlatformAt', 'isWeatherFrozen', `return (x,z,curY) => {${surfaceBody}}`);
+  const projectileSurfaces = [];
+  const surfaceGroups = [...geometryGroups,
+    {name:'stacked reachable decks',decks:[{x1:-40,z1:0,y1:5,x2:40,z2:0,y2:5,hw:8},
+      {x1:-40,z1:0,y1:20,x2:40,z2:0,y2:20,hw:8}],tunnels:[]},
+    {name:'terrain without structures',decks:[],tunnels:[]}];
+  for (const group of surfaceGroups) for (const ground of [0, 50]) {
+    const roofIndex = new Function('tunRoofTop', `return ${tunnelCode}`)(cy => cy + rules.tunnelRoofThickness);
+    const tunnelAt = roofIndex(group.tunnels), deckAt = deckIndex(group.decks);
+    const query = surfaceAt({heightAt:()=>ground},tunnelAt,deckAt,rules.deckMargin,rules.deckStep,rules.deckUnder,rules.maximumMechHeight,
+      ()=>null,0,()=>null,()=>false);
+    for (const x of [0,40,40.74,41.01,55]) for (const z of [0,8,8.01,11.01]) for (const y of [-.5,1,2.8,5,8,8.01,15,17.2,20,40,51]) {
+      const point=[x,y,z].map(Math.fround);
+      projectileSurfaces.push({name:group.name,...group,point,ground,result:query(point[0],point[2],point[1])});
+    }
+  }
   const clientCase = (name, geometry, point, surface, ground) => {
     const deckAt = deckIndex(geometry.decks), tunnelAt = tunnelIndex(geometry.tunnels);
     const ctx = { pos: { x: point[0], y: point[1], z: point[2] }, _surf: () => surface,
@@ -138,5 +163,5 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
     }
     structureWorlds.push({ key, count: entries.length, probes });
   }
-  return { rules, worlds, fixtures: { structureSeparation, structureLevels, structureClient, structureWorlds, structureBlasts } };
+  return { rules, worlds, fixtures: { structureSeparation, structureLevels, structureClient, structureWorlds, structureBlasts, projectileSurfaces } };
 }

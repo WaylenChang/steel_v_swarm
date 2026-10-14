@@ -24,20 +24,43 @@ func _ready() -> void:
 	pilot.position = Vector3(0, simulation.world.ground_height(0, 0) + 10, 0)
 	yaw = 0
 	pitch = -0.12
+	pilot.yaw = yaw
+	pilot.pitch = pitch
 	pilot.rotation.y = yaw
 	pilot.camera.rotation.x = pitch
+	pilot.sync_view_camera()
 	await get_tree().create_timer(0.4).timeout
 	if OS.get_cmdline_user_args().has("--fire-feedback"):
 		selected_slot = _argument("--feedback-slot", "light")
 		pilot.input_state = {"aim": selected_slot == "heavy", "slot": selected_slot}
+		simulation.clock += 1.0 / 60
 		simulation.fire(pilot, selected_slot)
+		simulation._tick_weapon_pose(pilot, 1.0 / 60)
 		var events := simulation.events.filter(func(event): return event.type == "weapon_fire" and int(event.actor) == pilot.entity_id)
 		if events.is_empty():
 			push_error("COCKPIT_PREVIEW_FIRE_REJECTED")
 			get_tree().quit(1)
 			return
 		pilot.cockpit.fire_feedback(events[-1])
+		pilot.cockpit.sync_authority_pose(simulation.snapshot(1).weapon_pose)
 		pilot.cockpit.update_view(pilot, selected_slot, false, 0, simulation.clock)
+		if OS.get_cmdline_user_args().has("--burst-echo"):
+			var definition := Content.weapon(character, selected_slot)
+			if int(definition.burst.count) <= 1:
+				push_error("COCKPIT_PREVIEW_NO_BURST")
+				get_tree().quit(1)
+				return
+			for frame in range(240):
+				simulation.clock += 1.0 / 240
+				simulation._tick_weapon_pose(pilot, 1.0 / 240)
+				pilot.cockpit.update_view(pilot, selected_slot, false, 1.0 / 240, simulation.clock)
+				if pilot.cockpit.weapons.last_serial > pilot.cockpit.accepted_serial:
+					break
+			if not pilot.cockpit.flash.visible or pilot.cockpit.weapons.last_serial <= pilot.cockpit.accepted_serial:
+				push_error("COCKPIT_PREVIEW_ECHO_MISSING")
+				get_tree().quit(1)
+				return
+			pilot.cockpit.sync_authority_pose(simulation.snapshot(1).weapon_pose)
 	if pilot.cockpit == null or not pilot.cockpit.visible or pilot.cockpit.gun.get_children().all(func(child): return not child.visible):
 		push_error("COCKPIT_PREVIEW_GEOMETRY_MISSING")
 		get_tree().quit(1)
@@ -45,6 +68,8 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--capture-preview"):
 		await RenderingServer.frame_post_draw
 		var suffix := "-fire" if OS.get_cmdline_user_args().has("--fire-feedback") else ""
+		if OS.get_cmdline_user_args().has("--burst-echo"):
+			suffix = "-echo"
 		if get_viewport().get_texture().get_image().save_png("res://tests/cockpit-%s%s.png" % [character, suffix]) != OK:
 			get_tree().quit(1)
 			return

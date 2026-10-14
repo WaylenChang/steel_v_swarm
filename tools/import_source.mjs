@@ -11,6 +11,8 @@ import { structureReferences } from './structure_references.mjs';
 import { reachabilityReferences } from './reachability_references.mjs';
 import { modelReferences } from './model_references.mjs';
 import { footprintReferences } from './footprint_references.mjs';
+import { cameraReferences } from './camera_references.mjs';
+import { burstReferences } from './burst_references.mjs';
 
 // Offline migration only: evaluate the source's settlement seams instead of copying derived numbers.
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -51,6 +53,7 @@ for (const [id, ch] of Object.entries(d.CHARACTERS)) {
     heroes[id].weapons[slot] = Array.from({ length: d.ECON.UPGRADES[slot === 'light' ? 'lw' : 'hw'].max + 1 }, (_, i) => {
       const def = d.heroWeapon(id, slot, i + 1);
       return { ...def, area: d.aoeClass(def), trajectory: d.trajClass(def), reachRule: d.reachRule(def),
+        burst: { count: d.fireBurstN(def), gap: d.fireBurstGap(def) },
         lanceRadius: d.lanceR(def), lancePen: d.lancePen(def),
         fanSubs: d.fanSubs(def), fanMaxBuildingHits: d.fanBuildingMaxHits(def),
         fanRangeFactors: Array.from({ length: d.fanSubs(def) }, (_, bin) => d.fanBinRangeF(def, bin)),
@@ -93,26 +96,29 @@ const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object
 const missileReference = await missileReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource);
 const structureReference = await structureReferences(d, BattleSim, maps[0].variants['1'].config, source, root, gameSource);
 const reachabilityReference = await reachabilityReferences(d, gameSource, source);
-const modelReference = await modelReferences(source, gameSource);
+const cameraReference = await cameraReferences(d, source, gameSource);
+const modelReference = await modelReferences(source, gameSource, cameraReference.profiles);
 const glowOpacity = /opacity: warn \? ([\d.]+) : ([\d.]+)/.exec(gameSource);
 const glowColor = /color: warn \? (0x[\da-f]+) : sideInfo\(this.side\).color/.exec(gameSource);
 const glowSize = /sp.scale.setScalar\(Math.max\(([\d.]+), Math.max\(h, r \* 2\) \* ([\d.]+)\)\)/.exec(gameSource);
 if (!glowOpacity || !glowColor || !glowSize) throw new Error('Source weapon glow style seams missing');
 const fixtures = {
+  ...burstReferences(d, gameSource),
   ...await footprintReferences(d, gameSource, source),
   ...modelReference.fixtures,
+  ...cameraReference.fixtures,
   ...structureReference.fixtures,
   ...missileReference.fixtures,
   ...combatReferences(d, BattleSim, maps[0].variants['1'].config, buildings),
   ...await projectileReferences(d, gameSource, source),
-  ...lineReferences(d, BattleSim, maps[0].variants['1'].config),
-  ...await targetingReferences(d, gameSource, source, BattleSim, maps[0].variants['1'].config),
+  ...lineReferences(d, BattleSim, maps[0].variants['1'].config, cameraReference.profiles),
+  ...await targetingReferences(d, gameSource, source, BattleSim, maps[0].variants['1'].config, cameraReference.profiles),
   reachability: reachabilityReference.reachability,
   volumes: [
     ...Object.entries(d.CHARACTERS).map(([id, ch]) => {
       const actor = {hero:true, kind:ch.kind, ch:id};
       return {kind:ch.kind, side:ch.side, character:id, radius:d.hitR(actor), height:d.hitH(actor),
-        eye:d.hitH(actor)*d.SELF_F.eye,
+        eye:cameraReference.profiles[id].ground.eye, forward:cameraReference.profiles[id].ground.forward,
         ground:d.selfCollider(d.heroTargetH(ch.kind,id),false), air:d.selfCollider(d.heroTargetH(ch.kind,id),true)};
     }),
     ...Object.keys(d.UNITS).flatMap(kind => ['SWARM','STEEL'].map(side =>
@@ -139,6 +145,8 @@ for (const [name, value] of Object.entries({ balance: { constants, heroes, unitV
   modelGeometry: modelReference.geometry,
   cockpit: modelReference.cockpits,
   cockpitRules: modelReference.cockpitRules,
+  projectileVisual: modelReference.projectileVisual,
+  cameraProfiles: cameraReference.profiles, cameraRules: cameraReference.rules,
   footprintGlow: { warningOpacity: Number(glowOpacity[1]), opacity: Number(glowOpacity[2]),
     warningColor: Number(glowColor[1]), minimumSize: Number(glowSize[1]), sizeFactor: Number(glowSize[2]) },
   reachability: reachabilityReference.reachabilityRules,
@@ -158,6 +166,9 @@ await writeFile(join(root, 'assets/ui/footprint-glow.png'), Buffer.from(modelRef
 await mkdir(join(root, 'data/cockpits'), { recursive: true });
 for (const [character, graph] of Object.entries(modelReference.cockpitGraphs))
   await writeFile(join(root, 'data/cockpits', `${character}.json`), JSON.stringify(graph));
+await mkdir(join(root, 'data/projectiles'), { recursive: true });
+for (const [key, graph] of Object.entries(modelReference.projectileGraphs))
+  await writeFile(join(root, 'data/projectiles', `${key}.json`), JSON.stringify(graph));
 await cp(join(source, 'public/audio'), join(root, 'assets/audio'), { recursive: true });
 await cp(join(source, 'LICENSE'), join(root, 'LICENSE'));
 const inputs = ['public/js/data.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];

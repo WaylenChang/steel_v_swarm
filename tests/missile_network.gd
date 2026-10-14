@@ -63,7 +63,7 @@ func _receive_state(state: Dictionary) -> void:
 		var id := int(states[0].id)
 		if simulation.missile_bodies.has(id) and states[0].hp > 0 and states[0].max_hp == Content.constants.BASE_MISSILE.HP:
 			missile_snapshot_seen = true
-			var offset: Vector3 = simulation.missile_bodies[id].position - pilot.eye()
+			var offset: Vector3 = simulation.missile_bodies[id].position - pilot.view_origin()
 			yaw = atan2(-offset.x, -offset.z)
 			pitch = atan2(offset.y, Vector2(offset.x, offset.z).length())
 			Input.action_press("fire")

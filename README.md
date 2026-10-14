@@ -39,11 +39,11 @@ Launch range uses the original target-dependent altitude frame. Confirmed
 locks appear in the pilot's private HUD, refresh at the source quarter-second
 interval and can continue for a missile already in flight after aim release.
 Direct/blast target advice now reports geometric reachability and warns inside
-the source arming/minimum-range distance. It uses the native eye origin and
+the source arming/minimum-range distance. It uses source gun-local ports and
 source spawn-time measured model centres. Source weapon-footprint rosters now
 highlight the predicted direct, blast, fan and penetration victims. Shared
 glow resources warn the whole shot, clear in the shop and disappear with hidden
-targets. Exact source muzzle placement and animated visual-mesh queries remain
+targets. TPS/super/recoil camera behavior and animated visual-mesh queries remain
 pending.
 
 All 32 pilots now have source-built native first-person cockpit geometry.
@@ -51,7 +51,13 @@ Weapon roots follow source reload, recoil-kick and lob elevation limits;
 aiming hides cockpit parts until the camera returns to its normal FOV. Morph
 pilots select the matching ground/air weapon group. Animated weapon mirrors,
 barrel progression, payload omission and muzzle flashes now follow source
-events and clips. Full morph transitions, burst echoes, authority muzzle origins
+events and clips. Scalar weapon poses now run on the authority without cockpit
+meshes; local gun recoil follows the private simulation clock. Physical rounds
+capture the shooter's original height frame for delayed settlement. Burst echoes
+now advance source barrel/recoil/flash poses and pure visual shells/tracers without
+additional combat spending. Native source projectile models follow private owner
+poses and preserve source tail/opacity animation. Full morph transitions,
+remote/impact effects, client flight interpolation and TPS/super/recoil camera behavior
 and final toon appearance are pending.
 
 Unguided launchers now solve a 45-degree ground throw or a crosshair-selected
@@ -101,13 +107,27 @@ godot --headless --path . res://tests/reachability.tscn
 godot --headless --path . res://tests/models.tscn
 godot --headless --path . res://tests/footprints.tscn
 godot --headless --path . res://tests/cockpits.tscn
+godot --headless --path . res://tests/muzzles.tscn
+godot --headless --path . res://tests/cameras.tscn
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Cameras
+godot --headless --path . res://tests/bursts.tscn
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Bursts
+godot --headless --path . res://tests/projectile_visuals.tscn
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Projectiles
 ```
 
 The test scene compares GDScript against fixtures evaluated by the original
 JavaScript seams, and exercises authority, purchases, ammo, reload deadlines,
 respawn and outcome settlement. Network checks use separate server/client
 processes for both transports; `-LobControl` also checks private fire-control
-snapshots and physical shot segments. `-KineticShots` verifies light-round flight
+snapshots and physical shot segments. `-Bursts` checks accepted and echo serials,
+slot capture, duplicate rejection and one authority spend per burst. Echo pose
+fixtures execute the original queue and weapon presentation across all pilots;
+source projectile/tracer fixtures also verify native geometry, flight, opacity,
+pooling and private owner poses. `-Projectiles` checks light/heavy meshes, moving
+snapshot poses, echo emission and clearing. Impact particles, remote mounts,
+client interpolation and view/body reaction remain pending.
+`-KineticShots` verifies light-round flight
 and heavy-round termination events. `-MissileShots` checks base launches, missile
 geometry/HP snapshots, fire commands, interception events and bounty replication.
 `-Reachability` checks private target advice, clear/warning HUD transitions and
@@ -133,7 +153,9 @@ Animation resources. Flash fixtures cover lifetime, heavy size and aiming.
 reload presentation, private elevation and zoom/death hiding over both
 transports. `tests/cockpit_preview.tscn -- --character m01 --capture-preview`
 writes the native first-person view to `tests/cockpit-m01.png` with a graphical
-display. These checks do not certify dynamic muzzle origins or final shaders.
+display. Source gun-local origins and original FPV eye/nose anchors now drive
+native combat. Registered-obstacle pullback and the original near plane also
+drive local/replicated camera views; final shaders remain pending.
 Add `--fire-feedback --feedback-slot heavy` to capture an accepted-shot flash in
 `tests/cockpit-m01-fire.png` instead of the resting view.
 Structural fixtures compare source blast layers and support-height references,
@@ -148,11 +170,20 @@ ray heights, layered bridge surfaces, tunnel portals and native player support
 under source gravity at the configured physics rate. `--capture` writes a rendered battle view to
 `tests/battle.png`; this command requires a graphical display.
 
+`tests/muzzles.tscn` additionally compares the original complete launch seam
+against native gun ports, camera reticle rays, physical launch vectors and Jolt
+fire-control queries. Registered-layer muzzle surfaces retain original bridge,
+tunnel and roof selection. `tests/cameras.tscn` verifies original eye/nose anchors,
+clipping rules and native camera/replica binding; `-Cameras` checks both morph
+forms over both transports. Full scenery, TPS/super/recoil camera behavior and
+animated visual-mesh collision remain pending.
+
 ## Update imported content
 
 ```powershell
 node tools/import_source.mjs ../steel_vs_swarm
 godot --headless --path . res://tools/import_cockpits.tscn
+godot --headless --path . res://tools/import_cockpits.tscn -- --projectiles
 node tools/bake_worlds.mjs --reuse
 node tools/world_references.mjs
 godot --headless --path . res://tools/import_worlds.tscn

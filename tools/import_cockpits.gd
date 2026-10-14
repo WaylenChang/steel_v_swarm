@@ -4,13 +4,16 @@ func _ready() -> void:
 	_import.call_deferred()
 
 func _import() -> void:
-	DirAccess.make_dir_recursive_absolute("res://assets/cockpits")
 	var selection := OS.get_cmdline_user_args()
+	var projectiles := selection.has("--projectiles")
+	var folder := "projectiles" if projectiles else "cockpits"
+	var catalog: Dictionary = Content.balance.projectileVisual.profiles if projectiles else Content.heroes
+	DirAccess.make_dir_recursive_absolute("res://assets/" + folder)
 	var count := 0
-	for character: String in Content.heroes:
-		if not selection.is_empty() and character not in selection:
+	for character: String in catalog:
+		if not projectiles and not selection.is_empty() and character not in selection:
 			continue
-		var data: Dictionary = Content.read_json("res://data/cockpits/%s.json" % character)
+		var data: Dictionary = Content.read_json("res://data/%s/%s.json" % [folder, character])
 		var textures: Array[ImageTexture] = []
 		for encoded: String in data.textures:
 			var image := Image.new()
@@ -60,13 +63,13 @@ func _import() -> void:
 				node.mesh = _mesh(data.meshes[int(spec.mesh)], spec.materials, data.materials, materials)
 				node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var scene := PackedScene.new()
-		if scene.pack(nodes[0]) != OK or ResourceSaver.save(scene, "res://assets/cockpits/%s.scn" % character, ResourceSaver.FLAG_COMPRESS) != OK:
+		if scene.pack(nodes[0]) != OK or ResourceSaver.save(scene, "res://assets/%s/%s.scn" % [folder, character], ResourceSaver.FLAG_COMPRESS) != OK:
 			push_error("Cannot pack source cockpit: " + character)
 			get_tree().quit(1)
 			return
 		nodes[0].free()
 		count += 1
-	print("COCKPIT_IMPORT_PASS characters=", count)
+	print("PROJECTILE_IMPORT_PASS profiles=" if projectiles else "COCKPIT_IMPORT_PASS characters=", count)
 	get_tree().quit()
 
 func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials: Array[StandardMaterial3D]) -> ArrayMesh:

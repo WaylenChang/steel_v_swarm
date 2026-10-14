@@ -61,7 +61,7 @@ func _receive_state(state: Dictionary) -> void:
 		return
 	for unit: Dictionary in state.units:
 		if unit.hp > 0 and unit.side != pilot.side and unit.kind == "soldier":
-			var offset: Vector3 = unit.position + Vector3.UP * Content.balance.modelGeometry.units.soldier[unit.side].centre - pilot.eye()
+			var offset: Vector3 = unit.position + Vector3.UP * Content.balance.modelGeometry.units.soldier[unit.side].centre - pilot.view_origin()
 			yaw = atan2(-offset.x, -offset.z)
 			pitch = atan2(offset.y, Vector2(offset.x, offset.z).length())
 			break

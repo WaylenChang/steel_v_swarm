@@ -41,6 +41,7 @@ var target_yaw := 0.0
 var model: Node3D
 var camera: Camera3D
 var cockpit: CockpitRig
+var weapon_pose: AuthorityWeaponPose
 var animation_player: AnimationPlayer
 var path_follower: PathFollow3D
 var reaction_at := 0.0
@@ -56,6 +57,11 @@ var animation_until := 0.0
 var movement_shape: CollisionShape3D
 var hit_area: Area3D
 var presentation_visible := true
+var view_offset := Vector3.ZERO
+var view_offset_ready := false
+var camera_cache_frame := -1
+var camera_cache_signature: Array = []
+var camera_cache_origin := Vector3.ZERO
 
 func configure(info: Dictionary) -> void:
 	entity_id = int(info.id)
@@ -109,8 +115,9 @@ func configure(info: Dictionary) -> void:
 	_build_model()
 	if not character.is_empty():
 		camera = Camera3D.new()
-		camera.position.y = height * Content.constants.SELF_F.eye
+		camera.position = CameraPose.anchor(character, Vector3.ZERO, 0, flying)
 		camera.fov = unit.get("fov", 68)
+		camera.near = Content.balance.cameraRules.near
 		camera.far = 3500
 		add_child(camera)
 		for slot in ["light", "heavy"]:
@@ -148,6 +155,11 @@ func _build_model() -> void:
 func is_hero() -> bool:
 	return not character.is_empty()
 
+func ensure_weapon_pose() -> void:
+	if is_hero() and (weapon_pose == null or weapon_pose.character != character):
+		weapon_pose = AuthorityWeaponPose.new()
+		weapon_pose.configure(character)
+
 func ensure_cockpit() -> void:
 	if cockpit != null or camera == null:
 		return
@@ -160,6 +172,26 @@ func alive() -> bool:
 
 func eye() -> Vector3:
 	return global_position + Vector3.UP * height * Content.constants.SELF_F.eye
+
+func view_eye_height() -> float:
+	return CameraPose.eye_height(character, flying) if is_hero() else height * Content.constants.SELF_F.eye
+
+func view_origin() -> Vector3:
+	if not is_hero():
+		return eye()
+	var parent := get_parent()
+	if parent is BattleSimulation and parent.authoritative:
+		return parent.camera_origin(self)
+	return global_position + (Basis(Vector3.UP, rotation.y) * view_offset if view_offset_ready else CameraPose.anchor(character, Vector3.ZERO, rotation.y, flying))
+
+func sync_view_camera() -> void:
+	if camera != null:
+		var parent := get_parent()
+		if parent is BattleSimulation and parent.authoritative:
+			camera.global_transform = aim_transform()
+		else:
+			camera.global_position = view_origin()
+			camera.rotation = Vector3(pitch, 0, 0)
 
 func visual_dimensions() -> Dictionary:
 	var geometry: Dictionary = Content.balance.modelGeometry
@@ -199,6 +231,9 @@ func refresh_collision() -> void:
 func aim_direction() -> Vector3:
 	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch) * Vector3.FORWARD
 
+func aim_transform() -> Transform3D:
+	return Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch), view_origin())
+
 func simulate_movement(delta: float) -> void:
 	if not alive() or speed <= 0:
 		return
@@ -237,6 +272,7 @@ func simulate_movement(delta: float) -> void:
 	move_and_slide()
 	if flying and position.y < 1:
 		position.y = 1
+	sync_view_camera()
 	if animation_player != null and Time.get_ticks_msec() / 1000.0 > animation_until:
 		var clip := "run" if motion.length() > 0.01 else "idle"
 		if animation_player.has_animation(clip) and animation_player.current_animation != clip:
@@ -264,10 +300,13 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	cooldowns = state.cooldowns
 	respawn_at = state.respawn_at
 	flying = state.flying
+	view_offset = state.get("view_offset", Vector3.ZERO)
+	view_offset_ready = state.has("view_offset")
 	if previous_flight != flying or was_alive != alive():
 		refresh_collision()
 	target_position = state.position
 	target_yaw = state.yaw
+	yaw = state.yaw
 	pitch = state.pitch
 	if instant:
 		global_position = target_position
@@ -275,10 +314,12 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	visible = alive()
 	if camera != null:
 		camera.rotation.x = pitch
+		sync_view_camera()
 
 func interpolate(delta: float) -> void:
 	global_position = global_position.lerp(target_position, 1.0 - exp(-12.0 * delta))
 	rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-12.0 * delta))
+	sync_view_camera()
 
 func snapshot() -> Dictionary:
 	return {"id": entity_id, "peer": peer_id, "side": side, "kind": kind, "character": character,
@@ -286,4 +327,5 @@ func snapshot() -> Dictionary:
 		"hp": hp, "max_hp": max_hp, "shield": shield, "max_shield": max_shield,
 		"power": power, "money": money, "score": score, "deaths": deaths,
 		"ammo": ammo.duplicate(), "upgrades": upgrades.duplicate(), "reload_at": reload_at.duplicate(),
-		"cooldowns": cooldowns.duplicate(), "respawn_at": respawn_at, "flying": flying}
+		"cooldowns": cooldowns.duplicate(), "respawn_at": respawn_at, "flying": flying,
+		"view_offset": Basis(Vector3.UP, -yaw) * (view_origin() - global_position) if is_hero() else Vector3.ZERO}

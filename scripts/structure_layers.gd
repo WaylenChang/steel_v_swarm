@@ -165,6 +165,21 @@ func player_level(point: Vector3, surface: float, ground: float) -> int:
 			return 1
 	return 0
 
+func projectile_surface(point: Vector3, ground: float) -> float:
+	var rules: Dictionary = Content.balance.structure
+	var planar := Vector2(point.x, point.z)
+	var tunnel := tunnel_at(planar)
+	if not tunnel.is_empty() and point.y < tunnel.ceil:
+		return tunnel.floor
+	var maximum: float = maxf(point.y + rules.deckStep, ground + rules.deckUnder + rules.maximumMechHeight - 0.000001)
+	var deck: Variant = deck_height(planar, rules.deckMargin, -INF, maximum)
+	var surface := ground
+	if deck != null and deck > ground and (point.y >= deck - rules.deckStep or deck - rules.deckUnder - ground < rules.maximumMechHeight):
+		surface = deck
+	if not tunnel.is_empty() and not tunnel.open:
+		surface = maxf(surface, tunnel.ceil + rules.tunnelRoofThickness)
+	return surface
+
 func player_reference(point: Vector3, surface: float, ground: float) -> float:
 	var level := player_level(point, surface, ground)
 	return ground if level == 0 and surface > ground + Content.balance.structure.bridgeThreshold else surface

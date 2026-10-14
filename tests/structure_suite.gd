@@ -9,6 +9,11 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 
 static func references(h: Node, fixtures: Dictionary) -> void:
 	var layers := StructureLayers.new()
+	for fixture: Dictionary in fixtures.projectileSurfaces:
+		layers.configure([], fixture.decks, fixture.tunnels)
+		var surface := layers.projectile_surface(h._reference_vector(fixture.point), fixture.ground)
+		h._check(absf(surface - fixture.result) < 0.00001, "Original surfaceAt at the launch muzzle: " + fixture.name)
+	layers.configure([])
 	var previous: Array = []
 	for fixture: Dictionary in fixtures.structureSeparation:
 		if fixture.slabs != previous:
@@ -136,6 +141,20 @@ static func physics(h: Node) -> void:
 	h._near(target.hp, health, "Physical bridge impact retains source hero layer isolation")
 	sim.world.layers.configure([])
 	h._check(sim._unit_level(target) == 0 and absf(sim._missile_target_altitude(target) - 10.1) < 0.001, "Rooftop without a matching deck uses terrain height reference")
+	var rooftop_shooter := sim.spawn({"kind": "robot", "side": "STEEL", "character": "t04", "position": Vector3(0, 10.1, 0)})
+	sim.fire(rooftop_shooter, "light")
+	h._check(sim.projectiles.size() == 1, "A verified rooftop permits an authority kinetic launch")
+	if sim.projectiles.is_empty():
+		sim.queue_free()
+		await h.get_tree().process_frame
+		return
+	var frame: Dictionary = sim.projectiles[0].shooter_frame
+	h._check(absf(frame.altitude - 10.1) < 0.001 and frame.position == rooftop_shooter.position and frame.eye_y == rooftop_shooter.position.y + rooftop_shooter.view_eye_height(),
+		"Launch height frame retains source rooftop terrain reference and absolute hero eye")
+	rooftop_shooter.position += Vector3(300, -9, 400)
+	rooftop_shooter.flying = true
+	h._check(sim.projectiles[0].shooter_frame == frame and frame.position != rooftop_shooter.position,
+		"Movement and morph changes cannot rewrite a launched shooter's height frame")
 	sim.queue_free()
 	await h.get_tree().process_frame
 

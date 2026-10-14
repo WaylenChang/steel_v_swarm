@@ -1,5 +1,5 @@
 // Source selection and damage references; no runtime dependency on JavaScript.
-export function lineReferences(d, BattleSim, config) {
+export function lineReferences(d, BattleSim, config, cameras) {
   const sim = new BattleSim(config);
   const lineHits = [];
   for (const [character, hero] of Object.entries(d.CHARACTERS)) {
@@ -105,7 +105,7 @@ export function lineReferences(d, BattleSim, config) {
   const settlementRange = [];
   const rangeSim = new BattleSim(config);
   const shooterCharacter = 't04', targetCharacter = 's06';
-  const eye = ch => d.hitH({ hero: true, kind: d.CHARACTERS[ch].kind, ch }) * d.SELF_F.eye;
+  const eye = ch => cameras[ch].ground.eye;
   for (const slot of ['light', 'heavy']) {
     for (const kind of ['robot', 'tower', 'heli', 'soldier']) {
       for (const height of [0, 26, 78]) {

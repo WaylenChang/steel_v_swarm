@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Measure the actual source model graph offline; native gameplay consumes only saved scalars.
-export async function modelReferences(source, gameSource) {
+export async function modelReferences(source, gameSource, cameraProfiles) {
   const { chromiumOrNull, chromePath } = await import(pathToFileURL(join(source, 'tools/pw.mjs')).href);
   const chromium = await chromiumOrNull();
   if (!chromium) throw new Error('Model migration requires the source development Playwright runtime');
@@ -29,6 +29,9 @@ export async function modelReferences(source, gameSource) {
   if (flashStart < 0 || flashEnd <= flashStart || !flashDuration || !flashSize) throw new Error('Source cockpit flash seam missing');
   const flashBody = text.slice(flashStart, flashEnd);
   const flashRules = {duration:Number(flashDuration[1]),minimum:Number(flashSize[1]),span:Number(flashSize[2]),heavy:Number(flashSize[3])};
+  const beamColorsMatch = /this.side === 'SWARM' \? (0x[\da-f]+) : (0x[\da-f]+)/.exec(text.slice(text.indexOf('\n  _burstEchoSelf(')));
+  if (!beamColorsMatch) throw new Error('Source FPV beam colors missing');
+  const beamColors = {SWARM:Number(beamColorsMatch[1]),STEEL:Number(beamColorsMatch[2])};
   const method = name => {
     const begin = text.indexOf(`\n  ${name}(`), finish = text.indexOf('\n  }\n', begin);
     if (begin < 0 || finish < 0) throw new Error(`Missing source model method: ${name}`);
@@ -60,12 +63,12 @@ export async function modelReferences(source, gameSource) {
       return route.abort();
     });
     await page.goto(origin);
-    const result = await page.evaluate(async ({ dimensionBody, aimBody, poseBody, kickDecay, elevationBody, flashBody, flashRules }) => {
+    const result = await page.evaluate(async ({ dimensionBody, aimBody, poseBody, kickDecay, elevationBody, flashBody, flashRules, cameraProfiles, beamColors }) => {
       const THREE = await import('three');
       const d = await import('/js/data.js');
       const { makeUnit } = await import('/js/models.js');
       const { disposeTree } = await import('/js/toon.js');
-      const { glowTexture } = await import('/js/vfx.js');
+      const { glowTexture, projectileMesh, stepProjectileFx } = await import('/js/vfx.js');
       const { BattleClient, COCKPIT } = await import('/js/game.js');
       const { stepCombatFx, stepLocomotion } = await import('/js/locomotion.js');
       const { fireReferenceWeapon } = await import('/js/unitMotion.js');
@@ -80,7 +83,7 @@ export async function modelReferences(source, gameSource) {
           result: elevation({ vel: new THREE.Vector3().fromArray(velocity) }, forwardY, d.BALLISTIC) });
       }
       const geometry = { heroes: {}, units: {} }, modelCentres = [], cockpits = {}, cockpitGraphs = {}, cockpitMuzzles = [], cockpitPoses = [], cockpitVisibility = [];
-      const weaponPresentation = [];
+      const weaponPresentation = [], authorityWeaponPoses = [], burstWeaponPoses = [], muzzleLaunches = [];
       const cockpitFlash = [], flashTick = new Function('dt','Math',flashBody);
       for (const heavy of [false,true]) for (const dt of [0,1/60,.044,.045,.046,.09]) for (const sample of [0,.5,1-Number.EPSILON]) {
         const state = {_flashTtl:flashRules.duration,_flashHeavy:heavy,flash:{visible:true,scale:new THREE.Vector3(1,1,1)}};
@@ -88,10 +91,10 @@ export async function modelReferences(source, gameSource) {
         flashTick.call(state,dt,math);
         cockpitFlash.push({heavy,dt,sample,visible:state.flash.visible,scale:state.flash.scale.toArray()});
       }
-      const graphOf = root => {
+      const graphOf = (root, omitOutlines = false) => {
         const all = [], ids = new Map(), meshes = [], materials = [], textures = [];
         const meshIds = new Map(), materialIds = new Map(), textureIds = new Map();
-        root.traverse(node => { ids.set(node, all.length); all.push(node); });
+        root.traverse(node => { if (omitOutlines && node.userData.isOutline) return; ids.set(node, all.length); all.push(node); });
         const textureOf = texture => {
           if (!texture) return -1;
           if (textureIds.has(texture)) return textureIds.get(texture);
@@ -147,6 +150,27 @@ export async function modelReferences(source, gameSource) {
         });
         return { data: { nodes, meshes, materials, textures }, ids };
       };
+      const projectileGraphs = {}, projectileProfiles = {}, projectileGeometry = [], projectileFx = [];
+      const shotColors = Object.fromEntries(['STEEL','SWARM'].map(side=>[side,BattleClient.prototype._shotCols(side)]));
+      for (const [character,hero] of Object.entries(d.CHARACTERS)) for (const slot of ['light','heavy']) {
+        for (const side of ['STEEL','SWARM']) {
+          const key = `${character}-${slot}-${side.toLowerCase()}`, definition = d.heroWeapon(character,slot,1);
+          const mesh = projectileMesh(definition,{col:shotColors[side].col,hue:hero.visual?.hue ?? 0xffd27a,heavy:slot==='heavy'});
+          mesh.updateMatrixWorld(true);
+          const graph = graphOf(mesh,true), fx = mesh.userData.projectileFx;
+          const profile = {character,slot,side,heavy:!!fx?.heavy,phase:fx?.phase || 0,
+            authored:(fx?.authored || []).map(node=>graph.ids.get(node)),wake:graph.ids.get(fx?.wake) ?? -1,
+            jets:(fx?.jets || []).map(jet=>({node:graph.ids.get(jet.mesh),rad:jet.rad,len:jet.len,opacity:jet.opacity,nozzle:jet.nozzle}))};
+          projectileProfiles[key] = profile; projectileGraphs[key] = graph.data;
+          projectileGeometry.push({key,nodes:graph.data.nodes});
+          for (const age of [0,.017,.1,.5,2]) for (const speed of [-1,0,130,260,1000]) {
+            stepProjectileFx(mesh,age,speed);
+            projectileFx.push({key,age,speed,nodes:[...graph.ids].filter(([node])=>node.isMesh).map(([node,id])=>
+              ({id,position:node.position.toArray(),scale:node.scale.toArray(),opacity:node.material.opacity}))});
+          }
+          disposeTree(mesh);
+        }
+      }
       const capture = (character, kind, side, key) => {
         const group = makeUnit(key, side, { ch: character || null, ring: true, dissolve: true }).group;
         const dims = measure(THREE, group, key, { k: kind, s: side, ch: character || null }, false, new Map());
@@ -227,6 +251,19 @@ export async function modelReferences(source, gameSource) {
             target: named(pair.target), source: pair.name, rotate: !!pair.rotate, translate: !!pair.translate });
         });
         profile.bindings = bindings;
+        // Authority needs only the transform paths to ports and mirrored nodes, never FPV meshes.
+        const poseIds = new Set();
+        for (const id of [...bindings.map(pair => pair.target),
+          ...Object.values(profile.emissions).flatMap(slots => Object.values(slots).flat())]) {
+          let node = id;
+          while (node >= 0 && node !== profile.nodes.gun) {
+            poseIds.add(node);
+            node = exported.data.nodes[node].parent;
+          }
+        }
+        profile.poseGraph = exported.data.nodes.filter(node => poseIds.has(node.id))
+          .map(({id,parent,name,matrix}) => ({id,parent,name,matrix}));
+        profile.poseGunName = exported.data.nodes[profile.nodes.gun].name;
         const owners = self.userData.morph ? {ground:self.userData.morph.ground,air:self.userData.morph.air} : {ground:self.userData.rig};
         const sourceNames = new Set(bindings.map(pair => pair.source));
         profile.motion = {};
@@ -309,6 +346,154 @@ export async function modelReferences(source, gameSource) {
           weaponPresentation.push({character,form,frames});
           disposeTree(body);
         }
+        for (const {form,burst} of [...Object.keys(owners), ...(hero.kind === 'morph' ? ['switch'] : [])]
+          .flatMap(form => [{form,burst:false},{form,burst:true}])) {
+          const body = makeUnit(`hero:${hero.kind}`, side, {ch:character,ring:false}).group;
+          if (body.userData.morph) {
+            const morph = body.userData.morph;
+            morph.m = form === 'air' ? 1 : 0; morph.air0 = form === 'air'; morph.act = false;
+            body.userData.rig = form === 'air' ? morph.air : morph.ground;
+          }
+          const ent = {id:1,pid:1,isSelf:true,hero:true,kind:hero.kind,mesh:body,heroY:form === 'air' ? 10 : 0,dead:false};
+          const caches = cachePoints.map(point => new THREE.Vector3().fromArray(point));
+          client._muzzles = Object.fromEntries(Object.entries(cacheSets).map(([key,slots]) => [key === 'air' ? 'A' : 'G',
+            Object.fromEntries(Object.entries(slots).map(([slot,index]) => [slot,caches[index]]))]));
+          client._muzzle = caches[muzzleCache.current]; client.weaponKick = 0;
+          client.ents = new Map([[1,ent]]); client.flight = form === 'air'; client.aiming = false; client.camera.fov = 68;
+          stepCombatFx(ent,0,0); stepLocomotion(ent,0,0,0,0,0);
+          client._syncCockpitWeapon();
+          client._lobFc = {on:false,sup:0}; pose.call(client,{rx:0,dy:0,dz:0},new THREE.Vector3());
+          let now = 0, serial = 0, acceptedSerial = 0;
+          const sourceNow = performance.now.bind(performance);
+          Object.defineProperty(performance,'now',{configurable:true,value:()=>now*1000});
+          client.youId = 1; client._burstQ = []; client.dead = false; client.trauma = 0; client.recoil = {p:0,y:0}; client.vel = new THREE.Vector3();
+          // Isolate the original echo's emission/bookkeeping; target and view recoil have separate migration fixtures.
+          client._aimTarget=()=>null; client._altRangeTo=()=>1;
+          client._resolveAim=range=>({point:client.camera.position.clone().addScaledVector(client.camera.getWorldDirection(new THREE.Vector3()),range)});
+          client._tracer=()=>{}; client._muzzleBurst=()=>{}; client._spawnVisShell=()=>{};
+          const frames = [], longest = Math.max(...Object.values(body.userData.rig.weaponSequences).map(sequence => sequence.entries.length));
+          for (let i = 0; i < longest * 4 + 24; i++) {
+            const dt = [1/60,1/30,.1][i % 3]; now += dt;
+            const slot = i % 2 ? 'heavy' : 'light', level = i % 4 + 1;
+            const flying = form === 'switch' ? i % 3 !== 0 : form === 'air';
+            client.flight = flying;
+            if (body.userData.morph) {
+              const morph = body.userData.morph;
+              morph.m = flying ? 1 : 0; morph.air0 = flying; morph.act = false;
+              body.userData.rig = flying ? morph.air : morph.ground;
+              ent.heroY = flying ? 10 : 0;
+            }
+            client.aiming = slot === 'heavy';
+            client.camera.position.set(12+i*.3,80+i*.2,-9+i*.1);
+            client.camera.rotation.set([-.4,0,.6][i%3],[0,.7,-1.2][i%3],0,'YXZ');
+            client.camera.updateMatrixWorld(true);
+            const shots = i < longest * 4 ? (i === 1 ? ['light','light'] : [slot]) : [];
+            const launches = [];
+            for (const fired of shots) {
+              const point = client._selfMuzzle(null,100,fired);
+              launches.push({slot:fired,point:point.toArray()});
+              client._markFire(1,fired,now,null,true); serial++; client.weaponKick = 1;
+              acceptedSerial++;
+              if (burst) {
+                const captured = d.heroWeapon(character,fired,level);
+                client._queueBurst(captured,()=>{client._burstEchoSelf(captured,fired,{kick:0,climb:0,back:0});serial++;});
+              }
+            }
+            if (burst) client._tickBurstFx(now);
+            stepCombatFx(ent,now,dt); stepLocomotion(ent,dt,now,0,0,0);
+            client._syncCockpitWeapon();
+            client.weaponKick = Math.max(0,client.weaponKick-dt*kickDecay);
+            const def = d.heroWeapon(character,slot,level), progress = [-.1,0,.25,.5,.75,1,1.1][i%7];
+            const reloading = i % 5 === 0, suppression = slot === 'heavy' ? [0,.7,-.7][i%3] : 0;
+            const reloadEnd = reloading ? now+(1-progress)*def.reload : null;
+            const actualProgress = reloading ? 1-Math.max(0,reloadEnd-now)/Math.max(.001,def.reload) : 0;
+            const offset = reloading ? client._reloadAnimOffset(def,actualProgress) : {rx:0,dy:0,dz:0};
+            client._lobFc = {on:suppression!==0,sup:suppression};
+            const matrix = pose.call(client,offset,new THREE.Vector3()); client.camera.updateMatrixWorld(true);
+            const current = client.gunGroup.localToWorld(client._muzzle.clone());
+            frames.push({dt,now,slot,level,flying,shots,launches,serial,acceptedSerial,reloadEnd,suppression,kick:client.weaponKick,matrix,
+              pending:client._burstQ.length,indices:Object.fromEntries(Object.entries(body.userData.rig.weaponSequences).map(([slot,sequence])=>[slot,sequence.index])),
+              camera:client.camera.matrixWorld.toArray(),current:current.toArray(),cache:client._muzzle.toArray()});
+          }
+          Object.defineProperty(performance,'now',{configurable:true,value:sourceNow});
+          (burst ? burstWeaponPoses : authorityWeaponPoses).push({character,form,frames});
+          for (const key of ['_aimTarget','_altRangeTo','_resolveAim','_tracer','_muzzleBurst','_spawnVisShell']) delete client[key];
+          disposeTree(body);
+        }
+        for (const form of Object.keys(owners)) {
+          const body = makeUnit(`hero:${hero.kind}`, side, {ch:character,ring:false}).group;
+          if (body.userData.morph) {
+            const morph = body.userData.morph;
+            morph.m = form === 'air' ? 1 : 0; morph.air0 = form === 'air'; morph.act = false;
+            body.userData.rig = form === 'air' ? morph.air : morph.ground;
+          }
+          for (const slot of ['light','heavy']) for (let level=1;level<=4;level++) for (let scenario=0;scenario<3;scenario++) {
+            const def = d.heroWeapon(character,slot,level), ground = [0,50,100][scenario];
+            const ent = {id:1,pid:1,isSelf:true,hero:true,kind:hero.kind,mesh:body,heroY:0,dead:false};
+            const caches = cachePoints.map(point => new THREE.Vector3().fromArray(point));
+            const packets=[], visual=[];
+            const wall = scenario === 1 ? -24 : null;
+            const cut = (a,b) => {
+              const hits=[];
+              if (a.y>ground && b.y<=ground) hits.push((a.y-ground)/(a.y-b.y));
+              if (wall!==null && (a.z-wall)*(b.z-wall)<=0 && a.z!==b.z) hits.push((a.z-wall)/(a.z-b.z));
+              return hits.length ? Math.min(...hits.filter(t=>t>=0 && t<=1))*a.distanceTo(b) : null;
+            };
+            const view = cameraProfiles[character][form];
+            const altitude = hero.kind === 'drone' || form === 'air' ? d.FLIGHT.HOVER_M : .1;
+            Object.assign(client, {side,ch:character,youId:1,heroKind:hero.kind,isDrone:hero.kind==='drone',isMorph:hero.kind==='morph',
+              ents:new Map([[1,ent]]),flight:form==='air',dead:false,shopOpen:false,firing:true,aiming:slot==='heavy',mp:1e9,
+              pos:new THREE.Vector3(0,ground+altitude,0),vel:new THREE.Vector3(),recoil:{p:0,y:0},trauma:0,_altAG:altitude,charge:0,
+              lastFireAt:{},_settleUntil:{},_burstN:{},_steadyAt:1,_railAt:1,weaponKick:0,bullets:[],_lobCache:null,_lobFc:null,
+              hud:{feed(){}},audio:null,env:null,net:{send(packet){packets.push(packet);}},
+              wdef:{light:d.heroWeapon(character,'light',level),heavy:d.heroWeapon(character,'heavy',level)},
+              _curWeapon:()=>({id:slot,def,st:{ammo:def.mag,reloadEnd:0}}),_aimTarget:()=>null,_moveInput:()=>false,
+              _fallbackFromEmptyHeavy(){},_startReload(){},_setRailCharge(){},_queueBurst(){},
+              _takeProjectile:()=>new THREE.Object3D(),_recPool:{acquire:()=>({pos:new THREE.Vector3(),vel:new THREE.Vector3(),origin:new THREE.Vector3(),guidePt:new THREE.Vector3()})},
+              _fanBlast:(from,dir)=>visual.push({from:from.toArray(),direction:dir.toArray()}),
+              _tracer:(from,to)=>visual.push({from:from.toArray(),to:to.toArray()}),
+              _lanceVisual:(from,to)=>visual.push({from:from.toArray(),to:to.toArray()}),
+              _muzzleBurst(){},_lanceFeedback(){},_lancePierced:()=>[],_rayCandidates:()=>[],raycaster:new THREE.Raycaster(),
+              terrain:{heightAt:()=>ground},_surf:()=>ground,_aaAim:false,_aaEnt:null,
+              _obstHitT:(x,y,z,ex,ey,ez)=>wall===null?null:cut(new THREE.Vector3(x,y,z),new THREE.Vector3(ex,ey,ez)),
+              _layerHitT:(x,y,z,ex,ey,ez)=>cut(new THREE.Vector3(x,y,z),new THREE.Vector3(ex,ey,ez)),
+              _blockersNear:()=>[],_blockerHitT:(x,y,z,ex,ey,ez)=>wall===null?null:cut(new THREE.Vector3(x,y,z),new THREE.Vector3(ex,ey,ez)),
+              _onDeck:false,_surfHere:ground,
+              _terrainHitT:(ro,rd,far)=>rd.y<0 && ro.y>ground && (ro.y-ground)/-rd.y<=far?(ro.y-ground)/-rd.y:null,
+            });
+            for (const owner of body.userData.morph?[body.userData.morph.ground,body.userData.morph.air]:[body.userData.rig])
+              for (const sequence of Object.values(owner.weaponSequences)) sequence.index=-1;
+            client._muzzles=Object.fromEntries(Object.entries(cacheSets).map(([key,slots])=>[key==='air'?'A':'G',Object.fromEntries(Object.entries(slots).map(([key,i])=>[key,caches[i]]))]));
+            client._muzzle=caches[muzzleCache.current];
+            const yaw = [0,.7,-1.2][scenario];
+            client.camera.position.copy(client.pos).add(new THREE.Vector3(-Math.sin(yaw)*view.forward,client._eyeH(),-Math.cos(yaw)*view.forward));
+            client._cameraDeClip();
+            client.camera.rotation.set([0,-.2,.4][scenario],[0,.7,-1.2][scenario],0,'YXZ');
+            client._syncCockpitWeapon();
+            client.weaponKick=[0,.65,0][scenario];
+            client._lobFc={on:scenario===2,sup:scenario===2?.7:0};
+            const offset=scenario===1?client._reloadAnimOffset(def,.5):{rx:0,dy:0,dz:0};
+            const gunMatrix=pose.call(client,offset,new THREE.Vector3()); client.camera.updateMatrixWorld(true);
+            const advisory=client.gunGroup.localToWorld(client._muzzle.clone());
+            client._lobFc=null;
+            if (d.trajClass(def)==='lob') client._lobAim();
+            const reticle=client._resolveAim(def.range,d.aoeClass(def)==='line').point;
+            const spread=client._armSpread;
+            client._armSpread=function(dir,s) {const random=Math.random;let i=0;Math.random=()=>[.37,.8][i++];try{return spread.call(this,dir,s);}finally{Math.random=random;}};
+            client._tryFire(120);
+            client._armSpread=spread;
+            if (packets.length===0 && client.bullets.length===0) throw new Error(`Source muzzle launch rejected: ${character}/${form}/${slot}/${level}`);
+            const bullet=client.bullets[0];
+            const flow={character,form,slot,level,scenario,ground,wall,body:client.pos.toArray(),camera:client.camera.matrixWorld.toArray(),gun:gunMatrix,
+              advisory:advisory.toArray(),reticle:reticle.toArray(),packets,visual};
+            if (bullet) flow.bullet={origin:bullet.origin.toArray(),position:bullet.pos.toArray(),velocity:bullet.vel.toArray(),range:bullet.max,
+              relativeMuzzle:bullet.oy,guidePoint:bullet.guidePt.toArray(),guide:bullet.guide,launchDistance:bullet.launchDist};
+            if (client._lobFc?.on) flow.control={velocity:client._lobFc.vel.toArray(),range:client._lobFc.max,aim:client._lobFc.aim.toArray(),ok:client._lobFc.ok,close:client._lobFc.close};
+            muzzleLaunches.push(flow);
+            for (const bullet of client.bullets) client.scene.remove(bullet.mesh);
+          }
+          disposeTree(body);
+        }
         disposeTree(self);
         disposeTree(client.cockpit);
       }
@@ -319,9 +504,9 @@ export async function modelReferences(source, gameSource) {
           geometry.units[kind][side] = capture('', kind, side, key);
         }
       }
-      return { geometry, cockpits, cockpitGraphs, cockpitRules: { ...COCKPIT, kickDecay, flash:flashRules },
-        fixtures: { modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
-    }, { dimensionBody, aimBody: method('_entAimPoint'), poseBody, kickDecay: Number(kickDecay[1]), elevationBody, flashBody, flashRules });
+      return { geometry, cockpits, cockpitGraphs, projectileGraphs, projectileVisual: {profiles:projectileProfiles,colors:shotColors,beamColors}, cockpitRules: { ...COCKPIT, kickDecay, flash:flashRules },
+        fixtures: { modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash, authorityWeaponPoses, burstWeaponPoses, muzzleLaunches, projectileGeometry, projectileFx }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
+    }, { dimensionBody, aimBody: method('_entAimPoint'), poseBody, kickDecay: Number(kickDecay[1]), elevationBody, flashBody, flashRules, cameraProfiles, beamColors });
     return { ...result, inputs: [...sourceInputs].sort() };
   } finally {
     await browser.close();

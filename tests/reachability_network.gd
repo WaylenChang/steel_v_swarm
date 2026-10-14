@@ -56,7 +56,7 @@ func _receive_state(state: Dictionary) -> void:
 	for unit: Dictionary in state.units:
 		if unit.hp <= 0 or unit.side == pilot.side or not Content.heroes.has(unit.character):
 			continue
-		var offset: Vector3 = unit.position + Vector3.UP * Content.balance.modelGeometry.heroes[unit.character].centre - pilot.eye()
+		var offset: Vector3 = unit.position + Vector3.UP * Content.balance.modelGeometry.heroes[unit.character].centre - pilot.view_origin()
 		yaw = atan2(-offset.x, -offset.z)
 		pitch = atan2(offset.y, Vector2(offset.x, offset.z).length())
 	var advice: Dictionary = state.get("reachability", {})
@@ -67,7 +67,7 @@ func _receive_state(state: Dictionary) -> void:
 			push_error("NETWORK_REACHABILITY_INVALID_TARGET")
 			get_tree().quit(1)
 			return
-		var offset := target.aim_point() - pilot.eye()
+		var offset := target.aim_point() - pilot.view_origin()
 		yaw = atan2(-offset.x, -offset.z)
 		pitch = atan2(offset.y, Vector2(offset.x, offset.z).length())
 		measured_centre_seen = measured_centre_seen or absf(target.visual_dimensions().centre - target.height / 2) > 0.01

@@ -1,5 +1,10 @@
 extends Node
 
+const MuzzleTests = preload("res://tests/muzzle_suite.gd")
+const CameraTests = preload("res://tests/camera_suite.gd")
+const BurstTests = preload("res://tests/burst_suite.gd")
+const ProjectileVisualTests = preload("res://tests/projectile_visual_suite.gd")
+
 var failures: Array[String] = []
 var assertions := 0
 var maximum_fan_error := 0.0
@@ -32,6 +37,7 @@ func _run() -> void:
 		_near(target.height, fixture.height, "Source target height: " + fixture.kind)
 		if not fixture.character.is_empty():
 			_near(actor.camera.position.y, fixture.eye, "Source hero eye height")
+			_near(actor.camera.position.z, -fixture.forward, "Source body-forward camera anchor")
 			for mode in ["ground", "air"]:
 				actor.flying = mode == "air"
 				actor.refresh_collision()
@@ -123,6 +129,10 @@ func _run() -> void:
 	await ModelSuite.run(self, fixtures.modelCentres)
 	await FootprintSuite.run(self, fixtures.shotFootprints)
 	await CockpitSuite.run(self, fixtures)
+	await MuzzleTests.run(self, fixtures.muzzleLaunches)
+	await CameraTests.run(self, fixtures)
+	await BurstTests.run(self, fixtures)
+	await ProjectileVisualTests.run(self, fixtures)
 	if failures.is_empty():
 		print("TEST_PASS assertions=", assertions)
 		print("FAN_REFERENCE_PASS cases=", fixtures.fanHits.size(), " maximumDamageError=", maximum_fan_error)
@@ -297,8 +307,9 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	target.position = Vector3(0, 20, -100)
 	target.side = "SWARM"
 	target.shield = 0
+	var incoming := actor.view_origin() + Vector3.FORWARD * 60
 	var missile := {"actor": base.entity_id, "side": "SWARM", "target": actor.entity_id,
-		"position": Vector3(0, actor.eye().y, -60), "origin": Vector3(0, actor.eye().y, -60),
+		"position": incoming, "origin": incoming,
 		"speed": Content.constants.BASE_MISSILE.SPEED, "dmg": Content.constants.UNITS.base.guns.dmg,
 		"r": Content.constants.STRUCT_W.base.r, "pen": Content.constants.STRUCT_W.base.pen,
 		"hp": 1.0, "max_hp": Content.constants.BASE_MISSILE.HP, "ttl": 5.0, "range": Content.constants.UNITS.base.guns.range}
@@ -344,7 +355,8 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	missile = missile.duplicate(true)
 	missile.side = "SWARM"
 	missile.hp = 1.0
-	missile.position = Vector3(0, actor.eye().y, -30)
+	actor.ensure_weapon_pose()
+	missile.position = actor.weapon_pose.muzzle(actor.aim_transform(), "light", actor.flying, true, false) + Vector3(0, -0.03, -30)
 	sim._launch_missile(missile)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -700,7 +712,7 @@ func _lob_settlement_tests(fixtures: Array) -> void:
 	var def := Content.weapon(actor.character, "heavy")
 	var control := sim.lob_control(actor, def)
 	_check(not control.aa and control.ok, "Crosshair on a ground robot selects the fixed-angle solution")
-	_near(control.velocity.y, Vector2(control.velocity.x, control.velocity.z).length(), "Ground launch uses 45 degrees")
+	_check(absf(control.velocity.y - Vector2(control.velocity.x, control.velocity.z).length()) < 0.00001, "Ground launch uses 45 degrees within native Vector3 rounding")
 	sim.fire_controls[actor.entity_id] = control
 	var health := target.hp
 	var ammo: float = actor.ammo.heavy
@@ -810,8 +822,13 @@ func _settlement_range_tests(fixtures: Array) -> void:
 		var altitude := 26 if fixture.kind in ["robot", "heli"] else 0
 		target.configure({"id": 2, "kind": fixture.kind, "character": character, "side": "SWARM",
 			"position": Vector3(10, fixture.targetGround + altitude, 0)})
-		var factor := sim._settlement_range_factor(actor, Content.weapon("t04", fixture.slot), actor.eye(), fixture.ground, target, fixture.targetGround)
+		var frame := sim._shooter_frame(actor, fixture.ground)
+		var factor := sim._settlement_range_factor(actor, Content.weapon("t04", fixture.slot), actor.view_origin(), fixture.ground, target, fixture.targetGround, frame)
 		_near(factor, fixture.factor, "Source impact range uses matching height frames and excludes expired buffs")
+		var fired_eye := actor.view_origin()
+		actor.position += Vector3(300, 250, -400)
+		var captured := sim._settlement_range_factor(actor, Content.weapon("t04", fixture.slot), fired_eye + Vector3(5, -20, -10), fixture.ground, target, fixture.targetGround, frame)
+		_near(captured, fixture.factor, "Source shooter height frame survives movement and a different muzzle origin")
 		target.free()
 	sim.queue_free()
 	await get_tree().process_frame

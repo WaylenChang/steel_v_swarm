@@ -14,6 +14,28 @@ var arc_material: StandardMaterial3D
 var terrain_rids: Array[RID] = []
 var missile_obstruction_rids: Array[RID] = []
 var layers := StructureLayers.new()
+var projectile_visuals: ProjectilePresentation
+
+func ensure_projectile_visuals() -> ProjectilePresentation:
+	if projectile_visuals == null:
+		projectile_visuals = ProjectilePresentation.new()
+		add_child(projectile_visuals)
+	return projectile_visuals
+
+func sync_projectile_view(states: Array) -> void:
+	if projectile_visuals == null and states.is_empty():
+		return
+	ensure_projectile_visuals().sync_rounds(states)
+
+func step_projectile_visuals(delta: float) -> void:
+	if projectile_visuals == null:
+		return
+	projectile_visuals.advance(delta, visual_collision)
+
+func visual_collision(start: Vector3, end: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(start, end, 1)
+	query.hit_back_faces = true
+	return get_world_3d().direct_space_state.intersect_ray(query)
 
 func build(map_data: Dictionary, environment: Dictionary) -> void:
 	bounds = map_data.bounds

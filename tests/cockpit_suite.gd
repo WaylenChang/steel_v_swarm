@@ -68,6 +68,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		rig.free()
 	print("COCKPIT_GEOMETRY_PASS characters=", Content.heroes.size(), " meshes=", mesh_count)
 	await weapon_mirrors(h, fixtures.weaponPresentation)
+	authority_poses(h, fixtures.authorityWeaponPoses)
 	flash_timing(h, fixtures.cockpitFlash)
 	await integration(h)
 
@@ -120,6 +121,43 @@ static func flash_timing(h: Node, fixtures: Array) -> void:
 	h._check(rig.flash.is_visible_in_tree(), "Original aiming hides cockpit parts while retaining the muzzle flash")
 	rig.free()
 
+static func authority_poses(h: Node, fixtures: Array) -> void:
+	var frames := 0
+	var launches := 0
+	var maximum_error := 0.0
+	for fixture: Dictionary in fixtures:
+		var pose := AuthorityWeaponPose.new()
+		pose.configure(fixture.character)
+		var serial := 0
+		for frame: Dictionary in fixture.frames:
+			frames += 1
+			var camera := matrix(frame.camera)
+			for launch: Dictionary in frame.launches:
+				launches += 1
+				var actual := pose.muzzle(camera, launch.slot, frame.flying)
+				var error := actual.distance_to(h._reference_vector(launch.point))
+				maximum_error = maxf(maximum_error, error)
+				h._check(error < 0.0001, "Original pre-fire next-barrel authority muzzle: %s/%s frame=%d error=%s" % [fixture.character, fixture.form, frames, error])
+				serial += 1
+				h._check(pose.fire(serial, launch.slot, frame.now), "Authority accepts a new immutable pose event")
+				h._check(not pose.fire(serial, launch.slot, frame.now), "Authority pose rejects duplicate events")
+			var def := Content.weapon(fixture.character, frame.slot, int(frame.level))
+			var deadline: float = frame.reloadEnd if frame.reloadEnd != null else NAN
+			h._check(pose.advance(frame.dt, frame.now, frame.slot, frame.flying, def, deadline, frame.suppression), "Authority pose advances once per simulation clock")
+			var expected := matrix(frame.matrix)
+			h._check(pose.gun.origin.distance_to(expected.origin) < 0.00001 and basis_error(pose.gun.basis, expected.basis) < 0.00001,
+				"Original authority reload, kick and elevation root")
+			h._near(pose.kick, frame.kick, "Original authority kick at variable tick intervals")
+			var error := pose.current_muzzle(camera).distance_to(h._reference_vector(frame.current))
+			maximum_error = maxf(maximum_error, error)
+			h._check(error < 0.0001, "Original current-port authority cache: %s/%s frame=%d error=%s" % [fixture.character, fixture.form, frames, error])
+			var cached: Vector3 = pose.caches[pose.cache_id]
+			h._check(cached.distance_to(h._reference_vector(frame.cache)) < 0.00001, "Original authority shared fallback aliases")
+			h._check(not pose.advance(frame.dt, frame.now, frame.slot, frame.flying, def, deadline, frame.suppression), "Repeated clocks cannot double-decay authority pose")
+			h._check(pose.caches[pose.cache_id] == cached, "Repeated clocks cannot mutate fallback caches")
+		h._check(not pose.fire(serial + 1, "light", NAN) and not pose.fire(serial + 1, "light", pose.clock - 1), "Authority pose rejects non-finite and older clocks")
+	print("AUTHORITY_WEAPON_POSE_REFERENCE_PASS sequences=", fixtures.size(), " frames=", frames, " launches=", launches, " maximum_error=", maximum_error)
+
 static func matrix(values: Array) -> Transform3D:
 	return Transform3D(Basis(Vector3(values[0], values[1], values[2]), Vector3(values[4], values[5], values[6]), Vector3(values[8], values[9], values[10])),
 		Vector3(values[12], values[13], values[14]))
@@ -154,6 +192,7 @@ static func integration(h: Node) -> void:
 	var hp := actor.hp
 	var rng_state := sim.rng.state
 	var projectile_rng_state := sim.projectile_rng.state
+	var expected_port := actor.weapon_pose.muzzle(actor.aim_transform(), "heavy", actor.flying)
 	rig.kick = 1
 	rig.update_view(actor, "heavy", true, 0.05, sim.clock)
 	h._check(absf(rig.kick - 0.55) < 0.000001, "Source cockpit kick decays at nine units per second")
@@ -172,6 +211,34 @@ static func integration(h: Node) -> void:
 	h._check(rig.weapons.last_serial == accepted_serial and rig.weapons.sequences.ground.heavy.index == index and rig.kick == 0.4,
 		"Repeated authority feedback does not advance barrels or restart recoil/flash")
 	h._check(event.serial == actor.fire_serial and event.clock == sim.clock, "Authority feedback retains immutable shot serial and accepted clock")
+	h._check(event.muzzle.distance_to(expected_port) < 0.00001 and event.muzzle.distance_to(actor.eye()) > 0.1,
+		"Authority captures the next port before advancing the accepted barrel")
+	var accepted_ammo: int = actor.ammo.heavy
+	var accepted_power := actor.power
+	sim.clock += 0.016
+	sim._tick_weapon_pose(actor, 0.016)
+	var pose_state: Dictionary = sim.snapshot(951).weapon_pose
+	h._check(pose_state.clock == sim.clock and pose_state.serial == event.serial and pose_state.gun is Transform3D,
+		"Authority pose clock and native transform are available in the pilot's private snapshot")
+	h._check(sim.snapshot().weapon_pose.is_empty() and sim.snapshot(952).weapon_pose.is_empty(), "Authority weapon pose is absent from global and other pilots' snapshots")
+	var expected_pose := CockpitPose.transform_for(rig.profile, Vector3.ZERO, control.elevation, 0.856)
+	h._check(pose_state.gun.origin.distance_to(expected_pose.origin) < 0.00001 and basis_error(pose_state.gun.basis, expected_pose.basis) < 0.00001,
+		"Authority pose consumes the same private lob elevation and accepted-fire clock")
+	sim._tick_weapon_pose(actor, 0.016)
+	h._check(actor.weapon_pose.kick == pose_state.kick, "Snapshot and duplicate ticks cannot decay authority pose twice")
+	h._check(actor.ammo.heavy == accepted_ammo and actor.power == accepted_power and sim.rng.state == rng_state and sim.projectile_rng.state == projectile_rng_state,
+		"Authority pose and private snapshot spend no combat resources or RNG")
+	rig.sync_authority_pose(pose_state)
+	rig.update_view(actor, "heavy", true, 0.001, pose_state.clock)
+	h._check(rig.gun.transform.origin.distance_to(pose_state.gun.origin) < 0.00001 and basis_error(rig.gun.basis, pose_state.gun.basis) < 0.00001,
+		"Local gun pose follows authority clock even with a different render interval")
+	rig.update_view(actor, "heavy", true, 0.001, pose_state.clock)
+	h._near(rig.kick, pose_state.kick, "Repeated presentation clocks cannot double-decay authority recoil")
+	var older := pose_state.duplicate()
+	older.clock -= 1
+	older.kick = 0
+	rig.sync_authority_pose(older)
+	h._check(rig.authority_pose == pose_state, "Older pose snapshots cannot rewind authority recoil")
 	rig.update_view(actor, "heavy", true, 0.016, sim.clock + 0.016)
 	h._check(rig.flash.visible and rig.flash.scale.x >= Content.balance.cockpitRules.flash.minimum * Content.balance.cockpitRules.flash.heavy,
 		"Accepted heavy shot presents original flash during aim hiding")
@@ -182,12 +249,16 @@ static func integration(h: Node) -> void:
 	actor.ammo.heavy = 0
 	sim.reload_weapon(actor, "heavy")
 	var definition := Content.weapon(actor.character, "heavy")
+	rig.sync_authority_pose({})
 	rig.update_view(actor, "heavy", false, 0.2, sim.clock + definition.reload / 2)
 	var expected := CockpitPose.transform_for(rig.profile, CockpitPose.reload_offset(definition, 0.5), 0, 0)
 	h._check(rig.gun.transform.origin.distance_to(expected.origin) < 0.00001 and basis_error(rig.gun.basis, expected.basis) < 0.00001,
 		"Native reload presentation uses authoritative deadline and source gun-root pivot")
 	h._check(actor.ammo.heavy == 0 and actor.reload_at.has("heavy"), "Reload animation cannot refill or complete authority ammunition")
 	actor.hp = 0
+	sim.clock += 1
+	sim._tick_weapon_pose(actor, 1)
+	h._check(actor.weapon_pose.kick == 0 and sim.snapshot(951).weapon_pose.is_empty(), "Dead pilots continue recoil decay without exposing a private weapon pose")
 	rig.update_view(actor, "heavy", false, 0.01, sim.clock)
 	h._check(not rig.visible, "Dead local pilot hides cockpit presentation")
 	sim.queue_free()

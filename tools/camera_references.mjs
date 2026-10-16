@@ -30,7 +30,7 @@ export async function cameraReferences(d, source, gameSource) {
   grab(/py < s \+ ([\d.]+)/, 'surfaceClearance');
   grab(/\(i - 1\) \/ N - ([\d.]+)/, 'surfaceRetreat');
   grab(/new THREE\.PerspectiveCamera\(fov, this\.canvas\.clientWidth \/ this\.canvas\.clientHeight, ([\d.]+),/, 'near');
-  const profiles={}, cameraAnchors=[], cameraClips=[];
+  const profiles={}, cameraAnchors=[], cameraClips=[], superCameraAnchors=[];
   for (const [character,hero] of Object.entries(d.CHARACTERS)) {
     profiles[character]={};
     for (const flight of [false,true]) {
@@ -38,11 +38,18 @@ export async function cameraReferences(d, source, gameSource) {
       ctx.selfH=selfHeight.call(ctx);
       const view=heroView(hero.kind,character,flying.call(ctx));
       const height=eye.call(ctx);ctx.charge=1;
-      profiles[character][flight?'air':'ground']={eye:height,forward:ctx.selfH*view.f,crouch:height-eye.call(ctx)};
+      profiles[character][flight?'air':'ground']={height:ctx.selfH,eye:height,forward:ctx.selfH*view.f,crouch:height-eye.call(ctx)};
       for (const yaw of [0,.7,-1.2]) for (const charge of [0,.5,1]) {
         ctx.charge=charge;
         const position=[12,50,-9], h=eye.call(ctx), forward=ctx.selfH*view.f;
         cameraAnchors.push({character,flight,yaw,charge,position,eye:h,
+          result:[position[0]-Math.sin(yaw)*forward,position[1]+h,position[2]-Math.cos(yaw)*forward]});
+      }
+      ctx.side='SUPER';
+      for(const level of [0,19,20,40,100]) for(const charge of [0,.5,1]) {
+        ctx.upg.super=level; ctx.charge=charge; ctx.selfH=selfHeight.call(ctx);
+        const position=[12,50,-9],yaw=.7,h=eye.call(ctx),forward=ctx.selfH*view.f;
+        superCameraAnchors.push({character,flight,level,charge,yaw,position,eye:h,
           result:[position[0]-Math.sin(yaw)*forward,position[1]+h,position[2]-Math.cos(yaw)*forward]});
       }
     }
@@ -75,5 +82,5 @@ export async function cameraReferences(d, source, gameSource) {
     cameraClips.push({name:scenario.name,camera:initial,eye:5,blockers,entities:entities.map(e=>({...e,mesh:undefined,position:e.mesh.position.toArray()})),
       onDeck:!!scenario.onDeck,surface:scenario.surface||0,hit:scenario.hit??null,ground:scenario.ground??(scenario.ground===null?null:0),ridge:!!scenario.ridge,result:camera.toArray()});
   }
-  return {profiles,rules,fixtures:{cameraAnchors,cameraClips}};
+  return {profiles,rules,fixtures:{cameraAnchors,cameraClips,superCameraAnchors}};
 }

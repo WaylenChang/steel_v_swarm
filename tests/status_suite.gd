@@ -158,7 +158,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			actor(simulation, input)
 		var caster: BattleUnit = simulation.units[1]
 		var definition := Content.ability(item.character, item.slot, int(item.level))
-		h._check(simulation._ability_supported(definition), "Source effect implementation accepts its authored fixture")
+		h._check(simulation._ability_supported(definition, item.character), "Source effect implementation accepts its authored fixture")
 		simulation._cast_effect(caster, definition, Vector3.ZERO, item.fraction, item.once)
 		for expected: Dictionary in item.result:
 			compare_state(h, simulation.units[int(expected.id)], expected)

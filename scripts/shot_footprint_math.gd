@@ -1,6 +1,29 @@
 class_name ShotFootprintMath
 extends RefCounted
 
+static func skill_victims(definition: Dictionary, point: Vector3, targets: Array, side: String) -> Array[int]:
+	var hits: Array[int] = []
+	if not definition.get("range", 0) or definition.get("target") == "self":
+		return hits
+	var foe: bool = definition.target == "enemy"
+	var reach: float = definition.range + Content.balance.aimingPresentation.skillRangeTolerance
+	for target: Dictionary in targets:
+		if not target.get("visible", false) or target.get("dead", false) or target.get("garrison", false) or target.get("neutral", false):
+			continue
+		var target_side: String = target.get("side", "")
+		var enemy := not target_side.is_empty() and target_side != side
+		if enemy != foe:
+			continue
+		var position: Vector3 = target.position
+		var dx := float(position.x) - float(point.x)
+		var dz := float(position.z) - float(point.z)
+		var radius: float = target.get("radius", 1.0)
+		if radius == 0:
+			radius = 1.0
+		if sqrt(dx * dx + dz * dz) - radius <= reach:
+			hits.append(int(target.id))
+	return hits
+
 # Source client advisory geometry. These lists never settle damage or spend combat resources.
 static func eligible(target: Dictionary) -> bool:
 	return target.get("foe", true) and target.get("visible", true) and not target.get("self", false) and not target.get("dead", false) and not target.get("garrison", false)

@@ -22,7 +22,9 @@ export async function missileReferences(d, BattleSim, config, source, gameSource
   const launchOffset = Number(/const off = i === 0 \? ([\d.]+) :/.exec(simSource)?.[1]);
   const interceptRadius = Number(/missileId:m\.id[^\n]+r: ([\d.]+), side: h\.side, sam: true/.exec(simSource)?.[1]);
   const snapshotScale = Number(/x: Math\.round\(m\.x \* ([\d.]+)\)/.exec(simSource)?.[1]);
-  if (!scale || !fuseDistance || !launchOffset || !interceptRadius || !snapshotScale) throw new Error('Missing source missile constants');
+  const decoyRadius = Number(/let bestDec = null, bd = ([\d.]+)/.exec(simSource)?.[1]);
+  const reflectOffset = Number(/x: m\.x \+ fx \* ([\d.]+)/.exec(simSource)?.[1]);
+  if (!scale || !fuseDistance || !launchOffset || !interceptRadius || !snapshotScale || !decoyRadius || !reflectOffset) throw new Error('Missing source missile constants');
   const mesh = meshFactory({ type: 'missile' }, { hue: 0xff6633 });
   mesh.scale.setScalar(scale);
   mesh.updateMatrixWorld(true);
@@ -171,6 +173,6 @@ export async function missileReferences(d, BattleSim, config, source, gameSource
     const packet = frameSim._frame().sm[0];
     missileSnapshots.push({ point, result: { position: [packet.x, packet.y, -packet.z], hp: packet.hp, max_hp: packet.m } });
   }
-  return { metadata: { parts, fuseDistance, launchOffset, interceptRadius, snapshotScale },
+  return { metadata: { parts, fuseDistance, launchOffset, interceptRadius, snapshotScale, decoyRadius, reflectOffset },
     fixtures: { missileFlight, missileDamage, missileLines, missileRays, baseLaunches, baseTargets, missileSnapshots } };
 }

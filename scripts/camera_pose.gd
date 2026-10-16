@@ -1,13 +1,54 @@
 class_name CameraPose
 extends RefCounted
 
-static func eye_height(character: String, flying: bool, charge: float = 0.0) -> float:
-	var view: Dictionary = Content.balance.cameraProfiles[character]["air" if flying else "ground"]
-	return view.eye - charge * view.crouch
+static func angle_step(current: float, target: float, rate: float, delta: float) -> float:
+	# The source camera seam maps both half-turn endpoints to -PI.
+	var difference := fposmod(target - current + PI, TAU) - PI
+	return current + difference * (1 - exp(-rate * delta))
 
-static func anchor(character: String, position: Vector3, yaw: float, flying: bool, charge: float = 0.0) -> Vector3:
+static func body_height(character: String, flying: bool, scale_factor: float = 1.0) -> float:
+	return float(Content.balance.cameraProfiles[character]["air" if flying else "ground"].height) * scale_factor
+
+static func entity_collider(kind: String, scale_factor: float, collapsed: bool) -> Dictionary:
+	var profile: Dictionary = Content.balance.playerView.colliders[kind]
+	var radius: float = profile.radius * ((scale_factor if scale_factor != 0 else 1.0) if profile.scaleRadius else 1.0)
+	var height: float = profile.height
+	if collapsed:
+		radius *= float(Content.balance.playerView.collapseRadius)
+		height *= float(Content.balance.playerView.collapseHeight)
+	return {"colR": radius, "colH": height}
+
+static func third_person_anchor(position: Vector3, height: float, yaw: float, pitch: float, surface: Callable) -> Vector3:
+	var rules: Dictionary = Content.constants.PLAYER_TPS
+	var distance := maxf(float(rules.MIN_DIST), height * float(rules.DIST_F))
+	var forward := Vector3(-sin(yaw), 0, -cos(yaw))
+	var right := Vector3(-forward.z, 0, forward.x)
+	var camera := position - forward * distance * cos(pitch) + right * height * float(rules.SHOULDER_F)
+	camera.y += height * float(rules.HEIGHT_F) - sin(pitch) * distance
+	var floor_height: float = surface.call(camera)
+	if camera.y < floor_height + float(rules.FLOOR_M):
+		camera.y = floor_height + float(rules.FLOOR_M)
+	return camera
+
+static func frame_ring(frame: Transform3D, projection: Projection, ring: Vector3) -> Transform3D:
+	var view := frame.affine_inverse()
+	var point := view * ring
+	var target: float = Content.constants.PLAYER_TPS.RING_NDC_Y
+	var denominator := target * view.basis.z.y + projection.y.y * view.basis.y.y
+	if absf(denominator) <= float(Content.balance.playerView.ringDenominator):
+		return frame
+	var offset := (target * point.z + projection.y.y * point.y) / denominator
+	if is_finite(offset):
+		frame.origin.y += offset
+	return frame
+
+static func eye_height(character: String, flying: bool, charge: float = 0.0, scale_factor: float = 1.0) -> float:
 	var view: Dictionary = Content.balance.cameraProfiles[character]["air" if flying else "ground"]
-	return position + Vector3(-sin(yaw) * view.forward, eye_height(character, flying, charge), -cos(yaw) * view.forward)
+	return view.eye * scale_factor - charge * view.crouch
+
+static func anchor(character: String, position: Vector3, yaw: float, flying: bool, charge: float = 0.0, scale_factor: float = 1.0) -> Vector3:
+	var view: Dictionary = Content.balance.cameraProfiles[character]["air" if flying else "ground"]
+	return position + Vector3(-sin(yaw) * view.forward * scale_factor, eye_height(character, flying, charge, scale_factor), -cos(yaw) * view.forward * scale_factor)
 
 static func clip(position: Vector3, camera: Vector3, eye: float, blockers: Array, entities: Array,
 		on_deck: bool, standing_surface: float, collision: Callable, surface: Callable) -> Vector3:

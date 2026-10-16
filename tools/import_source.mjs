@@ -10,6 +10,9 @@ import { missileReferences } from './missile_references.mjs';
 import { structureReferences } from './structure_references.mjs';
 import { reachabilityReferences } from './reachability_references.mjs';
 import { modelReferences } from './model_references.mjs';
+import { hurtBearingReferences } from './hurt_bearing_references.mjs';
+import { presentationFrameReferences } from './presentation_frame_references.mjs';
+import { blastFeedbackReferences } from './blast_feedback_references.mjs';
 import { footprintReferences } from './footprint_references.mjs';
 import { cameraReferences } from './camera_references.mjs';
 import { burstReferences } from './burst_references.mjs';
@@ -27,6 +30,17 @@ import { sceneReferences } from './scene_references.mjs';
 import { supplyReferences } from './supply_references.mjs';
 import { thirdReferences } from './third_references.mjs';
 import { matchReferences } from './match_references.mjs';
+import { missileDefenseReferences } from './missile_defense_references.mjs';
+import { aimingPresentationReferences } from './aiming_presentation_references.mjs';
+import { botReferences } from './bot_references.mjs';
+import { bossReferences } from './boss_references.mjs';
+import { campaignReferences } from './campaign_references.mjs';
+import { superReferences } from './super_references.mjs';
+import { controlsReferences } from './controls_references.mjs';
+import { mobileReferences } from './mobile_references.mjs';
+import { viewReferences } from './view_references.mjs';
+import { playerViewReferences } from './player_view_references.mjs';
+import { locomotionReferences } from './locomotion_references.mjs';
 
 // Offline migration only: evaluate the source's settlement seams instead of copying derived numbers.
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -61,63 +75,71 @@ for (const [key, value] of Object.entries(d)) {
   if (typeof value !== 'function') constants[key] = serialize(value);
 }
 const heroes = {};
+function weaponDefinition(id, slot, level) {
+  const def = d.heroWeapon(id, slot, level);
+  return { ...def, area: d.aoeClass(def), trajectory: d.trajClass(def), reachRule: d.reachRule(def),
+    burst: { count: d.fireBurstN(def), gap: d.fireBurstGap(def) },
+    lanceRadius: d.lanceR(def), lancePen: d.lancePen(def),
+    fanSubs: d.fanSubs(def), fanMaxBuildingHits: d.fanBuildingMaxHits(def),
+    fanRangeFactors: Array.from({ length: d.fanSubs(def) }, (_, bin) => d.fanBinRangeF(def, bin)),
+    projectile: { speed: d.shotV0(def), antiAirSpeed: d.shotV0(def, true), arm: d.armingOf(def), fuel: d.chaseCapS(def), flightCap: d.flightCapS(def),
+      core: d.blastCoreR(def), launchDistance: d.guidedLaunchDist(def) },
+    heavyMp: slot === 'heavy' ? d.heavyMpCost(def) : 0 };
+}
 for (const [id, ch] of Object.entries(d.CHARACTERS)) {
   heroes[id] = {
     ...ch, armor: d.heroArmor(id), radius: d.hitR({ hero:true, kind:ch.kind, ch:id }),
     height: d.hitH({ hero:true, kind:ch.kind, ch:id }), speed: d.heroMobility(ch.kind, ch.mods),
     colliders: {ground:d.selfCollider(d.heroTargetH(ch.kind,id),false),air:d.selfCollider(d.heroTargetH(ch.kind,id),true)},
     flySpeed: d.heroMobility(ch.kind, ch.mods, true),
-    weapons: {}, abilities: {},
+    weapons: {}, abilities: {}, super: {weapons:{},abilities:{}},
   };
   for (const slot of ['light', 'heavy']) {
-    heroes[id].weapons[slot] = Array.from({ length: d.ECON.UPGRADES[slot === 'light' ? 'lw' : 'hw'].max + 1 }, (_, i) => {
-      const def = d.heroWeapon(id, slot, i + 1);
-      return { ...def, area: d.aoeClass(def), trajectory: d.trajClass(def), reachRule: d.reachRule(def),
-        burst: { count: d.fireBurstN(def), gap: d.fireBurstGap(def) },
-        lanceRadius: d.lanceR(def), lancePen: d.lancePen(def),
-        fanSubs: d.fanSubs(def), fanMaxBuildingHits: d.fanBuildingMaxHits(def),
-        fanRangeFactors: Array.from({ length: d.fanSubs(def) }, (_, bin) => d.fanBinRangeF(def, bin)),
-        projectile: { speed: d.shotV0(def), antiAirSpeed: d.shotV0(def, true), arm: d.armingOf(def), fuel: d.chaseCapS(def), flightCap: d.flightCapS(def),
-          core: d.blastCoreR(def), launchDistance: d.guidedLaunchDist(def) },
-        heavyMp: slot === 'heavy' ? d.heavyMpCost(def) : 0 };
-    });
+    heroes[id].weapons[slot] = Array.from({ length: d.ECON.UPGRADES[slot === 'light' ? 'lw' : 'hw'].max + 1 }, (_, i) => weaponDefinition(id,slot,i+1));
+    heroes[id].super.weapons[slot] = Array.from({length:d.SUPER_UPG.MAX+1},(_,i)=>weaponDefinition(id,slot,d.superCombatLvl(i)));
   }
   for (const slot of ['def', 'atk']) {
     heroes[id].abilities[slot] = Array.from({ length: d.ECON.UPGRADES[slot].max + 1 }, (_, i) => d.heroAbility(id, slot, i + 1));
+    heroes[id].super.abilities[slot] = Array.from({length:d.SUPER_UPG.MAX+1},(_,i)=>d.heroAbility(id,slot,d.superCombatLvl(i)));
   }
 }
 const maps = [];
+function captureMapVariant(cfg, size) {
+  const sim = new BattleSim(cfg);
+  const wavePrefill = [];
+  sim._spawnLaneWave = (lane,side,wave,lead) => wavePrefill.push({lane,side,wave,lead});
+  sim._prefillLanes();
+  return {
+    config: cfg, bounds: d.battleRect(cfg),
+    authority_bounds: {minX:sim.bounds.minX,maxX:sim.bounds.maxX,minZ:-sim.bounds.maxZ,maxZ:-sim.bounds.minZ},
+    wave_prefill: wavePrefill,
+    lane_turns:sim.lanes.map(lane=>d.laneTacticsXZ(lane).turns),
+    bases: Object.fromEntries(Object.entries(cfg.bases).map(([side, ll]) => [side, d.llToXZ(...ll, cfg.center)])),
+    lanes: cfg.lanes.map(lane => lane.map(ll => d.llToXZ(...ll, cfg.center))),
+    hero_spawns: Object.fromEntries(['SWARM','STEEL'].map(side => [side,
+      Array.from({length:size}, (_, slot) => {
+        const [x,z] = sim._spawnPoint(side,slot);
+        const [dx,dz] = sim._spawnAimDir(side,slot,x,z);
+        return {position:[x,-z],direction:[dx,-dz]};
+      })])),
+    tower_sites: sim.towerSites.map(sites => sites.map(site => ({frac:site.frac,
+      normals:Object.fromEntries(['STEEL','SWARM'].filter(side=>site[side]).map(side=>[side,[site[side].nx,-site[side].nz]])),
+      ...Object.fromEntries(['STEEL','SWARM'].filter(side=>site[side]).map(side=>[side,[site[side].x,-site[side].z]]))}))),
+    structures: [...sim.ents.values()].filter(e => ['base', 'tower'].includes(e.kind)).map(e =>
+      ({ kind: e.kind, side: e.side, position: [e.x, e.y || 0, -e.z], lane: e.lane ?? 0, hp: e.hp, stage:e.sg })),
+  };
+}
 for (const venue of v.VENUES.filter(item => !item.story)) {
   const available = v.venueAvailability(venue, 5);
   if (!available.available) continue;
   const variants = {};
   for (let size = d.TEAM.MIN; size <= d.TEAM.MAX; size++) {
-    const cfg = v.venueConfig(venue, size);
-    const sim = new BattleSim(cfg);
-    const wavePrefill = [];
-    sim._spawnLaneWave = (lane,side,wave,lead) => wavePrefill.push({lane,side,wave,lead});
-    sim._prefillLanes();
-    variants[size] = {
-      config: cfg, bounds: d.battleRect(cfg),
-      authority_bounds: {minX:sim.bounds.minX,maxX:sim.bounds.maxX,minZ:-sim.bounds.maxZ,maxZ:-sim.bounds.minZ},
-      wave_prefill: wavePrefill,
-      lane_turns:sim.lanes.map(lane=>d.laneTacticsXZ(lane).turns),
-      bases: Object.fromEntries(Object.entries(cfg.bases).map(([side, ll]) => [side, d.llToXZ(...ll, cfg.center)])),
-      lanes: cfg.lanes.map(lane => lane.map(ll => d.llToXZ(...ll, cfg.center))),
-      hero_spawns: Object.fromEntries(['SWARM','STEEL'].map(side => [side,
-        Array.from({length:size}, (_, slot) => {
-          const [x,z] = sim._spawnPoint(side,slot);
-          const [dx,dz] = sim._spawnAimDir(side,slot,x,z);
-          return {position:[x,-z],direction:[dx,-dz]};
-        })])),
-      structures: [...sim.ents.values()].filter(e => ['base', 'tower'].includes(e.kind)).map(e =>
-        ({ kind: e.kind, side: e.side, position: [e.x, e.y || 0, -e.z], lane: e.lane ?? 0, hp: e.hp })),
-    };
+    variants[size] = captureMapVariant(v.venueConfig(venue, size), size);
   }
   maps.push({ id: venue.id, name: venue.name, variants });
 }
 const rng = mulberry32(123456789);
-const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object.fromEntries(['SWARM','STEEL','GUER','MILI'].map(side=>
+const unitVolumes=Object.fromEntries(Object.keys(d.UNITS).map(kind=>[kind,Object.fromEntries(['SWARM','STEEL','GUER','MILI','SUPER'].map(side=>
   [side,{radius:d.hitR({kind,side}),height:d.hitH({kind,side})}]))]));
 const missileReference = await missileReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource);
 const structureReference = await structureReferences(d, BattleSim, maps[0].variants['1'].config, source, root, gameSource);
@@ -128,11 +150,36 @@ const carrierReference = carrierReferences(d, BattleSim, maps[0].variants['1'].c
 const npcReference = await npcReferences(d, BattleSim, maps[0].variants['1'].config, source);
 const waveReference = waveReferences(d, BattleSim, maps[0].variants['1'].config, cumLen, pointAt, mulberry32);
 const weatherReference = await weatherReferences(d, BattleSim, maps[0].variants['1'].config, source);
+const aimingReference = await aimingPresentationReferences(d, gameSource, source);
+const botReference = await botReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32, source);
+const bossReference = await bossReferences(d, BattleSim, maps[0].variants['1'].config, source, gameSource);
+const campaignReference = await campaignReferences(d, v, narrative, mainSource, source, captureMapVariant, BattleSim);
+const superReference = await superReferences(d, BattleSim, maps[0].variants['1'].config, source, mulberry32);
+const controlsReference = await controlsReferences(d, gameSource, source);
+const mobileReference = await mobileReferences(gameSource, source);
+const viewReference = await viewReferences(d, gameSource, mainSource, source);
+const playerViewReference = await playerViewReferences(d, gameSource, source);
+const locomotionReference = await locomotionReferences(d, source);
+const presentationFrameReference = presentationFrameReferences(d, gameSource, BattleSim);
 const glowOpacity = /opacity: warn \? ([\d.]+) : ([\d.]+)/.exec(gameSource);
 const glowColor = /color: warn \? (0x[\da-f]+) : sideInfo\(this.side\).color/.exec(gameSource);
 const glowSize = /sp.scale.setScalar\(Math.max\(([\d.]+), Math.max\(h, r \* 2\) \* ([\d.]+)\)\)/.exec(gameSource);
 if (!glowOpacity || !glowColor || !glowSize) throw new Error('Source weapon glow style seams missing');
 const fixtures = {
+  ...await blastFeedbackReferences(d, gameSource, source, BattleSim),
+  ...presentationFrameReference.fixtures,
+  ...hurtBearingReferences(BattleSim),
+  ...missileDefenseReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
+  ...aimingReference.fixtures,
+  ...botReference.fixtures,
+  ...bossReference.fixtures,
+  ...campaignReference.fixtures,
+  ...superReference.fixtures,
+  ...controlsReference.fixtures,
+  ...mobileReference.fixtures,
+  ...viewReference.fixtures,
+  ...playerViewReference.fixtures,
+  ...locomotionReference.fixtures,
   ...carrierReference.fixtures,
   ...npcReference.fixtures,
   ...waveReference.fixtures,
@@ -187,15 +234,26 @@ await mkdir(join(root, 'data'), { recursive: true });
 for (const [name, value] of Object.entries({ balance: { constants, heroes, unitVolumes,
   structure: structureReference.rules,
   modelGeometry: modelReference.geometry,
+  bodies: modelReference.bodyProfiles,
+  bodyRules: {...modelReference.bodyRules,gait:locomotionReference.gait,locomotion:locomotionReference.locomotion,rotation:locomotionReference.rotation},
   cockpit: modelReference.cockpits,
   cockpitRules: modelReference.cockpitRules,
   projectileVisual: modelReference.projectileVisual,
+  npcShots: modelReference.npcShots,
+  weaponEffects: modelReference.weaponEffects,
+  firstPersonShields: modelReference.firstPersonShields,
+  hurtPresentation: modelReference.hurtPresentation,
+  screenSplats: {blood:serialize(d.BLOOD),glint:serialize(d.GLINT),paint:modelReference.splatPaint},
+  presentationFrame: presentationFrameReference.rules,
+  destruction: modelReference.destruction,
+  deathOverlay: modelReference.deathOverlay,
   companions: modelReference.companionProfiles,
   hazard_visuals: modelReference.hazardProfiles,
   loot_visuals: modelReference.lootProfiles,
   hud_feed: {maximum:Number(feedLimit[1]),lifetime:Number(feedLifetime[1])/1000},
   side_unknown: serialize(d.sideInfo(null)),
   civilian_appearance: {occupations:serialize(civilianContent.CIVILIAN_OCCUPATIONS),options:serialize(civilianContent.CIVILIAN_OPTIONS)},
+  civilian_visuals: modelReference.civilianVisuals,
   hazard_volumes: Object.fromEntries([...Object.keys(d.HAZARDS),'aasite','relay'].map(kind=>[kind,{radius:d.hitR({kind}),height:d.hitH({kind})}])),
   carrier: carrierReference.rules,
   npc: npcReference.rules,
@@ -204,21 +262,36 @@ for (const [name, value] of Object.entries({ balance: { constants, heroes, unitV
   cameraProfiles: cameraReference.profiles, cameraRules: cameraReference.rules,
   footprintGlow: { warningOpacity: Number(glowOpacity[1]), opacity: Number(glowOpacity[2]),
     warningColor: Number(glowColor[1]), minimumSize: Number(glowSize[1]), sizeFactor: Number(glowSize[2]) },
+  aimingPresentation: aimingReference.rules,
+  bot: botReference.rules,
+  siege: bossReference.rules,
+  super: superReference.rules,
+  controls: controlsReference.rules,
+  mobile: mobileReference.rules,
+  view: viewReference.rules,
+  playerView: playerViewReference.rules,
+  upgrade_curves:Object.fromEntries(Object.entries(d.ECON.UPGRADES).map(([key,up])=>[key,Array.from({length:up.max+1},(_,level)=>d.upgradeCurveMul(key,level))])),
   reachability: reachabilityReference.reachabilityRules,
-  missile: missileReference.metadata,
+  missile: {...missileReference.metadata,presentation:modelReference.destruction.missilePresentation},
   projectilePreview: { maxPoints: Number(arcPoints[1]), colors: Object.fromEntries(['close','blocked','aa','high'].map((key, i) => [key, Number(arcColors[i + 1])])) },
   targeting: { coneAngle: Number(coneAngle[1]), lockInterval: Number(lockInterval[1]), obstructionTolerance: Number(obstructionTolerance[1]) },
   movement: { sprint: Number(sprintMatch[1]) }, charge: Array.from({ length: 4 }, (_, i) => d.chargeF(i)),
   waves: Array.from({ length: 16 }, (_, i) => d.waveComp(i)) }, maps, fixtures,
-  narrative: serialize(narrative), structures: structureReference.worlds })) {
+  narrative: serialize(narrative), campaign: campaignReference.content, structures: structureReference.worlds })) {
   await writeFile(join(root, 'data', `${name}.json`), JSON.stringify(value));
 }
-for (const folder of ['models/reference', 'models/combat', 'models/factions', 'mech_avatars', 'story']) {
+for (const folder of ['models/reference', 'models/combat', 'models/factions', 'characters', 'avatars', 'mechs', 'mech_avatars', 'story']) {
   await cp(join(source, 'public/assets', folder), join(root, 'assets', folder), { recursive: true });
 }
 await mkdir(join(root, 'assets/ui'), { recursive: true });
 await writeFile(join(root, 'assets/ui/footprint-glow.png'), Buffer.from(modelReference.glowPng, 'base64'));
+await writeFile(join(root,'assets/ui/shot-spark.png'),Buffer.from(modelReference.sparkPng,'base64'));
+for(const [key,png]of Object.entries(modelReference.spriteTextures))
+  await writeFile(join(root,'assets/ui',`combat-${key}.png`),Buffer.from(png,'base64'));
 await mkdir(join(root, 'data/cockpits'), { recursive: true });
+await mkdir(join(root, 'data/bodies'), { recursive: true });
+for (const [key, graph] of Object.entries(modelReference.bodyGraphs))
+  await writeFile(join(root, 'data/bodies', `${key}.json`), JSON.stringify(graph));
 for (const [character, graph] of Object.entries(modelReference.cockpitGraphs))
   await writeFile(join(root, 'data/cockpits', `${character}.json`), JSON.stringify(graph));
 await mkdir(join(root, 'data/projectiles'), { recursive: true });
@@ -227,6 +300,18 @@ for (const [key, graph] of Object.entries(modelReference.projectileGraphs))
 await mkdir(join(root, 'data/companions'), { recursive: true });
 for (const [key, graph] of Object.entries(modelReference.companionGraphs))
   await writeFile(join(root, 'data/companions', `${key}.json`), JSON.stringify(graph));
+await mkdir(join(root,'data/civilian_parts'),{recursive:true});
+for(const [key,graph]of Object.entries(modelReference.civilianGraphs))
+  await writeFile(join(root,'data/civilian_parts',`${key}.json`),JSON.stringify(graph));
+await mkdir(join(root,'data/npc_effects'),{recursive:true});
+for(const [key,graph]of Object.entries(modelReference.npcEffectGraphs))
+  await writeFile(join(root,'data/npc_effects',`${key}.json`),JSON.stringify(graph));
+await mkdir(join(root,'data/weapon_effects'),{recursive:true});
+for(const [key,graph]of Object.entries(modelReference.weaponEffectGraphs))
+  await writeFile(join(root,'data/weapon_effects',`${key}.json`),JSON.stringify(graph));
+await mkdir(join(root,'data/first_person_shields'),{recursive:true});
+for(const [key,graph]of Object.entries(modelReference.firstPersonShieldGraphs))
+  await writeFile(join(root,'data/first_person_shields',`${key}.json`),JSON.stringify(graph));
 await mkdir(join(root, 'data/hazards'), { recursive: true });
 for(const [key,graph] of Object.entries(modelReference.hazardGraphs))
   await writeFile(join(root, 'data/hazards', `${key}.json`), JSON.stringify(graph));
@@ -235,9 +320,9 @@ for(const [key,graph] of Object.entries(modelReference.lootGraphs))
   await writeFile(join(root, 'data/loot', `${key}.json`), JSON.stringify(graph));
 await cp(join(source, 'public/audio'), join(root, 'assets/audio'), { recursive: true });
 await cp(join(source, 'LICENSE'), join(root, 'LICENSE'));
-const inputs = ['public/js/data.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];
+const inputs = ['public/js/data.js', 'public/js/balancePrefs.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];
 const hashes = {};
-for (const file of new Set([...inputs, ...modelReference.inputs])) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
+for (const file of new Set([...inputs, ...modelReference.inputs, ...botReference.inputs, ...campaignReference.inputs, ...mobileReference.inputs, ...viewReference.inputs, ...playerViewReference.inputs, ...locomotionReference.inputs])) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
 await writeFile(join(root, 'data/provenance.json'), JSON.stringify({ inputs: hashes, heroes: Object.keys(heroes).length,
   qualifiedMaps: maps.length, runtime: 'GDScript', sourceLicense: 'Apache-2.0' }, null, 2));
 console.log(`Imported ${Object.keys(heroes).length} heroes, ${maps.length} qualified maps and native glTF assets.`);

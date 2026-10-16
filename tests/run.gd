@@ -18,6 +18,17 @@ const SceneTests = preload("res://tests/scene_suite.gd")
 const SupplyTests = preload("res://tests/supply_suite.gd")
 const ThirdTests = preload("res://tests/third_suite.gd")
 const MatchTests = preload("res://tests/match_suite.gd")
+const MissileDefenseTests = preload("res://tests/missile_defense_suite.gd")
+const AimingPresentationTests = preload("res://tests/aiming_presentation_suite.gd")
+const BotTests = preload("res://tests/bot_suite.gd")
+const BossTests = preload("res://tests/boss_suite.gd")
+const CampaignTests = preload("res://tests/campaign_suite.gd")
+const SuperTests = preload("res://tests/super_suite.gd")
+const ControlsTests = preload("res://tests/controls_suite.gd")
+const MobileTests = preload("res://tests/mobile_suite.gd")
+const ViewTests = preload("res://tests/view_suite.gd")
+const PlayerViewTests = preload("res://tests/player_view_suite.gd")
+const BodyTests = preload("res://tests/body_suite.gd")
 
 var failures: Array[String] = []
 var assertions := 0
@@ -148,6 +159,17 @@ func _run() -> void:
 	await BurstTests.run(self, fixtures)
 	await ProjectileVisualTests.run(self, fixtures)
 	StatusTests.run(self, fixtures)
+	MissileDefenseTests.run(self, fixtures)
+	AimingPresentationTests.run(self, fixtures)
+	await BotTests.run(self, fixtures)
+	BossTests.run(self, fixtures)
+	await CampaignTests.run(self, fixtures)
+	SuperTests.run(self, fixtures)
+	ControlsTests.run(self, fixtures)
+	MobileTests.run(self, fixtures)
+	ViewTests.run(self, fixtures)
+	PlayerViewTests.run(self, fixtures)
+	BodyTests.run(self, fixtures)
 	await MovementTests.run(self, fixtures)
 	FieldTests.run(self, fixtures)
 	CompanionTests.run(self, fixtures)
@@ -603,7 +625,10 @@ func _lock_confirmation_tests(fixtures: Array) -> void:
 		actor.upgrades.hw = int(fixture.level) - 1
 		actor.position = Vector3(0, 1, 0)
 		actor.hp = 0 if fixture.dead else actor.max_hp
+		actor.status.blind_until = 11.0 if fixture.get("blind", false) else 0.0
 		actor.input_state = {"aim": fixture.aiming}
+		target.special.neutral = fixture.get("neutral", false)
+		target.special.garrison = fixture.get("garrison", false)
 		target.position = Vector3(0, 1, -fixture.distance)
 		observer.position = target.position + Vector3.RIGHT * 10
 		sim.clock = 10

@@ -16,6 +16,7 @@ static func launch(definition: Dictionary, origin: Vector3, target: Vector3, gro
 		var fixed := LobFireControl.velocity_45(origin, target, definition.projectile.speed) if not aa else {}
 		velocity = LobFireControl.velocity(origin, target, speed) if fixed.is_empty() else fixed.velocity
 	return {"position": origin, "origin": origin, "target": target, "velocity": velocity,
+		"pierce": definition.area == "line",
 		"guided": lift.guided, "launch_distance": lift.distance, "age": 0.0,
 		"range": maxf(0.01, minf((definition.range if definition.range else 300.0) * 1.35, distance))}
 

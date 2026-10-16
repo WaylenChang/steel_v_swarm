@@ -54,7 +54,7 @@ func _run() -> void:
 		await get_tree().physics_frame
 		var map_id := file.get_basename().rsplit("_", true, 1)[0]
 		var team_size := file.get_basename().rsplit("_", true, 1)[1]
-		var map_entry: Dictionary = Content.maps.filter(func(entry): return entry.id == map_id)[0]
+		var map_entry: Dictionary = (Content.maps + Content.campaign.get("maps", [])).filter(func(entry): return entry.id == map_id)[0]
 		var variant: Dictionary = map_entry.variants[team_size]
 		for structure in variant.structures:
 			_check(_height(structure.position[0], structure.position[2], data.ceiling + 100, data.min_height - 100, 8) != null, file + ": structure has a verified standing surface")

@@ -3,6 +3,38 @@ extends RefCounted
 
 const NATIVE_HEIGHT_TOLERANCE := 0.001
 
+static func attracted_target(state: Dictionary, side: String, decoys: Array, kamis: Array = []) -> int:
+	var target := int(state.target)
+	if state.get("lost", false) or decoys.is_empty() and kamis.is_empty():
+		return target
+	var position: Array = state.get("components", [float(state.position.x), float(state.position.y), float(state.position.z)])
+	var best_distance: float = Content.balance.missile.decoyRadius
+	for decoy: Dictionary in decoys:
+		if decoy.hp <= 0 or decoy.get("dead", false) or decoy.side != side:
+			continue
+		var point: Vector3 = decoy.position
+		var dx: float = position[0] - float(point.x)
+		var dy: float = position[1] - float(point.y)
+		var dz: float = position[2] - float(point.z)
+		var distance := sqrt(dx * dx + dy * dy + dz * dz)
+		if distance < best_distance:
+			target = int(decoy.id)
+			best_distance = distance
+	# Source attack carriers remain in the drone owner's kami roster. They override holograms.
+	best_distance = INF
+	for carrier: Dictionary in kamis:
+		if carrier.hp <= 0:
+			continue
+		var point: Vector3 = carrier.position
+		var dx: float = position[0] - float(point.x)
+		var dy: float = position[1] - float(point.y)
+		var dz: float = position[2] - float(point.z)
+		var distance := sqrt(dx * dx + dy * dy + dz * dz)
+		if distance < best_distance:
+			target = int(carrier.id)
+			best_distance = distance
+	return target
+
 # Server missiles use height above terrain, unlike the hero's absolute flight vectors.
 static func advance(state: Dictionary, delta: float, target: Dictionary = {}, obstruction: Callable = Callable()) -> Dictionary:
 	state.ttl -= delta
@@ -21,7 +53,24 @@ static func advance(state: Dictionary, delta: float, target: Dictionary = {}, ob
 		var distance := sqrt(dx * dx + dy * dy + dz * dz)
 		if distance == 0:
 			distance = 1.0
-		if distance <= maxf(Content.balance.missile.fuseDistance, step):
+		if target.get("phase", false):
+			state.lost = true
+			state.velocity_components = [dx / distance * state.speed, dy / distance * state.speed, dz / distance * state.speed]
+		elif distance <= maxf(Content.balance.missile.fuseDistance, step):
+			if target.get("reflect", false):
+				var yaw: float = target.get("yaw", 0.0)
+				var fx := -sin(yaw)
+				var fz := -cos(yaw)
+				var ax: float = p[0] - float(point.x)
+				var az: float = p[2] - float(point.z)
+				var planar_distance := sqrt(ax * ax + az * az)
+				var arc: float = target.get("reflect_arc", deg_to_rad(120.0))
+				if arc == 0:
+					arc = deg_to_rad(120.0)
+				if planar_distance > 0.01 and (fx * ax + fz * az) / planar_distance >= cos(arc / 2):
+					var shift: float = Content.balance.missile.reflectOffset
+					return {"remove": true, "deflected": true, "target": state.target,
+						"reflection": previous, "flash": previous + Vector3(fx * shift, 0, fz * shift)}
 			return {"remove": true, "blast": point, "target": state.target}
 		var origin: Vector3 = state.origin
 		var ox := float(point.x) - origin.x
@@ -34,6 +83,12 @@ static func advance(state: Dictionary, delta: float, target: Dictionary = {}, ob
 			p[0] += dx / distance * step
 			p[1] += dy / distance * step
 			p[2] += dz / distance * step
+			# Phase marks permanent loss but still takes this source guided step when inside range.
+			state.components = p
+			state.position = Vector3(p[0], p[1], p[2])
+			if obstruction.is_valid() and obstruction.call(previous, state.position):
+				return {"remove": true, "blast": state.position}
+			return {}
 	if state.get("lost", false):
 		var velocity: Array = state.get("velocity_components", [0.0, 0.0, 0.0])
 		for axis in range(3):

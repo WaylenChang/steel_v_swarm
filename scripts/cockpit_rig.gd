@@ -65,9 +65,10 @@ func sync_visibility(aiming: bool, fov: float, base_fov: float, flying: bool) ->
 		if child not in [flash, ground, air]:
 			child.visible = not hide
 
-func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, simulation_clock: float) -> void:
+func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, simulation_clock: float, view_mode: String = "fpv") -> void:
 	if source_root == null:
 		return
+	unit.render_view_mode = view_mode
 	visible = unit.alive()
 	for echo: Dictionary in bursts.take_due(simulation_clock):
 		if not unit.alive():
@@ -80,6 +81,13 @@ func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, sim
 		if id >= 0:
 			muzzle_cache[current_cache] = gun.to_local(nodes[id].global_position)
 		var origin := gun.to_global(muzzle_cache[current_cache])
+		if view_mode == "tps":
+			var heading := unit.body_presentation.previous_yaw - PI if unit.body_presentation != null else unit.facing_yaw()
+			origin = BodyLaunchPose.resolve(unit.body, fired_slot, unit.global_position, unit.view_eye_height(), heading,
+				unit.camera.global_position, TargetingMath.maximum_range(echo.payload.definition)).origin
+		if unit.body_presentation != null:
+			var simulation: BattleSimulation = unit.get_parent()
+			unit.body_presentation.fire_local(fired_slot, simulation.presentation_time())
 		_mark_fire(weapons.last_serial + 1, fired_slot, simulation_clock)
 		echo_fired.emit(echo.payload.definition, origin)
 	weapons.advance(delta, simulation_clock)
@@ -88,7 +96,7 @@ func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, sim
 	kick = maxf(0, kick - delta * Content.balance.cockpitRules.kickDecay)
 	if not authority_pose.is_empty() and authority_pose.get("visual_serial", authority_pose.serial) == weapons.last_serial and authority_pose.slot == slot and authority_pose.clock <= simulation_clock:
 		kick = maxf(0, authority_pose.kick - (simulation_clock - authority_pose.clock) * Content.balance.cockpitRules.kickDecay)
-	var level := int(unit.upgrades.hw if slot == "heavy" else unit.upgrades.lw) + 1
+	var level := unit.combat_level(slot)
 	var definition := Content.weapon(unit.character, slot, level)
 	var reload := Vector3.ZERO
 	if unit.reload_at.has(slot):
@@ -115,7 +123,7 @@ func fire_feedback(event: Dictionary) -> void:
 	if _mark_fire(maxi(int(event.serial), weapons.last_serial + 1), event.slot, event.clock):
 		accepted_serial = int(event.serial)
 		if event.has("level"):
-			var definition := Content.weapon(character, event.slot, int(event.level))
+			var definition := Content.weapon(character, event.slot, float(event.level))
 			bursts.schedule(definition, event.clock, {"slot": event.slot, "definition": definition})
 
 func _mark_fire(serial: int, slot: String, at: float) -> bool:

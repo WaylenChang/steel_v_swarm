@@ -8,12 +8,18 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 Content="*res://scripts/content.gd"
+Controls="*res://scripts/control_preferences.gd"
 Session="*res://scripts/session.gd"
 
 [display]
 window/size/viewport_width=1440
 window/size/viewport_height=900
 window/stretch/mode="canvas_items"
+
+[input_devices]
+sensors/enable_gravity=true
+sensors/enable_gyroscope=true
+sensors/enable_magnetometer=true
 
 [rendering]
 renderer/rendering_method="gl_compatibility"

@@ -3,6 +3,7 @@ extends Node
 signal lobby_changed
 signal battle_started(config: Dictionary, roster: Array)
 signal state_received(state: Dictionary)
+signal body_event_received(event: Dictionary)
 signal status_changed(key: String)
 
 var roster: Array = []
@@ -16,9 +17,10 @@ var dedicated := false
 var snapshot_timer: Timer
 var join_timer: Timer
 var local_command := {}
-var latest_action: Dictionary = {}
+var room_random := RandomNumberGenerator.new()
 
 func _ready() -> void:
+	room_random.randomize()
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(func(): status_changed.emit("failed"); stop())
 	multiplayer.server_disconnected.connect(func(): status_changed.emit("disconnected"); stop())
@@ -39,6 +41,22 @@ func _ready() -> void:
 func host(settings: Dictionary, port: int = 8620, transport: String = "offline") -> Error:
 	stop()
 	config = settings.duplicate(true)
+	var control_mode: String = settings.get("ctrl", Controls.pref)
+	if config.has("campaign"):
+		var selection: Dictionary = config.campaign
+		config = CampaignRules.settings(int(selection.get("index", -1)), selection.get("side", ""), selection.get("pilot", ""), room_random.randf() < 0.5)
+		if config.is_empty() or not Content.campaign_available(int(config.campaign.index), config.campaign.side):
+			return ERR_UNAVAILABLE
+		chosen_side = config.campaign.side
+		chosen_character = config.campaign.pilot
+	config["ctrl"] = control_mode if control_mode in Controls.rules.get("modeKeys", []) else Controls.pref
+	config["super"] = bool(config.get("super", false)) and not config.has("campaign")
+	if config["super"]:
+		if not Content.super_available():
+			return ERR_UNAVAILABLE
+		chosen_side = Content.constants.SUPER_SIDE
+	elif chosen_side == Content.constants.SUPER_SIDE:
+		return ERR_INVALID_PARAMETER
 	var peer: MultiplayerPeer
 	if transport == "offline":
 		peer = OfflineMultiplayerPeer.new()
@@ -56,6 +74,7 @@ func host(settings: Dictionary, port: int = 8620, transport: String = "offline")
 		peer = enet
 	multiplayer.multiplayer_peer = peer
 	active = true
+	Controls.set_room(config.ctrl)
 	if not dedicated:
 		roster.append({"peer": 1, "side": chosen_side, "character": chosen_character, "bot": false})
 	lobby_changed.emit()
@@ -96,22 +115,44 @@ func stop() -> void:
 	active = false
 	started = false
 	local_command.clear()
-	latest_action.clear()
+	Controls.set_room("")
+	lobby_changed.emit()
+
+func set_control_mode(mode: String) -> bool:
+	if not active or not multiplayer.is_server() or mode not in Controls.rules.get("modeKeys", []):
+		return false
+	config["ctrl"] = mode
+	Controls.set_room(mode)
+	if not multiplayer.get_peers().is_empty():
+		_sync_lobby.rpc(config, roster)
+	lobby_changed.emit()
+	return true
 
 func start_battle() -> void:
 	if not active or not multiplayer.is_server() or started:
 		return
-	var bot_peer := -1
-	for side in ["SWARM", "STEEL"]:
-		var count := roster.filter(func(player): return player.side == side).size()
-		var used: Array = roster.map(func(player): return player.character)
-		var available: Array = Content.heroes.keys().filter(func(id): return Content.heroes[id].side in [side, "MERC"] and not used.has(id))
-		for slot in range(count, int(config.team_size)):
-			if available.is_empty():
-				break
-			var character: String = available.pop_front()
-			roster.append({"peer": bot_peer, "side": side, "character": character, "bot": true, "lane": slot % ceili(config.team_size / 2.0)})
-			bot_peer -= 1
+	if config.has("campaign"):
+		if roster.size() != 1:
+			return
+		var player: Dictionary = roster[0]
+		roster = CampaignRules.roster(int(config.campaign.index), config.campaign.side, player.character, int(player.peer))
+		if roster.is_empty():
+			return
+		config.campaign.pilot = player.character
+	else:
+		if config.get("super", false) and (roster.size() != 1 or roster[0].side != Content.constants.SUPER_SIDE):
+			return
+		var bot_peer := -1
+		for side in ["SWARM", "STEEL"]:
+			var count := roster.filter(func(player): return player.side == side).size()
+			var used: Array = roster.map(func(player): return player.character)
+			var available: Array = Content.heroes.keys().filter(func(id): return Content.heroes[id].side in [side, "MERC"] and not used.has(id))
+			for slot in range(count, int(config.team_size)):
+				if available.is_empty():
+					break
+				var character: String = available.pop_front()
+				roster.append({"peer": bot_peer, "side": side, "character": character, "bot": true, "lane": slot % ceili(config.team_size / 2.0)})
+				bot_peer -= 1
 	started = true
 	if not multiplayer.get_peers().is_empty():
 		_begin.rpc(config, roster)
@@ -126,11 +167,19 @@ func _register(character: String, side: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if sender <= 1 or not Content.heroes.has(character) or side not in ["SWARM", "STEEL"]:
+	if sender <= 1 or not Content.heroes.has(character) or side not in ["SWARM", "STEEL", "SUPER"]:
 		return
-	if Content.heroes[character].side not in [side, "MERC"]:
+	if side == Content.constants.SUPER_SIDE and not config.get("super", false):
+		return
+	if side != Content.constants.SUPER_SIDE and Content.heroes[character].side not in [side, "MERC"]:
 		return
 	if roster.any(func(player): return int(player.peer) == sender):
+		return
+	if config.get("super", false) and (not roster.is_empty() or side != Content.constants.SUPER_SIDE):
+		_notice.rpc_id(sender, "full")
+		return
+	if config.has("campaign") and (not roster.is_empty() or side != config.campaign.side or not CampaignRules.valid_selection(int(config.campaign.index), side, character)):
+		_notice.rpc_id(sender, "full")
 		return
 	if started or roster.filter(func(player): return player.side == side).size() >= int(config.team_size):
 		_notice.rpc_id(sender, "full")
@@ -145,6 +194,7 @@ func _register(character: String, side: String) -> void:
 func _sync_lobby(settings: Dictionary, players: Array) -> void:
 	config = settings
 	roster = players
+	Controls.set_room(config.get("ctrl", ""))
 	join_timer.stop()
 	lobby_changed.emit()
 	status_changed.emit("ready")
@@ -153,6 +203,7 @@ func _sync_lobby(settings: Dictionary, players: Array) -> void:
 func _begin(settings: Dictionary, players: Array) -> void:
 	config = settings
 	roster = players
+	Controls.set_room(config.get("ctrl", ""))
 	started = true
 	join_timer.stop()
 	battle_started.emit(config, roster)
@@ -188,19 +239,37 @@ func _action(type: String, argument: String) -> void:
 	if not multiplayer.is_server() or simulation == null:
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	var now := Time.get_ticks_msec()
-	if now - int(latest_action.get(sender, 0)) < 80:
-		return
-	latest_action[sender] = now
 	simulation.action(sender, type, argument)
 
 func _broadcast_state() -> void:
 	if simulation == null or not multiplayer.is_server():
 		return
+	simulation.flush_blood_hurt()
+	simulation.flush_blast_feedback()
 	for peer in multiplayer.get_peers():
 		_snapshot.rpc_id(peer, simulation.snapshot(peer))
 	state_received.emit(simulation.snapshot(1))
 	simulation.events.clear()
+
+func broadcast_body_event(event: Dictionary) -> void:
+	if simulation == null or not multiplayer.is_server():
+		return
+	var actor: BattleUnit = simulation.units.get(int(event.actor))
+	if actor == null:
+		return
+	for peer: int in multiplayer.get_peers():
+		if event.has("only_peer") and int(event.only_peer) != peer:
+			continue
+		var viewer: BattleUnit = simulation.pilots.get(peer)
+		if viewer == null or simulation.visible_to_side(actor, viewer.side):
+			_body_event.rpc_id(peer, event)
+
+# Short tactical notifications must not wait behind fragmented full snapshots.
+@rpc("authority", "call_remote", "reliable", 4)
+func _body_event(event: Dictionary) -> void:
+	if simulation != null:
+		simulation.receive_body_events([event], simulation.presentation_time())
+		body_event_received.emit(event)
 
 # Full snapshots exceed ENet's MTU; native reliable fragmentation stays off the input/action channels.
 @rpc("authority", "call_remote", "reliable", 3)

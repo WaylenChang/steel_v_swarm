@@ -1,6 +1,31 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { captureBodyReferences } from './body_references.mjs';
+import { captureAnatomicalReferences } from './anatomical_references.mjs';
+import { captureBodyFrames } from './body_frame_references.mjs';
+import { captureNpcBodyReferences, captureCloneBodyReferences } from './npc_body_references.mjs';
+import { captureCarrierBodyMotion } from './carrier_body_references.mjs';
+import { captureCivilianBodies } from './civilian_body_references.mjs';
+import { captureBodyViewReferences } from './body_view_references.mjs';
+import { captureNpcShotReferences } from './npc_shot_references.mjs';
+import { captureHeroShotReferences } from './hero_shot_references.mjs';
+import { captureRemoteShotReferences } from './remote_shot_references.mjs';
+import { captureFanFallbackReferences } from './fan_fallback_references.mjs';
+import { captureSpriteReferences } from './sprite_references.mjs';
+import { captureFirstPersonShields } from './first_person_shield_references.mjs';
+import { captureHurtOverlay } from './hurt_overlay_references.mjs';
+import { captureBloodSplats } from './blood_splat_references.mjs';
+import { captureSplatPaint, captureSplatRasters } from './splat_paint_references.mjs';
+import { captureDestruction } from './destruction_references.mjs';
+import { captureSceneDamage } from './scene_damage_references.mjs';
+import { captureMobileDamage } from './mobile_damage_references.mjs';
+import { captureDamageFx } from './damage_fx_references.mjs';
+import { captureMissilePresentation } from './missile_presentation_references.mjs';
+import { captureBodyRemoval } from './body_removal_references.mjs';
+import { captureDissolve } from './dissolve_references.mjs';
+import { captureDeathSequences } from './death_sequence_references.mjs';
+import { captureDeathOverlay, captureDeathOverlayRasters } from './death_overlay_references.mjs';
 
 // Measure the actual source model graph offline; native gameplay consumes only saved scalars.
 export async function modelReferences(source, gameSource, cameraProfiles) {
@@ -8,6 +33,88 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
   const chromium = await chromiumOrNull();
   if (!chromium) throw new Error('Model migration requires the source development Playwright runtime');
   const text = gameSource.replace(/\r\n/g, '\n');
+  const shieldSetupStart=text.indexOf('this._fpsShieldMesh = this._createFrontShieldMesh(');
+  const shieldSetupEnd=text.indexOf('this.camera.add(this._fpsShieldMesh);',shieldSetupStart);
+  if(shieldSetupStart<0||shieldSetupEnd<=shieldSetupStart)throw new Error('Missing original first-person shield constructor setup');
+  const firstPersonShieldSetup=text.slice(shieldSetupStart,shieldSetupEnd+'this.camera.add(this._fpsShieldMesh);'.length);
+  const castRemoteMatch = /const dirCast = castDirF\(ev\.fx, cpNow && Math\.hypot\(wx - cpNow\.x, wz - cpNow\.z\) > ([\d.]+)\)/.exec(text);
+  if (!castRemoteMatch) throw new Error('Missing original cast animation distance gate');
+  const castRemote = Number(castRemoteMatch[1]);
+  const { grabFn, grabConst, grabBlock, grabMethod } = await import(pathToFileURL(join(source, 'tools/audit_src.mjs')).href);
+  const hurtCss=await readFile(join(source,'public/css/style.css'),'utf8');
+  const mainUiSource=(await readFile(join(source,'public/js/main.js'),'utf8')).replace(/\r\n?/g,'\n');
+  const reflashSource=grabFn(mainUiSource,'_reflash');
+  const vfxSource=(await readFile(join(source,'public/js/vfx.js'),'utf8')).replace(/\r\n?/g,'\n');
+  const heroShotSource=['energyMat','combatGeometry','combatDischarge'].map(name=>grabFn(vfxSource,name)).join('\n');
+  const shotDefinitions=['UNIT_SHOT_STYLE','UNIT_GUN','UNIT_TOWER','UNIT_BASE'].map(name=>grabConst(vfxSource,name)).join('\n');
+  const shotCaps=/lowPower\(\) \? (\d+) : (\d+)/.exec(vfxSource.slice(vfxSource.indexOf('const crowded ='),vfxSource.indexOf('\n',vfxSource.indexOf('const crowded ='))));
+  const shotMaximum=/const FX_MAX = (\d+);/.exec(text);
+  if(!shotCaps||!shotMaximum)throw new Error('Missing original transient effect budgets');
+  const shotLimits={low:Number(shotCaps[1]),normal:Number(shotCaps[2]),maximum:Number(shotMaximum[1]),pools:{},prewarm:{}};
+  const spritePool=/const SPRITE_POOL_MAX = (\d+);/.exec(text);
+  if(!spritePool)throw new Error('Missing original sprite pool budget');
+  for(const [key,pool]of [['sprite_fire','_spritePoolFire'],['sprite_smoke','_spritePoolSmoke']]) {
+    const prewarm=new RegExp(`this\\.${pool}\\.prewarm\\((\\d+)\\)`).exec(text);
+    if(!prewarm)throw new Error('Missing original sprite prewarm: '+pool);
+    shotLimits.pools[key]=Number(spritePool[1]);shotLimits.prewarm[key]=Number(prewarm[1]);
+  }
+  for(const [key,pool,next]of [['spark','_sparkPool','_ringPool'],['shock','_ringPool','_beamPool'],['beam6','_beamPool','_popPool'],['comic','_popPool','_numPool']]) {
+    const body=vfxSource.slice(vfxSource.indexOf('const '+pool),vfxSource.indexOf('const '+next));
+    const values=/max: (\d+), prewarm: (\d+)/.exec(body);
+    if(!values)throw new Error('Missing original effect pool budget: '+key);
+    shotLimits.pools[key]=Number(values[1]);shotLimits.prewarm[key]=Number(values[2]);
+  }
+  const civilianModelSource=(await readFile(join(source,'public/js/npcModels.js'),'utf8')).replace(/\r\n?/g,'\n');
+  const civilianMethods=Object.fromEntries(['frustum','strut','glowPlate','markBatch','civilianSurface','addCivilianHair',
+    'addCivilianClothing','addProfessionKit','buildCivilian'].map(name=>[name,grabFn(civilianModelSource,name)]));
+  const serverSource = (await readFile(join(source, 'server/sim.js'), 'utf8')).replace(/\r\n?/g, '\n');
+  const npcTargetYExpression = /ty: ([^\n]+),\n/.exec(grabMethod(serverSource, '_tickBaseGuns'))?.[1];
+  const npcCompanionYExpression = /ty: ([^\n]+),\n/.exec(grabMethod(serverSource, '_tickSummons'))?.[1];
+  const npcShotPointDeclaration = /const to = new THREE\.Vector3\(tx,[^\n]+;/.exec(grabMethod(text, '_onEvent'))?.[0];
+  if (!npcTargetYExpression || !npcCompanionYExpression || !npcShotPointDeclaration) throw new Error('Missing source NPC target-height report/presentation seam');
+  const locomotionSource = (await readFile(join(source, 'public/js/locomotion.js'), 'utf8')).replace(/\r\n?/g, '\n');
+  const combatRules = Object.fromEntries(['AIM_HOLD_S','HEAVY_CHARGE_ASSUME_S','HEAVY_FIRE_HOLD_S','FX_K'].map(name => {
+    const match = new RegExp(`const ${name} = ([\\d.]+);`).exec(locomotionSource);
+    if (!match) throw new Error('Missing original combat presentation constant: ' + name);
+    return [name, Number(match[1])];
+  }));
+  const castDuration = /cf\.slot === 'atk' \? ([\d.]+) : ([\d.]+)/.exec(grabFn(locomotionSource, 'stepCastPose'));
+  if (!castDuration) throw new Error('Missing original cast presentation durations');
+  const castRules = { defaults: new Function(grabConst(locomotionSource, 'CAST_DEF') + '\nreturn CAST_DEF;')(),
+    duration: {atk:Number(castDuration[1]),other:Number(castDuration[2])} };
+  const fullLocomotion = grabFn(locomotionSource, 'stepLocomotion');
+  const heldStart = fullLocomotion.indexOf("  if (rig.kind === 'aerial' && rig.heldWeapons?.length");
+  const heldEnd = fullLocomotion.indexOf('\n', heldStart);
+  const speciesStart = fullLocomotion.indexOf("  if (rig.predatory && rig.kind === 'biped') {");
+  const speciesEnd = fullLocomotion.indexOf('  stepStab(rig);', speciesStart);
+  if (heldStart < 0 || heldEnd <= heldStart || speciesStart < 0 || speciesEnd <= speciesStart)
+    throw new Error('Missing original held-aim/species post-pass seams');
+  const morphSource = Object.fromEntries(['morphSwap', 'morphPose', 'morphSide'].map(name => [name, grabFn(locomotionSource, name)]));
+  for (const name of ['damp', 'clamp']) {
+    const line = new RegExp(`const ${name} = [^;]+;`).exec(locomotionSource)?.[0];
+    if (!line) throw new Error('Missing original locomotion helper: ' + name);
+    morphSource[name] = line;
+  }
+  morphSource.fold = grabConst(locomotionSource, 'FOLD');
+  const gaitDefinitions = ['ACC_REF', 'accUp', 'accDn', 'idleOf', 'ease01'].map(name => {
+    const line = new RegExp(`const ${name} = [^;]+;`).exec(locomotionSource)?.[0];
+    if (!line) throw new Error('Missing original gait helper: ' + name);
+    return line;
+  });
+  const signatures = ['gsig', 'fsig'].map(name => {
+    const marker = 'const ' + name + ' =', start = locomotionSource.indexOf(marker);
+    const brace = locomotionSource.indexOf('{', start);
+    if (start < 0 || brace < start) throw new Error('Missing original movement signature: ' + name);
+    return locomotionSource.slice(start, brace) + grabBlock(locomotionSource, marker) + ';';
+  });
+  const gaitSource = [morphSource.damp, morphSource.clamp, grabConst(locomotionSource, 'S0'), grabConst(locomotionSource, 'CAST_DEF'), ...gaitDefinitions,
+    ...signatures,
+    `function heldWeaponAim(rig) {${fullLocomotion.slice(heldStart,heldEnd)}}`,
+    `function speciesPose(L,rig,dt,now,speed) {${fullLocomotion.slice(speciesStart,speciesEnd)}}`,
+    ...['flexChain', 'gunPitch', 'stabilizeHead', 'syncLegsToHips', 'whipTail', 'poseBipedAim', 'braceBipedArms', 'stepBiped', 'stepHop',
+      'poseFlightWing', 'stepAerial', 'softLeg', 'tentGuard', 'headArc', 'stepQuad', 'stepCephalopod', 'stepVehicle', 'stepJumpPose', 'castDrive', 'stepCastPose',
+      'stepStab', 'stepAimForward', 'poseArchery']
+      .map(name => grabFn(locomotionSource, name))].join('\n');
   const start = text.indexOf('    const dimCache = _GLOBAL_UNIT_DIM_CACHE;');
   const end = text.indexOf('    const isBoss =', start);
   if (start < 0 || end <= start) throw new Error('Source spawn dimension seam missing');
@@ -31,14 +138,14 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
   const flashRules = {duration:Number(flashDuration[1]),minimum:Number(flashSize[1]),span:Number(flashSize[2]),heavy:Number(flashSize[3])};
   const beamColorsMatch = /this.side === 'SWARM' \? (0x[\da-f]+) : (0x[\da-f]+)/.exec(text.slice(text.indexOf('\n  _burstEchoSelf(')));
   if (!beamColorsMatch) throw new Error('Source FPV beam colors missing');
-  const beamColors = {SWARM:Number(beamColorsMatch[1]),STEEL:Number(beamColorsMatch[2])};
+  const beamColors = {SWARM:Number(beamColorsMatch[1]),STEEL:Number(beamColorsMatch[2]),SUPER:Number(beamColorsMatch[2])};
   const method = name => {
     const begin = text.indexOf(`\n  ${name}(`), finish = text.indexOf('\n  }\n', begin);
     if (begin < 0 || finish < 0) throw new Error(`Missing source model method: ${name}`);
     return `return function ${text.slice(begin + 1, finish + 4).trimStart().slice(name.length)}`;
   };
   const browser = await chromium.launch({ headless: true, executablePath: chromePath() });
-  const sourceInputs = new Set();
+  const sourceInputs = new Set(['server/sim.js','public/js/main.js','public/css/style.css']);
   try {
     const page = await browser.newPage();
     const origin = 'http://godot-models.invalid';
@@ -63,17 +170,131 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
       return route.abort();
     });
     await page.goto(origin);
-    const result = await page.evaluate(async ({ dimensionBody, aimBody, poseBody, kickDecay, elevationBody, flashBody, flashRules, cameraProfiles, beamColors }) => {
+    const result = await page.evaluate(async ({ dimensionBody, aimBody, poseBody, kickDecay, elevationBody, flashBody, flashRules, cameraProfiles, beamColors, bodyCaptureSource, anatomyCaptureSource, frameCaptureSource, npcCaptureSource, cloneCaptureSource, carrierCaptureSource, civilianCaptureSource, viewCaptureSource, shotCaptureSource, heroShotCaptureSource, heroShotSource, remoteShotCaptureSource, fanFallbackCaptureSource, spriteCaptureSource, destructionCaptureSource, deathSequenceCaptureSource, deathOverlayCaptureSource, firstPersonShieldCaptureSource, firstPersonShieldSetup, hurtCaptureSource, hurtCss, reflashSource, bloodCaptureSource, splatPaintCaptureSource, mainUiSource, shotDefinitions, shotLimits, civilianMethods, npcTargetYExpression, npcCompanionYExpression, npcShotPointDeclaration, morphSource, gaitSource, combatRules, castRules, castRemote }) => {
       const THREE = await import('three');
       const d = await import('/js/data.js');
       const { makeUnit } = await import('/js/models.js');
+      const { NPC_MODEL_KINDS,CIVILIAN_PROFESSION_KITS } = await import('/js/npcModels.js');
+      const { generateCivilian } = await import('/js/civilianAppearance.js');
+      const { CIVILIAN_OPTIONS } = await import('/js/civilianContent.js');
+      const { finishUnitSurfaces } = await import('/js/unitSurfaces.js');
+      const { sceneryGeometry } = await import('/js/sceneryGeometry.js');
+      const geo = await import('/js/geo3d.js');
+      const { limbChain } = await import('/js/unitRig.js');
+      const { SUMMON_BUILDERS } = await import('/js/summonModels.js');
       const { buildHazard, buildLoot, buildAirdrop, buildMineBump, stepFireVisual } = await import('/js/hazards.js');
       const { WEATHER_SURFACE } = await import('/js/weatherState.js');
-      const { disposeTree } = await import('/js/toon.js');
-      const { glowTexture, projectileMesh, stepProjectileFx } = await import('/js/vfx.js');
+      const toon=await import('/js/toon.js');
+      const { disposeTree,outlinify } = toon;
+      const { glowTexture, projectileMesh, stepProjectileFx, makeShieldMaterial, shieldHitStrength, stepShieldMaterial,
+        SHIELD_FLASH_REF, SHIELD_PRESENTATION_EXPAND, unitShotStyle } = await import('/js/vfx.js');
+      const fx=await import('/js/vfx.js');
+      const sceneDamage=await import('/js/sceneDamage.js');
+      const mapBuilding=await import('/js/mapBuilding.js');
+      const {flameGeometry}=await import('/js/sceneDisasterGeometry.js');
+      const {characterCombatStyle}=await import('/js/characterStyle.js');
+      const {characterShieldTexture}=await import('/js/castfx.js');
+      const {setLowPower}=await import('/js/mobile.js');
       const { BattleClient, COCKPIT } = await import('/js/game.js');
       const { stepCombatFx, stepLocomotion } = await import('/js/locomotion.js');
-      const { fireReferenceWeapon } = await import('/js/unitMotion.js');
+      const { fireReferenceWeapon, poseWeaponPayloads, stepUnitSpinners, stepVehicleMotion, fireUnitMotion, stepUnitMotion } = await import('/js/unitMotion.js');
+      const morphHelpers = await import('/js/morphrig.js');
+      const gaitHelpers = await import('/js/gaitcurve.js');
+      const anatomyHelpers = await import('/js/anatomicalPose.js');
+      const unitMotion = await import('/js/unitMotion.js');
+      const combatAsset = await import('/js/forge/combatAsset.js');
+      const {COMBAT_ASSETS}=await import('/js/forge/combatAssets.js');
+      const lod = await import('/js/lod.js');
+      const bodyPresentationLod = [];
+      for(const lowPower of [false,true])for(const distance of [-1,0,149.999999,150,299.999999,300,599.999999,600,1200]) {
+        const squared=distance<0?distance:distance*distance,stride=lod.lodStrideByD2(squared,lowPower);
+        for(const id of ['1','two','unit/\ud83d\ude80','\u4e09\u6a5f'])for(const frame of [0,1,2,17,4294967295])
+          bodyPresentationLod.push({distance:squared,lowPower,id,frame,stride,hash:lod.lodHash(id),due:lod.lodDue(frame,id,stride)});
+      }
+      const bodyCastDirection = [];
+      for(const effect of [...new Set([...d.castDirF.toString().matchAll(/fx === '([^']+)'/g)].map(match=>match[1])),'missing'])
+        for(const remote of [false,true])bodyCastDirection.push({effect,remote,result:d.castDirF(effect,remote)});
+      const gaitScope = { ...d, ...gaitHelpers, stepVehicleMotion };
+      const gaitMethods = new Function(...Object.keys(gaitScope), `const GAIT_ANAT=true; ${gaitSource}
+        return {biped:stepBiped,aerial:stepAerial,quad:stepQuad,cephalopod:stepCephalopod,vehicle:stepVehicle,
+          travel:stepVehicleMotion,wing:poseFlightWing,jump:stepJumpPose,cast:stepCastPose,held:heldWeaponAim,species:speciesPose,
+          stabilize:stepStab,forward:stepAimForward,archery:poseArchery};`)(...Object.values(gaitScope));
+      const morphScope = { ...d, ...morphHelpers };
+      const morphMethods = new Function(...Object.keys(morphScope), `
+        const MORPH_RIG=true; ${morphSource.damp} ${morphSource.clamp} ${morphSource.fold}
+        const _mt={p:[0,0,0],q:[0,0,0,1],s:[1,1,1]}, _mq=[0,0,0,1];
+        ${morphSource.morphSide} ${morphSource.morphPose} ${morphSource.morphSwap}
+        return {swap:morphSwap,pose:morphPose};`)(...Object.values(morphScope));
+      const shieldTemplate = makeShieldMaterial(0);
+      const sourceNumber = (body, pattern, label) => {
+        const match = pattern.exec(body); if (!match) throw new Error('Missing body presentation rule: ' + label);
+        return Number(match[1]);
+      };
+      const bodyRules = { cast: castRules, combat: combatRules, payloadScale: sourceNumber(fireReferenceWeapon.toString(), /active\.payload\.scale\.setScalar\(([\d.]+)\)/, 'payload scale'),
+        npcKinds:NPC_MODEL_KINDS.filter(key=>key.startsWith('creep:')).map(key=>key.slice('creep:'.length)),
+        entityKeys:Object.fromEntries([...NPC_MODEL_KINDS.filter(key=>key.startsWith('creep:')).map(key=>[key.slice(6),'npc_'+key.replaceAll(':','_')]),
+          ...['tower','base','bunker'].map(kind=>[kind,'npc_'+kind]),
+          ...Object.keys(SUMMON_BUILDERS).map(key=>[key.slice(7),'npc_'+key.replaceAll(':','_')]),
+          ['decoy_beacon','npc_summon_decoy_beacon']]),
+        tpsMuzzleForward:sourceNumber(BattleClient.prototype._selfMuzzle.toString(),/addScaledVector\(fwd, ([\d.]+)\)/,'TPS absent/FX-only muzzle forward offset'),
+        presentation: {castRemote,lod:lod.LOD,castDefault:d.castDirF('',false),
+          flyKinds:[...BattleClient.prototype._spawnUnit.toString().match(/flies: ([^\n]+)/)[1].matchAll(/e\.k === '([^']+)'/g)].map(match=>match[1]),
+          remote:{positionResponse:sourceNumber(BattleClient.prototype._updateEnts.toString(),/const k = lerpFPS\(([\d.]+), dt\)/,'remote planar interpolation'),
+            headingResponse:sourceNumber(BattleClient.prototype._updateEnts.toString(),/pyaw \+ dy \* lerpFPS\(([\d.]+), dt\)/,'remote heading interpolation'),
+            stoppedSquared:sourceNumber(BattleClient.prototype._updateEnts.toString(),/adx \* adx \+ adz \* adz <= ([\d.]+)/,'stationary hero firing heading'),
+            laneSeed:sourceNumber(BattleClient.prototype._updateEnts.toString(),/curSeed = laneY \+ ([\d.]+)/,'lane surface standing seed')},
+          laneSurface:{segment:sourceNumber(BattleClient.prototype._buildLaneSurf.toString(),/const SEG = ([\d.]+)/,'lane surface sample spacing'),
+            radius:sourceNumber(BattleClient.prototype._buildLaneSurf.toString(),/R = ([\d.]+)/,'lane surface strict query radius'),
+            cell:sourceNumber(BattleClient.prototype._buildLaneSurf.toString(),/CELL = ([\d.]+)/,'lane surface grid width'),
+            seedStep:sourceNumber(BattleClient.prototype._buildLaneSurf.toString(),/py \+ ([\d.]+)/,'lane surface march seed')},
+          carrier:{response:sourceNumber(BattleClient.prototype._updateEnts.toString(),/wantPit[^\n]*lerpFPS\(([\d.]+), dt\)/,'carrier heading/pitch response'),
+            pitchThreshold:sourceNumber(BattleClient.prototype._updateEnts.toString(),/dh \+ Math\.abs\(dv\) > ([\de.-]+)/,'carrier motion threshold')},
+          aimHold:sourceNumber(BattleClient.prototype._markFire.toString(),/until: t0 \+ ([\d.]+)/,'shot facing hold'),
+          nearestInterval:sourceNumber(BattleClient.prototype._nearestEnemy.toString(),/now \+ ([\d.]+)/,'presentation acquisition interval'),
+          vehicleRange:sourceNumber(BattleClient.prototype._aimVehicleTurret.toString(),/\* ([\d.]+), true/,'vehicle visual acquisition range'),
+          baseAimHold:sourceNumber(BattleClient.prototype._onEvent.toString(),/ent\._gunAim[\s\S]*?until: t0 \+ ([\d.]+)/,'independent base gun aim hold'),
+          shotHeight:sourceNumber(npcShotPointDeclaration,/ev\.ty \|\| 0\) \+ ([\d.]+)/,'NPC target presentation height'),
+          fallbackHeight:sourceNumber(BattleClient.prototype._npcMuzzle.toString(),/ent\.dimH \* ([\d.]+)/,'NPC body muzzle fallback height'),
+          garrisonRadius:sourceNumber(BattleClient.prototype._npcMuzzle.toString(),/fx \+ dx \/ d \* ([\d.]+)/,'garrison muzzle radius'),
+          garrisonHeight:sourceNumber(BattleClient.prototype._npcMuzzle.toString(),/gy0 \+ ([\d.]+)/,'garrison muzzle height'),
+          castDirection:Object.fromEntries([...new Set([...d.castDirF.toString().matchAll(/fx === '([^']+)'/g)].map(match=>match[1]))]
+            .map(fx=>[fx,[d.castDirF(fx,false),d.castDirF(fx,true)]]))},
+        payloadDuration: sourceNumber(poseWeaponPayloads.toString(), /duration \|\| ([\d.]+)/, 'payload duration'),
+        curve: { knee: d.curveKneeM(), inverse: 1 / (2 * d.curveR()) },
+        morph: { ...morphHelpers.MORPH_FX,
+          damping: sourceNumber(morphSource.morphSwap, /want, ([\d.]+), dt/, 'morph damping'),
+          visibleAlpha: sourceNumber(morphSource.morphSide, /a > ([\d.]+)/, 'morph visibility'),
+          restoreAlpha: sourceNumber(morphSource.morphSide, /a >= ([\d.]+)/, 'morph material restore'),
+          slerpDot: sourceNumber(morphHelpers.slerpQ.toString(), /d > ([\d.]+)/, 'morph near quaternion') },
+        shield: { reference: SHIELD_FLASH_REF, expand: SHIELD_PRESENTATION_EXPAND,
+          timeWindow: sourceNumber(makeShieldMaterial.toString(), /Math\.random\(\) \* ([\d.]+)/, 'shield phase window'),
+          maximum: sourceNumber(shieldHitStrength.toString(), /Math\.min\(([\d.]+)/, 'shield flash cap'),
+          base: sourceNumber(shieldHitStrength.toString(), /Math\.min\([^,]+, ([\d.]+)/, 'shield flash base'),
+          decay: sourceNumber(stepShieldMaterial.toString(), /decay = ([\d.]+)/, 'shield flash decay') } };
+      const bodyTpsMuzzleFallback = [];
+      for(const input of [
+        {position:[0,0,0],eye:1,bodyYaw:0,camera:[0,1,-bodyRules.tpsMuzzleForward],reach:0,direction:[1,0,0]},
+        {position:[12,20,-9],eye:0,bodyYaw:-3.13,camera:[2,3,-5],reach:5,direction:null},
+        {position:[12,20,-9],eye:1,bodyYaw:.7,camera:[-6,8,3],reach:100,direction:[2,0,-.5]},
+        {position:[12,20,-9],eye:1,bodyYaw:3.13,camera:[-6,8,3],reach:0,direction:[0,0,0]}
+      ]) {
+        const direction=input.direction?new THREE.Vector3(...input.direction):null;
+        const context={viewMode:'tps',bodyYaw:input.bodyYaw,pos:new THREE.Vector3(...input.position),
+          _eyeH:()=>input.eye,camera:{position:new THREE.Vector3(...input.camera)},ents:new Map()};
+        const origin=BattleClient.prototype._selfMuzzle.call(context,direction,input.reach,'missing');
+        bodyTpsMuzzleFallback.push({...input,slot:'missing',result:{origin:origin.toArray(),direction:direction?.toArray()??null}});
+      }
+      const bodyShield = [];
+      for (const drop of [-100, 0, 12, 80, 1000]) {
+        const material = makeShieldMaterial(0x4090ff); material.uniforms.uTime.value = 3;
+        material.uniforms.uFlash.value = shieldHitStrength(drop);
+        const steps = [];
+        for (const delta of [0, .016, .1, 1, 2]) {
+          stepShieldMaterial(material, delta);
+          steps.push({delta, time: material.uniforms.uTime.value, flash: material.uniforms.uFlash.value});
+        }
+        bodyShield.push({drop, strength: shieldHitStrength(drop), steps}); material.dispose();
+      }
       const measure = new Function('THREE', 'group', 'key', 'e', 'civ', '_GLOBAL_UNIT_DIM_CACHE', dimensionBody);
       const scope = { THREE, ...d };
       const aimPoint = new Function(...Object.keys(scope), aimBody)(...Object.values(scope));
@@ -122,6 +343,19 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         };
         const materialOf = material => {
           if (materialIds.has(material)) return materialIds.get(material);
+          if (material.isShaderMaterial) {
+            if (material.vertexShader !== shieldTemplate.vertexShader || material.fragmentShader !== shieldTemplate.fragmentShader)
+              throw new Error('Unsupported source body shader: ' + material.name);
+            const index = materials.length; materialIds.set(material, index);
+            const uniforms = material.uniforms;
+            materials.push({ type: 'shield', color: 0, opacity: 1, transparent: true, blending: material.blending,
+              depthTest: material.depthTest, depthWrite: material.depthWrite, side: material.side, texture: -1,
+              flipY: false, repeat: [1, 1], offset: [0, 0],
+              patternFlipY: uniforms.uPattern.value?.flipY ?? false,
+              uniforms: Object.fromEntries(Object.entries(uniforms).map(([key, uniform]) => [key,
+                key === 'uPattern' ? textureOf(uniform.value) : uniform.value?.isColor ? uniform.value.toArray() : uniform.value])) });
+            return index;
+          }
           if (!material.color || material.isShaderMaterial) throw new Error(`Unsupported cockpit material: ${material.type}`);
           const index = materials.length;
           materialIds.set(material, index);
@@ -131,7 +365,8 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
             metalness: material.metalness ?? 0, emission: material.emissive?.getHex() || 0,
             emissionIntensity: material.emissiveIntensity ?? 0, texture: textureOf(material.map),
             flipY: material.map?.flipY ?? false, repeat: material.map?.repeat.toArray() || [1, 1],
-            offset: material.map?.offset.toArray() || [0, 0] });
+            offset: material.map?.offset.toArray() || [0, 0], dissolve:!!material.userData?.celDisU,
+            alphaTest:material.alphaTest||0 });
           return index;
         };
         const meshOf = geometry => {
@@ -145,26 +380,89 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
             indices: geometry.index ? Array.from(geometry.index.array) : [], groups: geometry.groups });
           return index;
         };
+        const instancesOf = node => {
+          const matrix = new THREE.Matrix4();
+          return Array.from({length:node.count}, (_, index) => { node.getMatrixAt(index, matrix); return matrix.toArray(); });
+        };
         const nodes = all.map((node, id) => {
           node.updateMatrix();
           const result = { id, parent: ids.get(node.parent) ?? -1, name: node.name,
-            matrix: node.matrix.toArray(), visible: node.visible };
+            matrix: node.matrix.toArray(), visible: node.visible, rotationOrder: node.rotation.order };
+          result.trs = { p: node.position.toArray(), q: node.quaternion.toArray(), s: node.scale.toArray(), r: [node.rotation.x, node.rotation.y, node.rotation.z] };
+          result.flags = Object.fromEntries(['teamRing', 'isOutline', 'noOutline', 'noPaint', 'weatherScorch', 'noViewOcclusion', 'presentationEffect'].map(key => [key, !!node.userData[key]]));
+          result.flags.materialArray=Array.isArray(node.material);
+          result.flags.skinned=!!node.isSkinnedMesh;
           if (node.isMesh) {
             result.mesh = meshOf(node.geometry);
             result.castShadow = !!node.castShadow;
             result.materials = (Array.isArray(node.material) ? node.material : [node.material]).map(materialOf);
+            if (node.isInstancedMesh) {
+              result.instances = instancesOf(node);
+              if (node.instanceColor) {
+                const color = new THREE.Color();
+                result.instanceColors = Array.from({length:node.count}, (_, index) => { node.getColorAt(index, color); return color.toArray(); });
+              }
+            }
             node.geometry.computeBoundingBox();
-            const box = node.geometry.boundingBox.clone().applyMatrix4(node.matrixWorld);
+            if (node.isInstancedMesh) node.computeBoundingBox();
+            const box = (node.isInstancedMesh ? node.boundingBox : node.geometry.boundingBox).clone().applyMatrix4(node.matrixWorld);
             result.worldBounds = [box.min.toArray(), box.max.toArray()];
           } else if (!node.isGroup && !node.isBone && node.type !== 'Object3D') throw new Error(`Unsupported cockpit node: ${node.type}`);
           return result;
         });
-        return { data: { nodes, meshes, materials, textures }, ids };
+        return { data: { nodes, meshes, materials, textures }, ids, materialIds, materialOf, instancesOf };
       };
+      const captureBodies = new Function('return ' + bodyCaptureSource)();
+      const captureAnatomy = new Function('return ' + anatomyCaptureSource)();
+      const captureFrames = new Function('return ' + frameCaptureSource)();
+      const captureNpc = new Function('return ' + npcCaptureSource)();
+      const captureClone = new Function('return ' + cloneCaptureSource)();
+      const captureCarrier = new Function('return ' + carrierCaptureSource)();
+      const bodies = captureBodies({ THREE, d, makeUnit, graphOf, fireReferenceWeapon, poseWeaponPayloads, stepUnitSpinners,
+        fireUnitMotion, stepUnitMotion, stepCombatFx, morphMethods, morphHelpers, gaitMethods, castRules, captureAnatomy, anatomyHelpers,
+        captureFrames, captureNpc, captureClone, captureCarrier, NPC_MODEL_KINDS, SUMMON_BUILDERS, measure, unitShotStyle, unitMotion, combatAsset, stepLocomotion, BattleClient, castRemote, cameraProfiles, disposeTree });
+      const captureCivilian=new Function('return '+civilianCaptureSource)();
+      const civilians=captureCivilian({THREE,d,methods:civilianMethods,geo,limbChain,finishUnitSurfaces,sceneryGeometry,
+        generateCivilian,options:CIVILIAN_OPTIONS,kits:CIVILIAN_PROFESSION_KITS,outlinify,enableDissolve:toon.enableDissolve,makeUnit,graphOf,measure,
+        stepCombatFx,stepLocomotion,disposeTree});
+      const captureBodyView=new Function('return '+viewCaptureSource)();
+      const bodyView=captureBodyView({THREE,d,BattleClient,lod});
+      const npcShotPoints=[];
+      const reportY=new Function('target','return '+npcTargetYExpression);
+      const companionY=new Function('target','return '+npcCompanionYExpression);
+      const shotPoint=new Function('THREE','ev','tx','tz','return function(){'+npcShotPointDeclaration+'return to;}');
+      for(const quantized of [false,true])for(const kind of ['soldier','heli','decoy','robot'])for(const altitude of [-1.5,-.5,0,.5,2.5,30]) {
+        const target={kind,hero:kind==='robot',decoy:kind==='decoy',y:altitude};
+        const point=shotPoint(THREE,{ty:quantized?reportY(target):companionY(target)},12,-9).call({terrain:{heightAt:()=>20}});
+        npcShotPoints.push({position:[12,200,-9],ground:20,altitude,quantized,raised:!quantized||!!(target.hero||target.decoy||kind==='heli'),result:point.toArray()});
+      }
       const projectileGraphs = {}, projectileProfiles = {}, projectileGeometry = [], projectileFx = [];
-      const shotColors = Object.fromEntries(['STEEL','SWARM'].map(side=>[side,BattleClient.prototype._shotCols(side)]));
+      const captureNpcShots=new Function('return '+shotCaptureSource)();
+      const npcShots=captureNpcShots({THREE,d,BattleClient,fx,definitions:shotDefinitions,limits:shotLimits,setLowPower,graphOf,disposeTree});
+      Object.assign(projectileGraphs,npcShots.projectiles);Object.assign(projectileProfiles,npcShots.profiles);
+      projectileGeometry.push(...npcShots.geometry);projectileFx.push(...npcShots.projectileFx);
+      const captureHeroShots=new Function('return '+heroShotCaptureSource)();
+      const heroShots=captureHeroShots({THREE,d,assets:COMBAT_ASSETS,fx,BattleClient,source:heroShotSource,
+        sampleKeys:combatAsset.sampleCombatKeys,graphOf,disposeTree,setLowPower,limits:shotLimits});
+      Object.assign(projectileGraphs,heroShots.projectiles);Object.assign(projectileProfiles,heroShots.profiles);
+      projectileGeometry.push(...heroShots.geometry);projectileFx.push(...heroShots.projectileFx);
+      const remoteShots=new Function('return '+remoteShotCaptureSource)()({THREE,d,BattleClient});
+      const fanFallbacks=new Function('return '+fanFallbackCaptureSource)()({THREE,d,BattleClient});
+      const sprites=new Function('return '+spriteCaptureSource)()({THREE,BattleClient,limits:shotLimits,fx});
+      const destruction=new Function('return '+destructionCaptureSource)()({THREE,d,toon,sceneDamage,fx,BattleClient,mapBuilding,flameGeometry,setLowPower,graphOf,disposeTree,limits:shotLimits});
+      Object.assign(npcShots.graphs,destruction.graphs);
+      Object.assign(projectileGraphs,destruction.projectileGraphs);
+      Object.assign(projectileProfiles,destruction.projectileProfiles);
+      const deathSequences=new Function('return '+deathSequenceCaptureSource)()({THREE,d,BattleClient});
+      const deathOverlay=new Function('return '+deathOverlayCaptureSource)()({css:hurtCss});
+      const firstPersonShields=new Function('return '+firstPersonShieldCaptureSource)()({THREE,d,BattleClient,fx,
+        setupSource:firstPersonShieldSetup,graphOf,disposeTree,characterCombatStyle,characterShieldTexture});
+      const hurt=new Function('return '+hurtCaptureSource)()({css:hurtCss,reflashSource});
+      const blood=new Function('return '+bloodCaptureSource)()({THREE,d,BattleClient});
+      const splatPaint=new Function('return '+splatPaintCaptureSource)()({css:hurtCss,mainSource:mainUiSource});
+      const shotColors = Object.fromEntries(['STEEL','SWARM','SUPER'].map(side=>[side,BattleClient.prototype._shotCols(side)]));
       for (const [character,hero] of Object.entries(d.CHARACTERS)) for (const slot of ['light','heavy']) {
-        for (const side of ['STEEL','SWARM']) {
+        for (const side of ['STEEL','SWARM','SUPER']) {
           const key = `${character}-${slot}-${side.toLowerCase()}`, definition = d.heroWeapon(character,slot,1);
           const mesh = projectileMesh(definition,{col:shotColors[side].col,hue:hero.visual?.hue ?? 0xffd27a,heavy:slot==='heavy'});
           mesh.updateMatrixWorld(true);
@@ -541,7 +839,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         geometry.units[kind] = {};
         // Source UNIT_KEYS renders the hologram with the dedicated wingman body.
         const modelKey = ['decoy','hyper'].includes(kind) ? kind : `summon:${kind === 'decoy_beacon' ? 'drone_wingman' : kind}`;
-        for (const side of ['STEEL','SWARM']) {
+        for (const side of ['STEEL','SWARM','SUPER']) {
           const key = `${side.toLowerCase()}_${kind}`;
           const body = makeUnit(modelKey, side, {ring:!['decoy','hyper'].includes(kind)}).group;
           body.updateMatrixWorld(true);
@@ -556,7 +854,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         }
       }
       for (const [character,hero] of Object.entries(d.CHARACTERS)) {
-        for (const side of ['STEEL','SWARM']) {
+        for (const side of ['STEEL','SWARM','SUPER']) {
           const key=`${side.toLowerCase()}_${character}_kami`,modelKey='hero:drone';
           const body=makeUnit(modelKey,side,{ch:character,ring:false}).group;
           body.scale.setScalar(d.SQUAD.KAMI.SIZE_F);
@@ -647,12 +945,40 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           airdropVisuals.push({size,landing,born,steps});disposeTree(mesh);
         }
       }
-      return { geometry, cockpits, cockpitGraphs, projectileGraphs, projectileVisual: {profiles:projectileProfiles,colors:shotColors,beamColors}, cockpitRules: { ...COCKPIT, kickDecay, flash:flashRules },
+      return { geometry, cockpits, cockpitGraphs, projectileGraphs, projectileVisual: {profiles:projectileProfiles,colors:shotColors,beamColors,
+        relayDistance:sourceNumber(BattleClient.prototype._tryFire.toString(),/muzzle\.x \+ dir\.x \* ([\d.]+)/,'remote physical launch tracer distance')}, cockpitRules: { ...COCKPIT, kickDecay, flash:flashRules },
         hazardGraphs,hazardProfiles,
         lootGraphs,lootProfiles,
-        companionGraphs, companionProfiles,
-        fixtures: { modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash, authorityWeaponPoses, burstWeaponPoses, muzzleLaunches, projectileGeometry, projectileFx, companionGeometry,fireVisuals,lootVisuals,mineVisuals,sceneCollapsePoses,airdropVisuals }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
-    }, { dimensionBody, aimBody: method('_entAimPoint'), poseBody, kickDecay: Number(kickDecay[1]), elevationBody, flashBody, flashRules, cameraProfiles, beamColors });
+        companionGraphs, companionProfiles, bodyGraphs: bodies.graphs, bodyProfiles: bodies.profiles, bodyRules,
+        civilianGraphs:civilians.graphs,civilianVisuals:{profiles:civilians.profiles,rings:civilians.rings},
+        npcEffectGraphs:npcShots.graphs,npcShots:{...npcShots.rules,shapes:Object.fromEntries(Object.keys(npcShots.graphs).map(key=>[key,{}]))},sparkPng:npcShots.sparkPng,
+        weaponEffectGraphs:heroShots.graphs,weaponEffects:{shapes:heroShots.shapes,characters:heroShots.characters},
+        spriteTextures:{...sprites.textures,...destruction.textures},destruction:destruction.rules,
+        deathOverlay:deathOverlay.rules,
+        firstPersonShieldGraphs:firstPersonShields.graphs,firstPersonShields:firstPersonShields.profiles,
+        hurtPresentation:hurt.rules,
+        splatPaint:splatPaint.rules,
+        fixtures: { ...bodies.fixtures, ...npcShots.fixtures, ...heroShots.fixtures, ...remoteShots, ...fanFallbacks, ...sprites.fixtures, ...destruction.fixtures, ...deathSequences, ...deathOverlay.fixtures, ...firstPersonShields.fixtures, ...hurt.fixtures, ...blood, ...splatPaint.fixtures, bodyViewFrames:bodyView.frames, laneSurfaceProfiles:bodyView.laneProfiles, civilianBodyGeometry:civilians.fixtures, bodyShield, bodyPresentationLod, bodyCastDirection, bodyTpsMuzzleFallback, npcShotPoints, modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash, authorityWeaponPoses, burstWeaponPoses, muzzleLaunches, projectileGeometry, projectileFx, companionGeometry,fireVisuals,lootVisuals,mineVisuals,sceneCollapsePoses,airdropVisuals }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
+    }, { dimensionBody, aimBody: method('_entAimPoint'), poseBody, kickDecay: Number(kickDecay[1]), elevationBody, flashBody, flashRules, cameraProfiles, beamColors,
+      bodyCaptureSource: captureBodyReferences.toString(), anatomyCaptureSource:captureAnatomicalReferences.toString(),
+      frameCaptureSource:captureBodyFrames.toString(), npcCaptureSource:captureNpcBodyReferences.toString(),
+      cloneCaptureSource:captureCloneBodyReferences.toString(),carrierCaptureSource:captureCarrierBodyMotion.toString(),
+      civilianCaptureSource:captureCivilianBodies.toString(),civilianMethods,
+      viewCaptureSource:captureBodyViewReferences.toString(),
+      shotCaptureSource:captureNpcShotReferences.toString(),shotDefinitions,shotLimits,
+      heroShotCaptureSource:captureHeroShotReferences.toString(),heroShotSource,
+      fanFallbackCaptureSource:captureFanFallbackReferences.toString(),
+      spriteCaptureSource:captureSpriteReferences.toString(),
+      destructionCaptureSource:`function(args) { const captureDestruction=${captureDestruction.toString()}; const captureSceneDamage=${captureSceneDamage.toString()}; const captureMobileDamage=${captureMobileDamage.toString()}; const captureDamageFx=${captureDamageFx.toString()}; const captureMissilePresentation=${captureMissilePresentation.toString()}; const captureBodyRemoval=${captureBodyRemoval.toString()}; const captureDissolve=${captureDissolve.toString()}; const result=captureDestruction(args); const damage=captureDamageFx(args); const missiles=captureMissilePresentation(args); const removal=captureBodyRemoval(args); const dissolve=captureDissolve(args); Object.assign(result.graphs,damage.graphs,missiles.graphs); Object.assign(result.textures,damage.textures); result.projectileGraphs=missiles.projectileGraphs; result.projectileProfiles=missiles.profiles; result.rules.damageFx=damage.rules; result.rules.missilePresentation=missiles.metadata; result.rules.removal=removal.rules; result.rules.dissolve=dissolve.rules; Object.assign(result.fixtures,captureSceneDamage(args),captureMobileDamage(args),damage.fixtures,missiles.fixtures,removal.fixtures,dissolve.fixtures); return result; }`,
+      deathSequenceCaptureSource:captureDeathSequences.toString(),deathOverlayCaptureSource:captureDeathOverlay.toString(),
+      firstPersonShieldCaptureSource:captureFirstPersonShields.toString(),firstPersonShieldSetup,
+      hurtCaptureSource:captureHurtOverlay.toString(),hurtCss,reflashSource,
+      bloodCaptureSource:captureBloodSplats.toString(),
+      splatPaintCaptureSource:captureSplatPaint.toString(),mainUiSource,
+      remoteShotCaptureSource:captureRemoteShotReferences.toString(),
+      npcTargetYExpression, npcCompanionYExpression, npcShotPointDeclaration, morphSource, gaitSource, combatRules, castRules, castRemote });
+    result.fixtures.splatPaintRasters=await captureSplatRasters(page,mainUiSource,hurtCss);
+    result.fixtures.deathOverlayRasters=await captureDeathOverlayRasters(page,hurtCss);
     return { ...result, inputs: [...sourceInputs].sort() };
   } finally {
     await browser.close();

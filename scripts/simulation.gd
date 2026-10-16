@@ -3,6 +3,13 @@ extends Node3D
 
 signal result(winner: String)
 signal message(peer: int, key: String)
+signal body_event(event: Dictionary)
+signal unit_spawned(unit: BattleUnit)
+signal self_hurt
+signal screen_hurt(event: Dictionary)
+signal death_presented(event: Dictionary)
+signal view_snapshot_ready(state: Dictionary)
+signal unit_view_removed(model: Node3D)
 
 var world: BattleWorld
 var units: Dictionary = {}
@@ -16,14 +23,36 @@ var next_id := 1
 var authoritative := true
 var rng := SourceRng.new(42)
 var events: Array = []
+var body_event_serial := 0
+var terminal_event_serials: Dictionary = {}
+var hero_report_serials: Dictionary = {}
+var hero_pose_serials: Dictionary = {}
+var remote_bursts := BurstPresentationQueue.new()
+var victim_reports: Dictionary = {}
+var retired_bodies: Dictionary = {}
+var dissolve_ghosts: Array[RetiredBody] = []
+var hurt_bearings := HurtBearingLog.new()
+var blood_event_serial := 0
+var death_event_serial := 0
+var presented_death_serial := -1
+var blast_event_serial := 0
+var presented_blast_serials: Dictionary = {}
+var pending_blast_feedback: Array[Dictionary] = []
+var body_clock_offset := NAN
 var match_stats: Dictionary = {"SWARM": {"kills": 0, "deaths": 0, "creepKills": 0, "assists": 0},
 	"STEEL": {"kills": 0, "deaths": 0, "creepKills": 0, "assists": 0}}
 var projectiles: Array[Dictionary] = []
 var projectile_rng := SourceRng.new(4242)
+var recoil_random := RandomNumberGenerator.new()
 var fire_controls: Dictionary = {}
 var missiles: Array[Dictionary] = []
 var missile_bodies: Dictionary = {}
+var missile_presentations: Dictionary = {}
+var pending_missile_view: Array = []
+var missile_view_pending := false
 var footprint_glows: FootprintGlows
+var skill_glows: FootprintGlows
+var lock_glow: LockGlowPresentation
 var vision_until: Dictionary = {"SWARM": 0.0, "STEEL": 0.0}
 var reflecting := false
 var fogs: Array[Dictionary] = []
@@ -62,16 +91,70 @@ var airdrops: Array[Dictionary] = []
 var next_airdrop := 0.0
 var camps: Array[Dictionary] = []
 var civilian_respawns: Array[Dictionary] = []
+var bot_brains: Dictionary = {}
+var bot_tower_sites: Array = []
+var bot_holds: Dictionary = {}
+var bot_difficulty := ""
+var siege := false
+var super_mode := false
+var super_random := RandomNumberGenerator.new()
+var last_super_spawn: Variant = null
+var super_spawns: Dictionary = {}
+var defending_side := ""
+var siege_left: Dictionary = {}
+var siege_open: Dictionary = {"SWARM": 0, "STEEL": 0}
+var boss_left: Dictionary = {}
+var siege_talk_until: Dictionary = {}
 const SUMMON_KINDS := ["drone_wingman", "assault_rover", "heli_squad", "main_battle_tank", "veteran_squad", "carnival_heli"]
 
 func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool) -> void:
 	set_physics_process(false)
 	authoritative = authority
+	if not Session.dedicated and not CombatEffects.available():
+		push_error("Missing original combat effect scenes/textures; regenerate and pack NPC effects/projectiles")
+		get_tree().quit(1)
+		return
+	if not Session.dedicated and not AuthoredCombatEffect.available():
+		push_error("Missing original hero discharge/fan scenes; regenerate and pack weapon effects/projectiles")
+		get_tree().quit(1)
+		return
+	if not Session.dedicated and not FirstPersonShield.available():
+		push_error("Missing original first-person shield scenes; regenerate and pack camera shields")
+		get_tree().quit(1)
+		return
+	if not Session.dedicated and not Content.balance.get("screenSplats", {}).has("paint"):
+		push_error("Missing original blood/glint gradient and filter metadata; regenerate source content")
+		get_tree().quit(1)
+		return
+	if not Session.dedicated and not Content.balance.get("presentationFrame", {}).has("deathEffects"):
+		push_error("Missing original hitstop/death metadata; regenerate source content")
+		get_tree().quit(1)
+		return
+	if not Session.dedicated and not Content.balance.has("deathOverlay"):
+		push_error("Missing original death-cinematic overlay metadata; regenerate source content")
+		get_tree().quit(1)
+		return
+	recoil_random.randomize()
 	authority_bounds = map_data.get("authority_bounds", {}).duplicate()
 	world = BattleWorld.new()
 	add_child(world)
+	world.missile_view_collision = missile_view_collision
 	await world.build(map_data, env)
 	_setup_weather(map_data, env)
+	world.prepare_lane_surface()
+	bot_tower_sites = map_data.get("tower_sites", []).duplicate(true)
+	bot_difficulty = env.get("bot_difficulty", Content.constants.DEFAULT_BOT_DIFF)
+	siege = bool(map_data.config.get("siege", false))
+	super_mode = bool(map_data.config.get("super", false)) and not siege
+	if super_mode:
+		super_random.randomize()
+		match_stats[Content.constants.SUPER_SIDE] = {"kills": 0, "deaths": 0, "creepKills": 0, "assists": 0}
+		vision_until[Content.constants.SUPER_SIDE] = 0.0
+	defending_side = String(map_data.config.get("defSide", ""))
+	if not defending_side.is_empty() and (defending_side not in ["SWARM", "STEEL"] or bot_tower_sites.is_empty() or world.lane_points.is_empty()):
+		push_error("Missing original campaign defender/tower-site configuration")
+		get_tree().quit(1)
+		return
 	for side: String in creep_upgrades:
 		creep_upgrades[side].resize(world.paths.size())
 		creep_upgrades[side].fill(0)
@@ -87,29 +170,154 @@ func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool
 			get_tree().quit(1)
 			return
 		spawn(data)
+	_setup_siege_counts()
 	next_wave = Content.constants.GAME.FIRST_WAVE_DELAY_S
 	next_airdrop = Content.constants.AIRDROP.INTERVAL_S
 	_prefill_lanes(map_data)
 	_seed_scene_hazards(map_data)
-	var slots := {"SWARM": 0, "STEEL": 0}
+	var slots := {"SWARM": 0, "STEEL": 0, "SUPER": 0}
 	for player in roster:
 		var hero: Dictionary = Content.heroes[player.character]
 		var data: Dictionary = player.duplicate()
 		data.kind = hero.kind
 		data.spawn_slot = slots[player.side]
 		data.lane = slots[player.side] % world.paths.size()
-		data.position = world.spawn_position(player.side, slots[player.side], hero.kind == "drone")
+		data.position = _super_spawn_position(int(player.peer)) if player.side == Content.constants.SUPER_SIDE else world.spawn_position(player.side, slots[player.side], hero.kind == "drone" and not player.get("bot", false))
+		if player.side == defending_side:
+			var plan := SiegeRules.slot_plan(int(map_data.config.teamSize))
+			var slot: int = slots[player.side]
+			var stage: int = int(plan[slot]) if slot < plan.size() else int(Content.constants.SIEGE.BASE)
+			var same_stage := plan.slice(0, slot).count(stage)
+			var base: Vector3 = world.bases[defending_side]
+			var anchor := SiegeRules.anchor(defending_side, stage, same_stage, bot_tower_sites[0], world.lane_points[0], Vector2(base.x, base.z))
+			data.special = {"boss": true, "boss_segment": 0, "siege_stage": stage}
+			data.position = Vector3(anchor.x, _npc_surface(anchor) + 0.1, anchor.y) if anchor.is_finite() else Vector3(INF, INF, INF)
+			bot_holds[int(player.peer)] = {"x": anchor.x, "z": anchor.y, "r": float(Content.constants.UNITS.tower.range) * float(Content.constants.BOSS.ZONE_F)}
 		if not data.position.is_finite():
 			push_error("Hero spawn has no verified standing surface")
 			get_tree().quit(1)
 			return
 		var unit := spawn(data)
 		pilots[int(player.peer)] = unit
+		if unit.special.get("boss", false):
+			var stage: int = int(unit.special.siege_stage)
+			siege_left[unit.side][stage] += 1
+			boss_left[unit.side][stage] += 1
+			siege_open[unit.side] = SiegeRules.open_stage(siege_left[unit.side])
 		slots[player.side] += 1
+	_refresh_siege_locks()
+	for unit: BattleUnit in pilots.values():
+		if unit.is_bot:
+			_create_bot_brain(unit)
 	set_physics_process(true)
 
+func _super_spawn_position(peer: int, hover: bool = false) -> Vector3:
+	var guns: Array = []
+	for unit: BattleUnit in units.values():
+		if unit.kind in ["tower", "base"] and unit.hp > 0:
+			guns.append({"kind": unit.kind, "side": unit.side, "x": unit.position.x, "z": unit.position.z})
+	for side: String in ["SWARM", "STEEL"]:
+		if not guns.any(func(gun): return gun.kind == "base" and gun.side == side):
+			var base: Vector3 = world.bases[side]
+			guns.append({"kind": "base", "side": side, "x": base.x, "z": base.z})
+	var point := SuperRules.spawn_point(super_random.randf, authority_bounds, world.lane_points, guns, hazard_blockers, _terrain_blocked, super_spawns.get(peer, last_super_spawn))
+	last_super_spawn = point
+	super_spawns[peer] = point
+	var surface := _npc_surface(point)
+	return Vector3(point.x, surface + (float(Content.constants.FLIGHT.HOVER_M) if hover else 0.1), point.y) if is_finite(surface) else Vector3(INF, INF, INF)
+
+func _setup_siege_counts() -> void:
+	var count: int = Content.constants.SIEGE.STAGES.size()
+	for side: String in ["SWARM", "STEEL"]:
+		siege_left[side] = []
+		boss_left[side] = []
+		siege_talk_until[side] = []
+		for stage in range(count):
+			siege_left[side].append(0)
+			boss_left[side].append(0)
+			siege_talk_until[side].append(0.0)
+		for unit: BattleUnit in units.values():
+			var stage: int = int(unit.special.get("siege_stage", -1))
+			if unit.side == side and stage >= 0 and stage < count:
+				siege_left[side][stage] += 1
+		siege_open[side] = SiegeRules.open_stage(siege_left[side])
+
+func siege_locked(unit: BattleUnit) -> bool:
+	var stage: int = int(unit.special.get("siege_stage", -1))
+	return siege and stage > int(siege_open.get(unit.side, 0)) if stage >= 0 else bool(unit.special.get("siege_locked", false))
+
+func _refresh_siege_locks() -> void:
+	for unit: BattleUnit in units.values():
+		if unit.special.has("siege_stage"):
+			unit.special.siege_locked = siege_locked(unit)
+
+func _siege_hp_floor(unit: BattleUnit) -> float:
+	var stage: int = int(unit.special.get("siege_stage", -1))
+	var left: Array = boss_left.get(unit.side, [])
+	var until: Array = siege_talk_until.get(unit.side, [])
+	if not siege or unit.is_hero() or stage < 0 or stage >= left.size():
+		return 0.0
+	return float(Content.constants.SIEGE.BLD_HP_FLOOR) if int(left[stage]) > 0 or clock < float(until[stage]) else 0.0
+
+func _ally_bot_damage_factor(unit: BattleUnit, attacker: BattleUnit) -> float:
+	if defending_side.is_empty() or attacker == null or not attacker.is_hero() or attacker.peer_id >= 0 or attacker.side == defending_side or unit.side != defending_side:
+		return 1.0
+	if unit.special.get("boss", false):
+		return float(Content.constants.STORY_MAP.ALLY_BOT_BOSS_F)
+	return float(Content.constants.STORY_MAP.ALLY_BOT_BLD_F) if unit.kind in ["tower", "base"] else 1.0
+
+func _siege_fell(unit: BattleUnit) -> void:
+	var stage: int = int(unit.special.get("siege_stage", -1))
+	var left: Array = siege_left.get(unit.side, [])
+	if stage < 0 or stage >= left.size():
+		return
+	left[stage] = maxi(0, int(left[stage]) - 1)
+	var opened := SiegeRules.open_stage(left)
+	var previous: int = int(siege_open[unit.side])
+	if opened != previous:
+		siege_open[unit.side] = opened
+		_refresh_siege_locks()
+		if siege:
+			events.append({"type": "siege", "actor": 0, "side": unit.side, "stage": previous})
+
+func _boss_fell(unit: BattleUnit) -> void:
+	var stage: int = int(unit.special.get("siege_stage", -1))
+	var left: Array = boss_left.get(unit.side, [])
+	if stage < 0 or stage >= left.size():
+		return
+	left[stage] = maxi(0, int(left[stage]) - 1)
+	if int(left[stage]) > 0:
+		return
+	siege_talk_until[unit.side][stage] = clock + SiegeRules.talk_seconds(stage)
+	events.append({"type": "siege_talk", "actor": 0, "side": unit.side, "stage": stage})
+
+func _boss_sync(unit: BattleUnit) -> void:
+	if not authoritative or not unit.special.get("boss", false) or unit.special.get("role") == "clone":
+		return
+	# Current source SQUAD.N is one. Clones are not squad HP segments.
+	var segment := SiegeRules.segment_of(maxf(0, unit.hp) / unit.max_hp if unit.max_hp > 0 else 1.0)
+	var previous: int = int(unit.special.get("boss_segment", 0))
+	if segment <= previous:
+		return
+	for step in range(previous, segment):
+		for item: String in Content.constants.ECON.UPGRADES:
+			var definition: Dictionary = Content.constants.ECON.UPGRADES[item]
+			if int(unit.upgrades.get(item, 0)) >= int(definition.max):
+				continue
+			var fraction := unit.hp / unit.max_hp if item == "hp" and unit.max_hp > 0 else 0.0
+			unit.upgrades[item] = int(unit.upgrades.get(item, 0)) + 1
+			_apply_upgrade(unit, item)
+			if item == "hp":
+				unit.hp = minf(unit.max_hp, floorf(unit.max_hp * fraction + 0.5))
+	unit.special.boss_segment = segment
+	if unit.alive():
+		unit.shield = unit.max_shield
+		unit.status.inv_until = maxf(float(unit.status.get("inv_until", 0)), clock + SiegeRules.invulnerability(segment))
+	unit.refresh_body_scale()
+	events.append({"type": "boss_segment", "actor": unit.entity_id, "peer": unit.peer_id, "side": unit.side, "segment": segment})
+
 func _seed_scene_hazards(map_data: Dictionary) -> void:
-	if not map_data.has("lane_turns") or not Content.balance.has("hazard_visuals") or not Content.balance.has("hazard_volumes"):
+	if not map_data.has("lane_turns") or not Content.balance.has("hazard_visuals") or not Content.balance.has("hazard_volumes") or not Content.balance.has("playerView"):
 		push_error("Missing original hazard generation/model metadata; regenerate migration data")
 		return
 	var bases := {}
@@ -167,16 +375,19 @@ func _camp_content_ready() -> bool:
 	var keys: Array[String] = []
 	for side: String in ["GUER", "MILI"]:
 		for kind: String in ["bunker"] + Content.constants.THIRD.COMP[side]:
+			if not BodyRig.available(BodyRig.entity_key(side, kind)):
+				push_error("Missing original camp body rig: " + BodyRig.entity_key(side, kind))
+				return false
 			keys.append("%s_%s" % [side.to_lower(), kind])
-	for side: String in ["SWARM", "STEEL"]:
-		for profession in range(Content.constants.CIVILIANS.size()):
-			keys.append("%s_civilian_%02d" % [side.to_lower(), profession])
 	for key: String in keys:
-		if not profiles.has(key) or not ResourceLoader.exists("res://assets/companions/%s.scn" % key):
+		if not profiles.has(key):
 			push_error("Original camp/civilian content is unavailable; regenerate and pack companion resources: " + key)
 			return false
 	if not Content.balance.has("civilian_appearance"):
 		push_error("Missing original civilian appearance tables")
+		return false
+	if not CivilianBodyBuilder.available():
+		push_error("Missing original civilian component scenes; regenerate and pack civilian parts")
 		return false
 	return true
 
@@ -705,7 +916,7 @@ func _tick_loots(delta: float) -> void:
 				continue
 			if loot.get("ammo", false):
 				for slot: String in ["light", "heavy"]:
-					unit.ammo[slot] = Content.weapon(unit.character, slot, int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1).mag
+					unit.ammo[slot] = Content.weapon(unit.character, slot, unit.combat_level(slot)).mag
 				unit.reload_at.clear()
 			elif loot.has("affix"):
 				var key: String = loot.affix
@@ -845,7 +1056,7 @@ func _tick_mines() -> void:
 				continue
 			mines.remove_at(index)
 			unit.status.third_cooldown_until = clock + float(Content.constants.GAME.THREAT_CD_S)
-			events.append({"type": "mine_blast", "actor": unit.entity_id, "peer": unit.peer_id, "mine": mine.id, "position": point, "radius": cfg.R})
+			_publish_blast_event({"type": "mine_blast", "actor": unit.entity_id, "peer": unit.peer_id, "mine": mine.id, "position": point, "radius": cfg.R})
 			for target: BattleUnit in units.values():
 				if not target.alive() or target.is_hero() and _missile_target_altitude(target) > float(cfg.R):
 					continue
@@ -979,6 +1190,9 @@ func _lightning_shockwave(center: Vector3, direct_id: int = 0) -> void:
 func spawn(info: Dictionary) -> BattleUnit:
 	var unit := BattleUnit.new()
 	var data: Dictionary = info.duplicate()
+	if info.has("stage"):
+		data.special = info.get("special", {}).duplicate(true)
+		data.special.siege_stage = int(info.stage)
 	data.id = next_id if not info.has("id") else int(info.id)
 	next_id = maxi(next_id, int(data.id) + 1)
 	unit.name = "Unit_%d" % data.id
@@ -986,15 +1200,21 @@ func spawn(info: Dictionary) -> BattleUnit:
 	unit.configure(data)
 	units[unit.entity_id] = unit
 	if unit.is_pilot():
-		unit.yaw = world.spawn_heading(unit.side, unit.spawn_slot)
+		unit.yaw = 0.0 if unit.special.get("boss", false) else atan2(unit.position.x, unit.position.z) if unit.side == Content.constants.SUPER_SIDE else world.spawn_heading(unit.side, unit.spawn_slot)
+		if not unit.player_view.rules.is_empty():
+			unit.player_view.body_yaw = unit.yaw
+		unit.rotation.y = unit.yaw
 		if authoritative:
 			unit.ensure_weapon_pose()
+			if not unit.is_bot:
+				unit.ensure_authority_body()
 	if authoritative and unit.speed > 0 and not unit.is_hero() and unit.special.is_empty():
 		unit.path_follower = PathFollow3D.new()
 		unit.path_follower.loop = false
 		unit.path_follower.rotation_mode = PathFollow3D.ROTATION_NONE
 		world.paths[unit.lane].add_child(unit.path_follower)
 		unit.path_follower.progress_ratio = 0.0 if unit.side == "SWARM" else 1.0
+	unit_spawned.emit(unit)
 	return unit
 
 func submit_input(peer: int, command: Dictionary) -> void:
@@ -1011,14 +1231,25 @@ func submit_input(peer: int, command: Dictionary) -> void:
 	if not (vertical is float or vertical is int) or not is_finite(float(vertical)):
 		return
 	var unit: BattleUnit = pilots[peer]
-	if unit.input_state.get("aim", false) and command.get("aim", false) != true:
+	var aiming: bool = command.get("aim", unit.input_state.get("aim", false)) == true
+	var requested_mode: Variant = command.get("view_mode", unit.view_mode)
+	var view_mode: String = requested_mode if requested_mode is String and requested_mode in ["fpv", "tps"] else unit.view_mode
+	if aiming:
+		view_mode = "fpv"
+	if view_mode == "tps" and not unit.ensure_authority_body():
+		message.emit(peer, "view_unavailable")
+		return
+	if unit.input_state.get("aim", false) and not aiming:
 		unit.aim_off_at = clock
 	unit.input_state = {"move": motion.limit_length(), "yaw": wrapf(heading, -PI, PI),
 		"pitch": clampf(elevation, -1.45, 1.45), "vertical": clampf(float(vertical), -1, 1),
-		"jump": command.get("jump", false) == true, "fire": command.get("fire", false) == true,
+		"jump": command.get("jump", false) == true, "fire": command.get("fire", false) == true and unit.alive(),
 		"jump_held": command.get("jump_held", false) == true,
-		"sprint": command.get("sprint", false) == true, "aim": command.get("aim", false) == true,
-		"slot": "heavy" if command.get("slot") == "heavy" else "light"}
+		"level_move": command.get("level_move", false) is bool and command.get("level_move", false),
+		"sprint": command.get("sprint", false) == true, "aim": aiming,
+		"view_mode": view_mode,
+		"view_restore": "tps" if aiming and command.get("view_restore") == "tps" else "",
+		"slot": "heavy" if command.get("slot", "heavy" if aiming else "light") == "heavy" else "light"}
 	unit.input_state["received"] = clock
 
 func action(peer: int, type: String, argument: String = "") -> void:
@@ -1033,6 +1264,18 @@ func action(peer: int, type: String, argument: String = "") -> void:
 		if lane.is_valid_int():
 			buy_creep(unit, int(lane))
 		return
+	if type == "aim":
+		var parts := argument.split(":")
+		if parts.size() != 2 or parts[0] not in ["on", "off"] or not parts[1].is_valid_int():
+			return
+		var request := int(parts[1])
+		if request <= unit.aim_request:
+			return
+		unit.aim_request = request
+		if parts[0] == "on" and unit.has_status("blind_until", clock):
+			return
+		_set_human_aim(unit, parts[0] == "on" and unit.alive())
+		return
 	if not unit.alive():
 		return
 	if type in ["civ_follow", "civ_away"]:
@@ -1044,9 +1287,34 @@ func action(peer: int, type: String, argument: String = "") -> void:
 			reload_weapon(unit, argument if argument in ["light", "heavy"] else "light")
 		"cast":
 			cast(unit, argument)
+		"cast_stance":
+			cast(unit, InputRules.hold_slot(unit.defending))
 		"defend":
-			if argument == "off" or unit.shield > 0:
-				unit.defending = argument != "off"
+			if not unit.has_status("freeze_until", clock) and argument in ["on", "off", "toggle"]:
+				var next := not unit.defending if argument == "toggle" else argument == "on"
+				if not next or unit.shield > 0:
+					unit.defending = next
+
+func _set_human_aim(unit: BattleUnit, aiming: bool) -> void:
+	if unit.input_state.get("aim", false) and not aiming:
+		unit.aim_off_at = clock
+	unit.input_state.aim = aiming
+	unit.input_state.slot = "heavy" if aiming else "light"
+	if not unit.player_view.rules.is_empty():
+		unit.player_view.aiming = aiming
+	if aiming:
+		if not unit.player_view.rules.is_empty():
+			if unit.view_mode == "tps":
+				unit.player_view.body_yaw = unit.yaw
+			unit.player_view.select_mode("fpv", unit.yaw)
+		unit.view_mode = "fpv"
+	elif unit.input_state.get("view_restore") == "tps":
+		unit.view_mode = "tps"
+		unit.input_state.view_mode = "tps"
+		if not unit.player_view.rules.is_empty():
+			unit.player_view.select_mode("tps", unit.yaw)
+	if not aiming:
+		unit.input_state.view_restore = ""
 
 func request_iframe(unit: BattleUnit) -> bool:
 	if not authoritative or over or not unit.alive() or unit.has_status("iframe_cooldown_until", clock):
@@ -1086,28 +1354,38 @@ func _physics_process(delta: float) -> void:
 		if not unit.alive():
 			fire_controls.erase(unit.entity_id)
 			_tick_weapon_pose(unit, delta)
+			_tick_authority_body(unit, delta)
 			continue
 		if unit.is_pilot():
 			var was_aiming: bool = unit.input_state.get("aim", false)
-			if unit.is_bot:
-				_bot_command(unit)
-			elif clock - float(unit.input_state.get("received", clock)) > 0.5:
-				unit.input_state = {}
+			if not unit.is_bot and clock - float(unit.input_state.get("received", clock)) > 0.5:
+				unit.input_state = {"aim": was_aiming, "slot": "heavy" if was_aiming else "light",
+					"view_mode": unit.view_mode, "view_restore": unit.input_state.get("view_restore", "")}
 			if was_aiming and not unit.input_state.get("aim", false):
 				unit.aim_off_at = clock
-			unit.simulate_movement(delta)
+			if not unit.is_bot:
+				_tick_recoil_echoes(unit)
+				unit.simulate_movement(delta)
+				_tick_view_fov(unit, delta)
+				unit.recoil.advance(delta, _recoil_next)
+				unit.sync_view_camera()
+				if not unit.input_state.get("fire", false):
+					unit.recoil.release_fire()
+					_sync_body_charge(unit)
 			if unit.input_state.get("aim", false) and unit.input_state.get("slot", "light") == "heavy":
-				var weapon := Content.weapon(unit.character, "heavy", int(unit.upgrades.hw) + 1)
+				var weapon := Content.weapon(unit.character, "heavy", unit.combat_level("heavy"))
 				if weapon.trajectory == "lob":
 					fire_controls[unit.entity_id] = lob_control(unit, weapon)
 				else:
 					fire_controls.erase(unit.entity_id)
 			else:
 				fire_controls.erase(unit.entity_id)
-			_tick_lock(unit)
-			if unit.input_state.get("fire", false):
+			if not unit.is_bot:
+				_tick_lock(unit)
+			if not unit.is_bot and unit.input_state.get("fire", false):
 				fire(unit, unit.input_state.get("slot", "light"))
 			_tick_weapon_pose(unit, delta)
+			_tick_authority_body(unit, delta)
 		unit.visible = (unit.alive() or unit.special.get("collapsed", false)) and unit.presentation_visible and not unit.special.get("garrison", false)
 		if unit.special.get("role") != "carrier":
 			unit.position.y = minf(unit.position.y, world.ceiling)
@@ -1116,6 +1394,13 @@ func _physics_process(delta: float) -> void:
 	var npc_delta: float = float(Content.constants.GAME.TICK_MS) / 1000
 	while npc_accumulator + 0.000000001 >= npc_delta:
 		npc_accumulator = maxf(0, npc_accumulator - npc_delta)
+		for unit: BattleUnit in pilots.values():
+			if unit.is_bot:
+				if not bot_brains.has(unit.entity_id):
+					_create_bot_brain(unit)
+				if not bot_brains.has(unit.entity_id):
+					continue
+				bot_brains[unit.entity_id].update(npc_delta)
 		_tick_civilians(npc_delta)
 		_tick_mines()
 		_tick_ambush(npc_delta)
@@ -1136,9 +1421,15 @@ func _physics_process(delta: float) -> void:
 		npc_index_active = false
 		npc_index.clear()
 		npc_structures.clear()
+		for unit: BattleUnit in pilots.values():
+			if unit.alive():
+				ShotHistory.record(unit.position_trail, clock, unit.position.x, unit.position.z)
 	_tick_projectiles(delta)
 	_tick_missiles(delta)
 	_prune_dead_creeps()
+	for unit: BattleUnit in units.values():
+		if unit.body_presentation != null:
+			unit.presented_altitude = _missile_target_altitude(unit) if unit.is_hero() or unit.flying else 0.0
 
 func spawn_wave() -> void:
 	wave += 1
@@ -1245,10 +1536,14 @@ func _tick_npc(unit: BattleUnit, delta: float) -> void:
 			if weapon_def.get("r", 0) > 0:
 				var point := Vector3(target.position.x, _missile_target_altitude(target) if target.is_hero() or target.kind == "heli" else 0, target.position.z)
 				blast(unit, weapon_def, point, false, true, _unit_level(target), def.dmg)
-				events.append({"type": "boom", "actor": unit.entity_id, "position": target.position, "radius": weapon_def.r, "side": unit.side})
+				_publish_blast_event({"type": "boom", "actor": unit.entity_id, "position": _missile_world_position(point), "radius": weapon_def.r, "side": unit.side})
 			elif not _roll_miss(unit, target, weapon_def):
 				damage(unit, target, weapon_def, def.dmg * (1.0 if target.is_hero() else unit.creep_multiplier), false, {}, false)
-			events.append({"type": "shot", "actor": unit.entity_id, "start": unit.eye(), "end": target.eye(), "side": unit.side})
+			var shot := {"type": "shot", "actor": unit.entity_id, "kind": unit.kind, "start": unit.eye(), "end": _npc_shot_point(target), "side": unit.side}
+			if unit.body_presentation != null:
+				_emit_body_event(shot)
+			else:
+				events.append(shot)
 		return
 	if unit.special.get("third", false) and unit.speed > 0:
 		_move_camp_unit(unit, def, delta)
@@ -1260,7 +1555,7 @@ func _tick_npc(unit: BattleUnit, delta: float) -> void:
 func _npc_spec(unit: BattleUnit) -> Dictionary:
 	return {"kind": unit.kind, "side": unit.side, "hero": unit.is_hero(), "hp": unit.hp, "dead": not unit.alive(),
 		"neutral": unit.special.get("neutral", false), "garrison": unit.special.get("garrison", false),
-		"third": unit.special.get("third", false), "siege_locked": unit.special.get("siege_locked", false),
+		"third": unit.special.get("third", false), "siege_locked": siege_locked(unit),
 		"stealth": unit.has_status("stealth_until", clock), "blind": unit.has_status("blind_until", clock),
 		"altitude": _missile_target_altitude(unit), "sight_height": _relative_sight_height(unit), "hologram": unit.special.get("role") == "hologram"}
 
@@ -1401,46 +1696,399 @@ func apply_presentation_view(state: Dictionary) -> void:
 	var shown := {}
 	for actor in state.units:
 		shown[int(actor.id)] = true
+		var unit: BattleUnit = units.get(int(actor.id))
+		if unit != null:
+			present_victim_snapshot(unit, actor)
+		if unit != null and unit.body_presentation != null:
+			unit.body_presentation.capture_snapshot(actor, float(state.clock))
+			_prime_body_view(unit)
 	for unit: BattleUnit in units.values():
+		if unit.presentation_visible and not shown.has(unit.entity_id):
+			unit.mobile_damage.release(true)
+			unit.clear_damage_fx()
 		unit.presentation_visible = shown.has(unit.entity_id)
 		unit.visible = (unit.alive() or unit.special.get("collapsed", false)) and unit.presentation_visible and not unit.special.get("garrison", false)
+	for id: int in victim_reports.keys():
+		if not shown.has(id):
+			victim_reports.erase(id)
+	view_snapshot_ready.emit(state)
+	_present_retired_bodies(state.get("events", []))
+	pending_missile_view = state.get("missiles", []).duplicate(true)
+	missile_view_pending = true
 
-func _bot_command(unit: BattleUnit) -> void:
-	var target: BattleUnit = units.get(unit.bot_target)
-	if clock >= unit.reaction_at:
-		unit.reaction_at = clock + Content.constants.BOT_DIFF[Content.constants.DEFAULT_BOT_DIFF].react
-		target = acquire_target(unit, Content.constants.UNITS[unit.kind].sight, true)
-		unit.bot_target = target.entity_id if target != null else 0
-	var destination: Vector3 = world.bases["STEEL" if unit.side == "SWARM" else "SWARM"]
-	var retreating := unit.hp < unit.max_hp * 0.25
-	if retreating:
-		destination = world.bases[unit.side]
-	elif target != null:
-		destination = target.eye()
-	else:
-		var path: Path3D = world.paths[unit.lane % world.paths.size()]
-		var progress := path.curve.get_closest_offset(path.to_local(unit.global_position))
-		destination = path.curve.sample_baked(clampf(progress + (20 if unit.side == "SWARM" else -20), 0, path.curve.get_baked_length()))
-	var direction := destination - unit.eye()
-	var desired_yaw := atan2(-direction.x, -direction.z)
-	unit.yaw += CombatMath.view_lock_step(wrapf(desired_yaw - unit.yaw, -PI, PI), get_physics_process_delta_time())
-	var desired_pitch := atan2(direction.y, maxf(1, Vector2(direction.x, direction.z).length()))
-	unit.pitch += CombatMath.view_lock_step(desired_pitch - unit.pitch, get_physics_process_delta_time())
-	var weapon_def := Content.weapon(unit.character, "light", int(unit.upgrades.lw) + 1)
-	var distance := direction.length()
-	var move_forward: bool = retreating or target == null or distance > weapon_def.range * 0.75
-	var fire_now := target != null and not retreating and unit.aim_direction().dot(direction.normalized()) > 0.995
-	var ground_reference := world.flight_reference(unit.position.x, unit.position.z)
-	var vertical := clampf((ground_reference + 12 - unit.position.y) * 0.1, -1, 1) if unit.flying and is_finite(ground_reference) else 0.0
-	unit.input_state = {"move": Vector2(0, -1 if move_forward else 0), "yaw": unit.yaw,
-		"pitch": unit.pitch, "vertical": vertical,
-		"slot": "light", "fire": fire_now}
+func present_victim_snapshot(unit: BattleUnit, state: Dictionary) -> void:
+	if Session.dedicated or world == null:
+		return
+	var current := {"hp": float(state.hp), "shield": float(state.shield), "defending": bool(state.get("defending", false)),
+		"dead": float(state.hp) <= 0, "view_reset": int(state.get("view_reset", 0))}
+	var previous: Dictionary = victim_reports.get(unit.entity_id, {})
+	var reaction := VictimHitState.reaction(previous, current, unit.is_hero())
+	victim_reports[unit.entity_id] = current
+	# Original hero stage changes precede their shield/armor contact branch.
+	if unit.is_hero():
+		unit.present_scene_damage(state, world.combat_effects, previous.is_empty())
+	if unit.is_pilot() and unit.peer_id == multiplayer.get_unique_id():
+		var self_reaction := VictimHitState.self_reaction(previous, current)
+		if not self_reaction.is_empty():
+			if self_reaction.shielded:
+				if unit.first_person_shield != null:
+					unit.first_person_shield.hit(float(self_reaction.flash))
+				if unit.body != null:
+					unit.body.flash_shield(float(self_reaction.flash))
+			else:
+				self_hurt.emit()
+	var effects: CombatEffects = world.combat_effects
+	if not reaction.is_empty() and unit.model != null:
+		var dimensions: Dictionary = unit.body.profile.dimensions if unit.body != null else unit.geometry_override
+		if dimensions.is_empty():
+			push_error("Victim feedback requires captured model dimensions")
+			return
+		var camera := get_viewport().get_camera_3d()
+		effects = world.ensure_combat_effects()
+		effects.victim(unit.model.global_position, float(dimensions.height), unit.kind,
+			bool(reaction.shielded), camera.global_position if camera != null else null)
+		if reaction.shielded and unit.body != null:
+			unit.body.flash_shield(float(reaction.flash))
+	if not unit.is_hero():
+		unit.present_scene_damage(state, effects, previous.is_empty())
+	unit.present_damage_fx(state, effects)
+
+func step_damage_fx(delta: float, now: float) -> void:
+	if Session.dedicated:
+		return
+	for unit: BattleUnit in units.values():
+		if unit.damage_fx == null or unit.model == null or not unit.model.is_visible_in_tree():
+			continue
+		if not weather_dynamics.has("windAmp") or not weather_dynamics.has("windDir"):
+			push_error("Persistent damage FX require resolved source wind dynamics")
+			return
+		unit.damage_fx.advance(delta, now, weather_dynamics)
+	for view: MissilePresentation in missile_presentations.values():
+		if view.damage_fx.node != null and view.is_visible_in_tree():
+			if not weather_dynamics.has("windAmp") or not weather_dynamics.has("windDir"):
+				push_error("Missile damage FX require resolved source wind dynamics")
+				return
+			view.damage_fx.node.advance(delta, now, weather_dynamics)
+
+func sync_missile_presentations(states: Array, reports: Array) -> void:
+	if Session.dedicated or world == null:
+		return
+	if states.is_empty() and missile_presentations.is_empty():
+		return
+	var seen := {}
+	var effects := world.ensure_combat_effects()
+	for state: Dictionary in states:
+		var id := int(state.id)
+		seen[id] = true
+		var relative: Vector3 = state.position
+		var ground := _npc_presentation_ground(relative)
+		if not is_finite(ground):
+			push_error("Missile presentation requires verified terrain height")
+			continue
+		var point := Vector3(relative.x, ground + relative.y, relative.z)
+		if not missile_presentations.has(id):
+			var fresh := MissilePresentation.new()
+			add_child(fresh)
+			if not fresh.configure(id, point):
+				fresh.free()
+				continue
+			missile_presentations[id] = fresh
+		var view: MissilePresentation = missile_presentations[id]
+		view.observe(state, point, effects)
+	for id: int in missile_presentations.keys():
+		if seen.has(id):
+			continue
+		# Reflection has no source missileId; only matching blast/intercept reports fracture it.
+		var burst := reports.any(func(event): return event.type in ["missile_blast", "missile_intercept"] and int(event.get("missile", -1)) == id)
+		var view: MissilePresentation = missile_presentations[id]
+		view.release(effects, burst)
+		view.queue_free()
+		missile_presentations.erase(id)
+
+func missile_view_collision(start: Vector3, end: Vector3) -> Dictionary:
+	if not start.is_finite() or not end.is_finite():
+		return {}
+	var hit := {}
+	for view: MissilePresentation in missile_presentations.values():
+		hit = MissileViewRay.nearer(start, hit, view.ray.intersect(view, start, end))
+	return hit
+
+func step_missile_presentations(delta: float) -> void:
+	if Session.dedicated or world == null or missile_presentations.is_empty():
+		return
+	var effects := world.ensure_combat_effects()
+	for view: MissilePresentation in missile_presentations.values():
+		view.advance(delta, effects)
+
+func _prime_body_view(unit: BattleUnit) -> void:
+	var presentation := unit.body_presentation
+	if world == null or presentation == null or presentation.view_motion.configured or presentation.report.is_empty():
+		return
+	var target: Vector3 = presentation.report.position
+	var ground := world.source_height(target.x, target.z)
+	if not is_finite(ground):
+		return
+	var point := Vector3(target.x, ground, target.z)
+	presentation.view_motion.place(point)
+	unit.body.top_level = true
+	unit.body.global_transform = Transform3D(Basis.IDENTITY.scaled_local(unit.model_base_scale * unit.body_scale), point)
+
+func present_bodies(delta: float, now: float, frame: int, camera: Camera3D, local_view: PlayerViewState = null) -> void:
+	if camera == null:
+		return
+	var local_peer := multiplayer.get_unique_id()
+	for unit: BattleUnit in units.values():
+		if unit.body_presentation == null or not unit.presentation_visible:
+			continue
+		var presentation := unit.body_presentation
+		var is_self := unit.is_pilot() and unit.peer_id == local_peer
+		var first_person := unit.view_mode != "tps"
+		var heading := float(unit.rotation.y) + PI
+		var position := unit.global_position
+		var view_plan: Dictionary = {}
+		var altitude := unit.presented_altitude if is_self else float(presentation.report.get("altitude", NAN))
+		if not is_finite(altitude):
+			unit.body.spin(delta)
+			continue
+		var flies: bool = unit.flying if is_self else unit.kind in Content.balance.bodyRules.presentation.flyKinds
+		if is_self and local_view != null and not local_view.rules.is_empty():
+			unit.body.top_level = false
+			unit.body.position = unit.model_base_position * unit.body_scale
+			first_person = local_view.mode != "tps"
+			heading = local_view.body_yaw + PI
+			if first_person:
+				heading = unit.body_presentation.previous_yaw if unit.body_presentation.sampled else unit.body.poses.axis(unit.body.source_root, "y")
+			unit.body.rotation.y = heading - float(unit.rotation.y)
+			unit.body.visible = not first_person and unit.alive()
+		elif not is_self:
+			if world == null or presentation.report.is_empty():
+				continue
+			var motion := presentation.view_motion
+			var target: Vector3 = presentation.report.position
+			if not motion.configured:
+				var ground := world.source_height(target.x, target.z)
+				if not is_finite(ground):
+					continue
+				motion.place(Vector3(target.x, ground, target.z))
+			var remote_state := {"id": str(unit.entity_id), "kind": unit.kind, "side": unit.side, "hero": unit.is_hero(),
+				"flies": flies, "heroY": altitude, "target": target, "static": unit.body.profile["static"],
+				"padY": target.y if unit.body.profile["static"] else null, "reported_yaw": presentation.report.yaw,
+				"aim": presentation.entity.get("_aimAt"), "carrier": unit.special.get("role") == "carrier", "waterY": world.water_y}
+			view_plan = motion.advance(delta, now, frame, camera.global_position, remote_state, presentation.pending_snap,
+				{"ground": world.source_height, "surface": world.visual_surface, "flight": world.visual_flight_surface,
+					"lane": world.lane_surface.at, "deck": world.visual_deck}, _body_facing_target.bind(unit), presentation.carrier_motion)
+			if view_plan.is_empty():
+				continue
+			heading = motion.yaw
+			position = motion.position
+			unit.body.top_level = true
+			unit.body.global_transform = Transform3D(Basis.from_euler(Vector3(motion.pitch, heading, 0), EULER_ORDER_YXZ)
+				.scaled_local(unit.model_base_scale * unit.body_scale), position)
+		var expanded: bool = unit.has_status("shield_expand_until", clock) if is_self else presentation.report.expanded
+		var defending: bool = unit.defending if is_self else presentation.report.defending
+		var shield := unit.shield if is_self else float(presentation.report.shield)
+		var dead: bool = not unit.alive() if is_self else presentation.report.dead
+		var state := {"hero": unit.is_hero(), "heroY": altitude, "flies": flies, "dead": dead,
+			"isSelf": is_self, "sp": shield, "df": (2 if expanded else 1) if defending else 0,
+			"visualDefense": defending and shield > 0, "visualShieldExpand": expanded}
+		presentation.frame(delta, now, frame, position, heading,
+			camera.global_position, state, first_person, false, _pose_body_mounts.bind(unit), view_plan)
+		unit.body.spin(delta)
+
+func _body_facing_target(now: float, origin: Vector3, unit: BattleUnit) -> Variant:
+	return _body_nearest(unit, now, origin, float(Content.constants.UNITS.get(unit.kind, {}).get("range", 0)), true)
+
+func _body_nearest(unit: BattleUnit, now: float, origin: Vector3, reach: float, structures: bool) -> Variant:
+	var entity := unit.body_presentation.entity
+	var id := int(entity.get("_aimTarget", 0))
+	if float(entity.get("_aimNext", 0)) == 0 or now >= float(entity._aimNext):
+		var candidates: Array = []
+		for candidate: BattleUnit in units.values():
+			if not candidate.presentation_visible:
+				continue
+			candidates.append({"id": candidate.entity_id, "position": candidate.model.global_position if candidate.model != null else candidate.global_position,
+				"side": candidate.side, "neutral": candidate.special.get("neutral", false), "dead": not candidate.alive(),
+				"static": candidate.kind in ["base", "tower", "bunker"] or candidate.special.get("role") in ["slab", "hazard"],
+				"visible": candidate.model != null and candidate.model.visible and not candidate.special.get("garrison", false),
+				"self": candidate.is_pilot() and candidate.peer_id == multiplayer.get_unique_id()})
+		id = BodyMountAim.nearest(entity, origin, unit.side, now, reach, candidates, structures)
+	var target: BattleUnit = units.get(id)
+	if target == null or not target.presentation_visible:
+		return null
+	return target.global_position if target.is_pilot() and target.peer_id == multiplayer.get_unique_id() else target.model.global_position if target.model != null else target.global_position
+
+func _pose_body_mounts(delta: float, now: float, unit: BattleUnit) -> void:
+	if unit.body.mounts.get("turret") == null and unit.body.mounts.get("gunTilt") == null and unit.body.mounts.get("guns") == null:
+		return
+	var entity := unit.body_presentation.entity
+	var aim: Variant = entity.get("_aimAt")
+	var nearest: Variant = null
+	if unit.body.mounts.get("turret") != null and not (aim is Dictionary and now < float(aim.until)):
+		var tower := unit.kind == "tower"
+		nearest = _body_nearest(unit, now, unit.body.global_position,
+			float(Content.constants.UNITS.get(unit.kind, {}).get("range", 0)) * (1.0 if tower else float(Content.balance.bodyRules.presentation.vehicleRange)), not tower)
+	if unit.kind == "base" and world != null:
+		var foe := "SWARM" if unit.side == "STEEL" else "STEEL"
+		if world.bases.has(foe):
+			var target: Vector3 = world.bases[foe]
+			unit.body.poses.set_axis(unit.body.mounts.guns, "y", atan2(target.x - unit.position.x, target.z - unit.position.z))
+	BodyMountAim.step(unit.body, entity, delta, now, unit.body.global_position,
+		unit.body_presentation.view_motion.yaw if unit.body_presentation.view_motion.configured else float(unit.rotation.y) + float(unit.body.rotation.y), nearest)
+
+func _npc_presentation_ground(point: Vector3) -> float:
+	if world == null:
+		return NAN
+	var ground := world.source_height(point.x, point.z)
+	if not is_finite(ground):
+		ground = world.ground_height(point.x, point.z)
+	return ground
+
+func _npc_shot_point(target: BattleUnit, quantize: bool = true) -> Vector3:
+	var raised := not quantize or target.is_hero() or target.kind in ["decoy", "heli"]
+	var height := _missile_target_altitude(target) if target.is_hero() or target.flying or target.kind == "decoy" else 0.0
+	return BodyMountAim.shot_point(target.global_position, _npc_presentation_ground(target.position), height, raised, quantize)
+
+func _emit_body_event(event: Dictionary) -> void:
+	body_event_serial += 1
+	event.body_serial = body_event_serial
+	var unit: BattleUnit = units.get(int(event.actor))
+	if (event.get("hero_report", false) or event.get("plasma_report", false)) and unit != null:
+		event.shooter_peer = unit.peer_id
+	if event.type == "shot" and unit != null:
+		event.muzzle_ground = _npc_presentation_ground(unit.position)
+		event.garrison = bool(unit.special.get("garrison", false))
+		if unit.kind == "heli":
+			event.muzzle_y = floorf(_missile_target_altitude(unit) + .5)
+	events.append(event)
+	if event.type == "projectile_terminal":
+		present_projectile_terminal(event)
+	if event.type == "local_blast":
+		present_blast(event)
+	if event.get("hero_report", false):
+		present_shot(event)
+	if event.get("plasma_report", false):
+		present_plasma(event)
+	if unit != null:
+		var accepted := unit.present_body_event(event, presentation_time())
+		if accepted and event.type == "weapon_fire" and unit.is_pilot():
+			_fire_squad_clones(unit, event.slot, int(event.get("serial", -1)), presentation_time())
+		if accepted and event.type == "shot" and not Session.dedicated:
+			present_shot(event)
+		if unit.authority_body != null:
+			unit.authority_body.accept(event, presentation_time(), unit.global_position)
+	body_event.emit(event)
+
+func presentation_time() -> float:
+	return BodyPresentation.time_now() + (0.0 if is_nan(body_clock_offset) else body_clock_offset)
+
+func receive_body_events(received: Array, now: float) -> void:
+	for event: Dictionary in received:
+		if not event.has("body_serial"):
+			continue
+		if event.type == "local_blast":
+			present_blast(event)
+			continue
+		if event.type == "projectile_terminal":
+			present_projectile_terminal(event)
+			continue
+		if event.get("hero_report", false):
+			present_shot(event)
+			continue
+		if event.get("plasma_report", false):
+			present_plasma(event)
+			continue
+		var unit: BattleUnit = units.get(int(event.actor))
+		if unit != null:
+			var accepted := unit.present_body_event(event, now)
+			if accepted and event.type == "weapon_fire" and unit.is_pilot():
+				_fire_squad_clones(unit, event.slot, int(event.get("serial", -1)), now)
+			if accepted and event.type == "shot" and not Session.dedicated:
+				present_shot(event)
+
+func _sync_body_charge(unit: BattleUnit) -> void:
+	var charging := unit.recoil.rail_at != 0 or unit.recoil.steady_at != 0
+	if unit.body_charge_on == charging:
+		return
+	unit.body_charge_on = charging
+	_emit_body_event({"type": "heavy_charge", "actor": unit.entity_id, "on": charging})
+
+func _create_bot_brain(unit: BattleUnit) -> void:
+	if not Content.balance.has("bot") or bot_tower_sites.size() != world.lane_points.size():
+		push_error("Missing original bot policy/tower-site data; regenerate source content")
+		get_tree().quit(1)
+		return
+	var brain := BotBrain.new()
+	unit.bot_dodge_speed = Vector2(unit.velocity.x, unit.velocity.z).length()
+	brain.configure(self, unit, bot_difficulty)
+	bot_brains[unit.entity_id] = brain
+
+func _bot_aim(unit: BattleUnit, aiming: bool) -> void:
+	if not authoritative or over or not unit.alive() or aiming and unit.has_status("blind_until", clock):
+		return
+	if unit.input_state.get("aim", false) and not aiming:
+		unit.aim_off_at = clock
+	unit.input_state.aim = aiming
+
+func _bot_defend(unit: BattleUnit, defending: bool) -> void:
+	if authoritative and not over and unit.alive():
+		unit.defending = defending and unit.shield > 0 and unit.cast_state.is_empty()
+
+func _bot_move(unit: BattleUnit, destination: Vector2, delta: float) -> float:
+	if not authoritative or over or not unit.alive() or not destination.is_finite() or not is_finite(delta) or delta <= 0:
+		return 0.0
+	var old := unit.position
+	var requested := Vector2(destination.x - old.x, destination.y - old.z).length()
+	var altitude := _missile_target_altitude(unit)
+	var surface := _npc_surface(destination)
+	if not is_finite(surface) or not is_finite(altitude):
+		return 0.0
+	var desired := Vector3(destination.x, surface + maxf(0.1, altitude), destination.y)
+	unit.move_and_collide(desired - old)
+	_update_fluid_state(unit)
+	return _planar_distance(unit.position, old) / requested if requested > 0.0001 else 1.0
+
+func _bot_altitude(unit: BattleUnit, altitude: float) -> void:
+	if not authoritative or over or not unit.alive() or not is_finite(altitude):
+		return
+	var surface := _npc_surface(Vector2(unit.position.x, unit.position.z))
+	if not is_finite(surface):
+		return
+	var was_flying := unit.flying
+	unit.flying = unit.kind == "drone" or unit.kind == "morph" and altitude > float(Content.constants.FLY_Y)
+	if was_flying != unit.flying:
+		unit.refresh_collision()
+	unit.move_and_collide(Vector3.UP * (minf(world.ceiling, surface + maxf(0.1, altitude)) - unit.position.y))
+	unit.sync_view_camera()
+	_update_fluid_state(unit)
+
+func _bot_clear_shot(unit: BattleUnit, target: BattleUnit) -> bool:
+	var ground := world.ground_height(unit.position.x, unit.position.z)
+	if not is_finite(ground):
+		return false
+	return _visible_from(Vector3(unit.position.x, ground + _missile_target_altitude(unit) + Content.constants.LOS.EYE_M, unit.position.z), target)
+
+func _refill_if_done(unit: BattleUnit, slot: String, definition: Dictionary) -> void:
+	if authoritative and unit.reload_at.has(slot) and float(unit.reload_at[slot]) > 0 and clock >= float(unit.reload_at[slot]):
+		unit.ammo[slot] = definition.mag
+		unit.reload_at.erase(slot)
 
 func reload_weapon(unit: BattleUnit, slot: String) -> void:
-	var def := Content.weapon(unit.character, slot, int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1)
-	if unit.reload_at.has(slot) or unit.ammo.get(slot, def.mag) >= def.mag:
+	if not authoritative or over or not unit.alive() or not unit.is_pilot() or slot not in ["light", "heavy"]:
 		return
-	unit.reload_at[slot] = clock + def.reload * StatusRules.multiplier(unit.buffs, "reload", clock) * float(weather_dynamics.get("snowCdMul", 1))
+	var def := Content.weapon(unit.character, slot, unit.combat_level(slot))
+	_refill_if_done(unit, slot, def)
+	if float(unit.reload_at.get(slot, 0)) > clock or unit.ammo.get(slot, def.mag) >= def.mag:
+		return
+	unit.ammo[slot] = 0
+	unit.reload_at[slot] = clock + _reload_duration(unit, def)
+
+func _reload_duration(unit: BattleUnit, definition: Dictionary) -> float:
+	var boss_factor: float = Content.constants.BOSS.ENRAGE_RELOAD_F if unit.special.get("boss", false) and int(unit.special.get("boss_segment", 0)) >= 3 else 1.0
+	return definition.reload * StatusRules.multiplier(unit.buffs, "reload", clock) * float(weather_dynamics.get("snowCdMul", 1)) * boss_factor
+
+func _weapon_rate(unit: BattleUnit, definition: Dictionary) -> float:
+	var boss_factor: float = Content.constants.BOSS.ENRAGE_RATE_F if unit.special.get("boss", false) and int(unit.special.get("boss_segment", 0)) >= 3 else 1.0
+	return definition.rate * weather_attack_rate(unit) * (0.5 if unit.defending and unit.shield > 0 else 1.0) * boss_factor
 
 func _tick_weapon_pose(unit: BattleUnit, delta: float) -> void:
 	if not authoritative or unit.weapon_pose == null:
@@ -1448,38 +2096,65 @@ func _tick_weapon_pose(unit: BattleUnit, delta: float) -> void:
 	var slot: String = unit.input_state.get("slot", "light")
 	if slot not in ["light", "heavy"]:
 		return
-	var def := Content.weapon(unit.character, slot, int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1)
+	var def := Content.weapon(unit.character, slot, unit.combat_level(slot))
 	var control: Dictionary = fire_controls.get(unit.entity_id, {})
 	var elevation := CockpitPose.barrel_elevation(control.velocity, control.direction) if not control.is_empty() and slot == "heavy" and unit.input_state.get("aim", false) else 0.0
 	unit.weapon_pose.advance(delta, clock, slot, unit.flying, def, unit.reload_at.get(slot, NAN), elevation, unit.alive())
 
+func _tick_view_fov(unit: BattleUnit, delta: float) -> void:
+	var stats: Dictionary = Content.constants.UNITS[unit.kind]
+	var base: float = stats.get("fovAir", stats.get("fov", 68)) if unit.flying else stats.get("fov", 68)
+	unit.authority_fov = ScopeState.fov_step(unit.authority_fov, float(stats.get("zoomFov", base)) if unit.input_state.get("aim", false) else base, delta)
+
+func _tick_authority_body(unit: BattleUnit, delta: float) -> void:
+	if unit.authority_body == null:
+		return
+	unit.presented_altitude = _missile_target_altitude(unit)
+	if not is_finite(unit.presented_altitude):
+		return
+	var expanded := unit.has_status("shield_expand_until", clock)
+	unit.authority_body.advance(delta, presentation_time(), unit.global_position, unit.facing_yaw(), unit.body_scale,
+		{"hero": true, "heroY": unit.presented_altitude, "flies": unit.flying, "dead": not unit.alive(),
+			"sp": unit.shield, "visualDefense": unit.defending and unit.shield > 0, "visualShieldExpand": expanded}, unit.view_mode != "tps")
+
+func _shot_view_mode(unit: BattleUnit, slot: String) -> String:
+	if slot == "heavy" and unit.input_state.get("aim", false) and float(unit.ammo.get(slot, INF)) <= 1 and unit.input_state.get("view_restore") == "tps":
+		return "tps"
+	return unit.view_mode
+
+func _launch_pose(unit: BattleUnit, slot: String, reach: float, direction: Variant = null, remember: bool = false, mode: String = "") -> Dictionary:
+	unit.ensure_weapon_pose()
+	if (unit.view_mode if mode.is_empty() else mode) == "tps":
+		if unit.authority_body == null or unit.authority_body.body.source_root == null:
+			return {"origin": Vector3(NAN, NAN, NAN), "direction": direction}
+		return unit.authority_body.muzzle(slot, unit.global_position, unit.view_eye_height(), unit.facing_yaw(), unit.view_origin(), reach, direction)
+	return {"origin": unit.weapon_pose.muzzle(unit.aim_transform(), slot, unit.flying, true, remember), "direction": direction}
+
 func fire(unit: BattleUnit, slot: String) -> void:
 	if not authoritative or over or not unit.alive() or not unit.is_pilot() or slot not in ["light", "heavy"]:
 		return
-	if unit.has_status("emp_until", clock) or unit.has_status("blind_until", clock) or unit.has_status("phase_until", clock) or unit.has_status("freeze_until", clock) or unit.has_status("cast_lock_until", clock) or not unit.cast_state.is_empty():
+	var def := Content.weapon(unit.character, slot, unit.combat_level(slot))
+	var serial := unit.fire_serial
+	_fire_once(unit, slot, def)
+	if unit.fire_serial != serial and not unit.is_bot and unit.alive():
+		_apply_recoil(unit, def, slot, unit.last_launch_direction)
+		if slot == "heavy" and unit.input_state.get("aim", false) and float(unit.ammo.get("heavy", 0)) <= 0:
+			_set_human_aim(unit, false)
+
+func _fire_once(unit: BattleUnit, slot: String, def: Dictionary) -> void:
+	if not _weapon_ready(unit, slot, def):
 		return
-	if slot == "heavy" and unit.has_status("clones_until", clock):
-		return
-	var def := Content.weapon(unit.character, slot, int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1)
-	if unit.reload_at.has(slot):
-		if clock < unit.reload_at[slot]:
+	if not unit.is_bot:
+		var ready := unit.recoil.gate(def, slot, clock, InputRules.moving(unit.input_state))
+		_sync_body_charge(unit)
+		if not ready:
 			return
-		unit.ammo[slot] = def.mag
-		unit.reload_at.erase(slot)
-	if clock < float(unit.fire_at.get(slot, 0)):
-		return
-	if unit.ammo.get(slot, 0) <= 0:
-		if unit.has_status("no_reload_until", clock) or unit.has_status("no_%s_reload_until" % slot, clock):
-			unit.ammo[slot] = def.mag
-		else:
-			reload_weapon(unit, slot)
-			return
-	if unit.power < def.heavyMp:
-		return
-	if def.get("needAim", false) and not unit.input_state.get("aim", false):
-		return
 	unit.ensure_weapon_pose()
-	var start := unit.weapon_pose.muzzle(unit.aim_transform(), slot, unit.flying, true, false)
+	var emission_mode := _shot_view_mode(unit, slot)
+	var start: Vector3 = _launch_pose(unit, slot, def.range, null, false, emission_mode).origin
+	if not start.is_finite():
+		message.emit(unit.peer_id, "view_unavailable")
+		return
 	var launch_surface := NAN
 	var shooter_frame := {}
 	if def.trajectory in ["guide", "fnf", "lob", "flat"]:
@@ -1492,8 +2167,8 @@ func fire(unit: BattleUnit, slot: String) -> void:
 	var control := {}
 	if def.trajectory == "lob":
 		control = fire_controls.get(unit.entity_id, {})
-		if control.is_empty() or control.clock != clock or control.camera != unit.aim_transform() or control.pose_clock != unit.weapon_pose.clock or control.direction != unit.aim_direction() or control.level != int(unit.upgrades.hw):
-			control = lob_control(unit, def)
+		if control.is_empty() or control.clock != clock or control.camera != unit.aim_transform() or control.pose_clock != unit.weapon_pose.clock or control.direction != unit.aim_direction() or control.level != unit.combat_level("heavy") or control.origin != start:
+			control = lob_control(unit, def, start)
 			fire_controls[unit.entity_id] = control
 		if control.is_empty():
 			message.emit(unit.peer_id, "unavailable_surface")
@@ -1504,32 +2179,18 @@ func fire(unit: BattleUnit, slot: String) -> void:
 		if not is_finite(reach):
 			message.emit(unit.peer_id, "unavailable_surface")
 			return
-	unit.ammo[slot] -= 1
-	unit.power -= def.heavyMp
-	unit.fire_at[slot] = clock + 1.0 / (def.rate * weather_attack_rate(unit) * (0.5 if unit.defending and unit.shield > 0 else 1.0))
-	unit.last_fired_at[slot] = clock
-	if unit.ammo[slot] <= 0 and not unit.has_status("no_reload_until", clock) and not unit.has_status("no_%s_reload_until" % slot, clock):
-		unit.reload_at[slot] = clock + def.reload * StatusRules.multiplier(unit.buffs, "reload", clock) * float(weather_dynamics.get("snowCdMul", 1))
-	if unit.has_status("alpha_arm_until", clock) and unit.has_status("stealth_until", clock):
-		_add_modifier(unit, "dmg", float(unit.status.get("alpha_multiplier", 1)), Content.constants.SELF_ATK.ALPHA_S)
-		unit.status.alpha_arm_until = 0
-	unit.status.stealth_until = 0
-	unit.play_action(slot)
-	unit.fire_serial += 1
-	unit.ensure_weapon_pose()
-	var port := unit.weapon_pose.muzzle(unit.aim_transform(), slot, unit.flying)
-	unit.weapon_pose.fire(unit.fire_serial, slot, clock, def)
-	events.append({"type": "weapon_fire", "actor": unit.entity_id, "slot": slot, "side": unit.side,
-		"serial": unit.fire_serial, "clock": clock, "muzzle": port,
-		"level": int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1})
+	var firing_direction: Vector3 = _launch_pose(unit, slot, reach, unit.aim_direction(), false, emission_mode).direction
+	unit.last_launch_direction = firing_direction
+	_spend_weapon_fire(unit, slot, def, 0, start, emission_mode)
 	if def.trajectory == "flat":
-		var state := ProjectileMotion.ballistic(start, unit.aim_direction() * def.projectile.speed, reach)
+		var state := ProjectileMotion.ballistic(start, firing_direction * def.projectile.speed, reach)
 		state.actor = unit.entity_id
 		state.side = unit.side
 		state.definition = def.duplicate(true)
 		state.origin_surface = launch_surface
 		state.shooter_frame = shooter_frame
 		state.slot = slot
+		state.visual_speed = float(def.projectile.speed)
 		_register_projectile(state)
 		return
 	if def.trajectory == "lob":
@@ -1538,25 +2199,28 @@ func fire(unit: BattleUnit, slot: String) -> void:
 		state.side = unit.side
 		state.definition = def.duplicate(true)
 		state.shooter_frame = shooter_frame
-		_register_projectile(state)
+		state.visual_speed = float(def.projectile.antiAirSpeed if control.aa else def.projectile.speed)
+		_register_projectile(state, RemoteShotState.relay(start, firing_direction, control))
 		return
 	if def.trajectory in ["guide", "fnf"]:
 		var aim := _projectile_aim(unit, reach)
-		_launch_guided(unit, def, start, aim.point, aim.hit, launch_surface, reach, shooter_frame)
+		_launch_guided(unit, def, start, aim.point, aim.hit, launch_surface, reach, shooter_frame, firing_direction)
 		return
 	var precise := _projectile_aim(unit, reach, def.area == "line")
 	var end: Vector3 = precise.point
+	var confirmed_contact := false
 	match def.area:
 		"blast":
 			blast(unit, def, end)
 		"fan":
-			_fire_fan(unit, def, start)
+			_fire_fan(unit, def, start, firing_direction)
 		"line":
 			var reference := _height_reference(unit)
 			if is_finite(reference):
 				_fire_line(unit, def, start, end, reference, _shooter_frame(unit, reference))
 		_:
 			if int(precise.missile) != 0 and start.distance_to(end) <= def.range * Content.constants.RANGE_TOL:
+				confirmed_contact = true
 				_damage_missile(unit, def, int(precise.missile))
 			var target: BattleUnit = precise.target if precise.target != null else _aim_target(unit, reach) if int(precise.missile) == 0 else null
 			if target != null:
@@ -1569,15 +2233,157 @@ func fire(unit: BattleUnit, slot: String) -> void:
 				var budget: float = def.range * _settlement_range_factor(unit, def, start, surface, target, target_surface, _shooter_frame(unit, surface)) * Content.constants.RANGE_TOL
 				var launch_budget: float = _launch_range(unit, def, target) * Content.constants.RANGE_TOL
 				if visible_to_side(target, unit.side) and visible_to(unit, target) and CombatMath.direct_in_range(budget, offset, target.radius) and CombatMath.direct_in_range(launch_budget, target.position - start, target.radius):
+					confirmed_contact = true
 					if not _roll_miss(unit, target, def):
 						var amount: float = def.dmg * CombatMath.damage_falloff(def, offset.length())
 						amount = _roll_critical(unit, target, def, amount)
 						damage(unit, target, def, amount)
-	events.append({"type": "shot", "actor": unit.entity_id, "start": start, "end": end, "side": unit.side,
-		"slot": slot, "weapon_type": def.type, "area": def.area})
+	_emit_body_event({"type": "shot", "hero_report": true, "actor": unit.entity_id, "start": start, "end": end, "side": unit.side,
+		"slot": slot, "weapon_type": def.type, "area": def.area, "level": unit.combat_level(slot),
+		"direction": firing_direction, "range": reach, "hit": confirmed_contact, "shot_serial": unit.fire_serial})
 
-func lob_control(unit: BattleUnit, def: Dictionary) -> Dictionary:
-	var origin := _advisory_origin(unit)
+func _apply_recoil(unit: BattleUnit, definition: Dictionary, slot: String, direction: Vector3, echo: bool = false) -> void:
+	var back := unit.recoil.accepted(definition, slot, clock, unit.flying, _recoil_next, echo)
+	if back == 0:
+		return
+	if unit.flying:
+		unit.velocity -= direction * back
+	else:
+		unit.impulse_velocity -= Vector2(direction.x, direction.z) * back
+		unit.velocity.y -= direction.y * back
+
+func _recoil_next() -> float:
+	return recoil_random.randf()
+
+func _tick_recoil_echoes(unit: BattleUnit) -> void:
+	for echo: Dictionary in unit.recoil.echoes.take_due(clock):
+		var definition: Dictionary = echo.payload.definition
+		var direction := unit.aim_direction()
+		if unit.view_mode == "tps":
+			var reach := _launch_range(unit, definition, _aim_target(unit, TargetingMath.maximum_range(definition)))
+			if not is_finite(reach):
+				continue
+			direction = _launch_pose(unit, echo.payload.slot, reach, direction).direction
+		_emit_body_event({"type": "body_echo", "actor": unit.entity_id, "slot": echo.payload.slot})
+		_apply_recoil(unit, definition, echo.payload.slot, direction, true)
+
+func _weapon_ready(unit: BattleUnit, slot: String, definition: Dictionary, source_cadence: bool = false, lenient: bool = false, reload_back: float = 0.0) -> bool:
+	if not authoritative or over or not unit.alive() or not unit.is_pilot() or unit.has_status("emp_until", clock) or unit.has_status("blind_until", clock):
+		return false
+	if source_cadence:
+		_refill_if_done(unit, slot, definition)
+	if unit.has_status("phase_until", clock) or unit.has_status("cast_lock_until", clock) or not unit.cast_state.is_empty() or not source_cadence and unit.has_status("freeze_until", clock):
+		return false
+	if slot == "heavy" and unit.has_status("clones_until", clock):
+		return false
+	if not source_cadence:
+		_refill_if_done(unit, slot, definition)
+	if float(unit.reload_at.get(slot, 0)) > clock:
+		return false
+	if source_cadence:
+		var rate := _weapon_rate(unit, definition)
+		if clock - float(unit.last_fired_at.get(slot, 0)) < 1 / (rate * (1.5 if lenient else 1.0)):
+			return false
+	elif clock < float(unit.fire_at.get(slot, 0)):
+		return false
+	if not unit.ammo.has(slot):
+		unit.ammo[slot] = definition.mag
+	if float(unit.ammo[slot]) <= 0:
+		if unit.has_status("no_reload_until", clock) or unit.has_status("no_%s_reload_until" % slot, clock):
+			unit.ammo[slot] = definition.mag
+		else:
+			if source_cadence:
+				unit.reload_at[slot] = clock - reload_back + _reload_duration(unit, definition)
+			else:
+				reload_weapon(unit, slot)
+			return false
+	if unit.power < float(definition.heavyMp):
+		return false
+	return source_cadence and not lenient or not definition.get("needAim", false) or unit.input_state.get("aim", false)
+
+func _spend_weapon_fire(unit: BattleUnit, slot: String, definition: Dictionary, reload_back: float = 0.0, origin: Vector3 = Vector3(NAN, NAN, NAN), emission_mode: String = "") -> void:
+	unit.ammo[slot] -= 1
+	unit.power -= definition.heavyMp
+	unit.fire_at[slot] = clock + 1.0 / _weapon_rate(unit, definition)
+	unit.last_fired_at[slot] = clock
+	if unit.ammo[slot] <= 0 and not unit.has_status("no_reload_until", clock) and not unit.has_status("no_%s_reload_until" % slot, clock):
+		unit.reload_at[slot] = clock - reload_back + _reload_duration(unit, definition)
+	if unit.has_status("alpha_arm_until", clock) and unit.has_status("stealth_until", clock):
+		_add_modifier(unit, "dmg", float(unit.status.get("alpha_multiplier", 1)), Content.constants.SELF_ATK.ALPHA_S)
+		unit.status.alpha_arm_until = 0
+	unit.status.stealth_until = 0
+	unit.play_action(slot)
+	unit.fire_serial += 1
+	unit.ensure_weapon_pose()
+	var port := origin
+	if not origin.is_finite():
+		port = _launch_pose(unit, slot, definition.range, null, true).origin
+	elif emission_mode != "tps":
+		unit.weapon_pose.muzzle(unit.aim_transform(), slot, unit.flying)
+	unit.weapon_pose.fire(unit.fire_serial, slot, clock, definition)
+	_emit_body_event({"type": "weapon_fire", "actor": unit.entity_id, "slot": slot, "side": unit.side,
+		"public_pose": not unit.is_bot,
+		"serial": unit.fire_serial, "clock": clock, "muzzle": port, "empty_heavy": slot == "heavy" and unit.ammo[slot] <= 0, "aim_request": unit.aim_request,
+		"level": unit.combat_level(slot)})
+
+func _bot_fire(unit: BattleUnit, target: BattleUnit, slot: String, mode: String = "direct") -> bool:
+	if not authoritative or over or not unit.alive() or not unit.is_pilot() or target == null or target.side == unit.side or slot not in ["light", "heavy"] or mode not in ["direct", "burst", "fan"]:
+		return false
+	var definition := Content.weapon(unit.character, slot, unit.combat_level(slot))
+	var altitude := _missile_target_altitude(unit)
+	var target_altitude := _missile_target_altitude(target) if target.is_hero() else 0.0
+	var offset := Vector3(target.position.x - unit.position.x, target_altitude - altitude, target.position.z - unit.position.z)
+	var reach: float = definition.range * CombatMath.altitude_range(definition, _height_difference(unit, target)) * StatusRules.multiplier(unit.buffs, "range", clock)
+	var origin := unit.position + Vector3.UP * float(Content.constants.LOS.EYE_M)
+	var endpoint := target.sight_target()
+	var back := 0.0
+	var burst_origin := Vector2(unit.position.x, unit.position.z)
+	if mode == "burst":
+		var cap: float = definition.projectile.fuel if definition.trajectory == "fnf" else definition.projectile.flightCap
+		var previous := ShotHistory.origin(unit.position_trail, clock, Vector2(unit.position.x, unit.position.z), Vector2(target.position.x, target.position.z), definition, cap)
+		var maximum: float = TargetingMath.maximum_range(definition) * Content.constants.RANGE_TOL
+		var distance: float = previous.point.distance_to(Vector2(target.position.x, target.position.z))
+		var height := _missile_target_altitude(target) if target.is_hero() or target.kind == "heli" else 0.0
+		if distance > maximum or definition.trajectory == "lob" and distance > CombatMath.max_horizontal(maximum, height - altitude):
+			return false
+		back = previous.back
+		burst_origin = previous.point
+	elif mode == "direct" and offset.length() > reach and not (offset.y < 0 and CombatMath.in_range(reach, offset, target.radius)):
+		return false
+	if mode != "fan" and not _bot_clear_shot(unit, target) or not _weapon_ready(unit, slot, definition, true, mode != "direct", back):
+		return false
+	_spend_weapon_fire(unit, slot, definition, back)
+	if mode == "direct":
+		unit.bot_shot_count += 1
+	if mode == "burst" or mode == "direct" and (slot == "heavy" or unit.bot_shot_count % 3 == 0):
+		_emit_body_event({"type": "shot", "hero_report": true, "bot_report": true, "actor": unit.entity_id,
+			"start": origin, "end": endpoint, "side": unit.side, "slot": slot,
+			"weapon_type": definition.type, "area": definition.area, "shot_serial": unit.fire_serial})
+	if mode == "burst":
+		var height := _missile_target_altitude(target) if target.is_hero() or target.kind == "heli" else 0.0
+		var impact := Vector3(target.position.x, clampf(height, 0, 400), target.position.z)
+		var friendly := LobFireControl.friendly_impact(definition, Vector3(burst_origin.x, altitude, burst_origin.y), impact)
+		_publish_blast_event({"type": "boom", "actor": unit.entity_id, "position": _missile_world_position(impact), "radius": definition.r, "side": unit.side})
+		blast(unit, definition, impact, friendly, true, 0)
+	elif mode == "fan":
+		var direction := Vector3(target.position.x - unit.position.x, _relative_target(target).y - altitude - Content.constants.LOS.EYE_M, target.position.z - unit.position.z).normalized()
+		_fire_fan(unit, definition, origin, direction)
+		_emit_body_event({"type": "plasma", "plasma_report": true, "actor": unit.entity_id, "position": unit.position, "direction": direction,
+			"start": origin, "radius": definition.range, "arc": definition.arc if definition.arc else 15,
+			"level": unit.combat_level(slot), "slot": slot, "side": unit.side})
+	else:
+		if not _roll_miss(unit, target, definition):
+			var amount := _roll_critical(unit, target, definition, float(definition.dmg) * CombatMath.damage_falloff(definition, offset.length()))
+			_apply_hit_emp(definition, target)
+			_apply_hit_elements(unit, definition, target)
+			damage(unit, target, definition, amount * _weapon_multiplier(unit, target, definition), false, {"origin": unit.position}, false)
+			if definition.area == "line":
+				var direction := Vector3(target.position.x - unit.position.x, _relative_target(target).y - altitude - Content.constants.LOS.EYE_M, target.position.z - unit.position.z).normalized()
+				_fire_line(unit, definition, origin, origin + direction * reach, _height_reference(unit), {}, {"skip": target.entity_id, "critical": false, "intercept": false, "maximum": reach})
+	return true
+
+func lob_control(unit: BattleUnit, def: Dictionary, launch_origin: Vector3 = Vector3(NAN, NAN, NAN)) -> Dictionary:
+	var origin := launch_origin if launch_origin.is_finite() else _advisory_origin(unit, "heavy")
 	var direction := unit.aim_direction()
 	var maximum := TargetingMath.maximum_range(def)
 	var crosshair := _projectile_aim(unit, maximum)
@@ -1599,7 +2405,7 @@ func lob_control(unit: BattleUnit, def: Dictionary) -> Dictionary:
 	control.camera = unit.aim_transform()
 	control.pose_clock = unit.weapon_pose.clock
 	control.direction = direction
-	control.level = int(unit.upgrades.hw)
+	control.level = unit.combat_level("heavy")
 	control.target = target.entity_id if target != null else 0
 	return control
 
@@ -1650,7 +2456,7 @@ func _tick_lock(unit: BattleUnit) -> void:
 	if clock - unit.lock_at > Content.constants.LOCK.TTL:
 		unit.aim_anchor = 0
 	var slot := "heavy" if unit.input_state.get("aim", false) else "light"
-	var def := Content.weapon(unit.character, slot, int(unit.upgrades.hw if slot == "heavy" else unit.upgrades.lw) + 1)
+	var def := Content.weapon(unit.character, slot, unit.combat_level(slot))
 	var target := _aim_target(unit, TargetingMath.maximum_range(def))
 	var primary := {}
 	if target != null:
@@ -1658,7 +2464,7 @@ func _tick_lock(unit: BattleUnit) -> void:
 		primary = {"id": target.entity_id, "distance": unit.position.distance_to(target.position) - target.radius,
 			"reach": _launch_range(unit, def, target) * multiplier}
 	var flights: Array = []
-	var heavy := Content.weapon(unit.character, "heavy", int(unit.upgrades.hw) + 1)
+	var heavy := Content.weapon(unit.character, "heavy", unit.combat_level("heavy"))
 	if heavy.trajectory == "fnf":
 		for projectile: Dictionary in projectiles:
 			if projectile.actor != unit.entity_id or int(projectile.get("target", 0)) == 0:
@@ -1683,12 +2489,16 @@ func _confirm_lock(unit: BattleUnit, target_id: int) -> void:
 	var target: BattleUnit = units.get(target_id)
 	if target == null or not unit.alive() or not target.alive() or target.side == unit.side or not visible_to_side(target, unit.side) or not visible_to(unit, target):
 		return
+	if target.special.get("neutral", false) or target.special.get("garrison", false):
+		return
+	if unit.side == Content.constants.SUPER_SIDE and target.side in ["GUER", "MILI"] or target.side == Content.constants.SUPER_SIDE and unit.side in ["GUER", "MILI"]:
+		return
 	var slot := "heavy" if unit.input_state.get("aim", false) else "light"
 	if slot == "light" and unit.lock_target == target_id and clock - unit.lock_at <= Content.constants.LOCK.TTL:
-		var heavy := Content.weapon(unit.character, "heavy", int(unit.upgrades.hw) + 1)
+		var heavy := Content.weapon(unit.character, "heavy", unit.combat_level("heavy"))
 		if clock - unit.aim_off_at <= heavy.projectile.flightCap:
 			slot = "heavy"
-	var def := Content.weapon(unit.character, slot, int(unit.upgrades.hw if slot == "heavy" else unit.upgrades.lw) + 1)
+	var def := Content.weapon(unit.character, slot, unit.combat_level(slot))
 	var surface := _projectile_surface(unit.position)
 	var target_surface := _projectile_surface(target.position)
 	if not is_finite(surface) or not is_finite(target_surface):
@@ -1703,6 +2513,8 @@ func _confirm_lock(unit: BattleUnit, target_id: int) -> void:
 	unit.lock_target = target_id
 	unit.aim_anchor = target_id
 	unit.lock_at = clock
+	events.append({"type": "lock", "actor": unit.entity_id, "peer": unit.peer_id,
+		"side": unit.side, "target": target_id, "target_peer": target.peer_id if target.is_hero() else 0})
 
 func _hit_unit(hit: Dictionary) -> BattleUnit:
 	if hit.is_empty() or not hit.has("collider"):
@@ -1712,8 +2524,10 @@ func _hit_unit(hit: Dictionary) -> BattleUnit:
 	return hit.collider.get_parent() as BattleUnit
 
 func _projectile_aim(unit: BattleUnit, reach: float, pierce: bool = false) -> Dictionary:
-	var origin := unit.view_origin()
-	var end := origin + unit.aim_direction() * reach
+	return _projectile_ray(unit, unit.view_origin(), unit.aim_direction(), reach, pierce)
+
+func _projectile_ray(unit: BattleUnit, origin: Vector3, direction: Vector3, reach: float, pierce: bool = false) -> Dictionary:
+	var end := origin + direction * reach
 	var excluded: Array[RID] = []
 	for candidate: BattleUnit in units.values():
 		if candidate.side == unit.side or not candidate.alive() or not visible_to_side(candidate, unit.side):
@@ -1733,7 +2547,7 @@ func _arc_collision(start: Vector3, end: Vector3) -> Dictionary:
 	query.hit_back_faces = true
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
-func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vector3, hit: Dictionary, surface: float, reach: float, shooter_frame: Dictionary) -> void:
+func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vector3, hit: Dictionary, surface: float, reach: float, shooter_frame: Dictionary, direction: Vector3 = Vector3(NAN, NAN, NAN)) -> void:
 	var target_id := 0
 	var launch_def := def.duplicate(true)
 	if def.trajectory == "fnf":
@@ -1745,7 +2559,7 @@ func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vect
 		if target != null and target.alive() and target.side != unit.side and visible_to_side(target, unit.side):
 			if def.trajectory == "guide" and def.type == "launcher" and CombatMath.target_class(target.kind) == "air":
 				launch_def.projectile.speed = launch_def.projectile.antiAirSpeed
-	var state := ProjectileMotion.launch(launch_def, start, unit.aim_direction(), surface,
+	var state := ProjectileMotion.launch(launch_def, start, direction if direction.is_finite() else unit.aim_direction(), surface,
 		projectile_rng.next(), projectile_rng.next(), aim, target_id)
 	state.actor = unit.entity_id
 	state.side = unit.side
@@ -1755,10 +2569,18 @@ func _launch_guided(unit: BattleUnit, def: Dictionary, start: Vector3, aim: Vect
 	state.shooter_frame = shooter_frame
 	_register_projectile(state)
 
-func _register_projectile(state: Dictionary) -> void:
+func _register_projectile(state: Dictionary, relay: Dictionary = {}) -> void:
 	var unit: BattleUnit = units[state.actor]
 	state.visual_id = "%d/%d" % [unit.entity_id, unit.fire_serial]
 	projectiles.append(state)
+	var definition: Dictionary = state.definition
+	var report := RemoteShotState.relay(state.origin, unit.last_launch_direction) if relay.is_empty() else relay
+	var event := {"type": "shot", "hero_report": true, "remote_only": true, "actor": unit.entity_id,
+		"start": state.origin, "end": report.target, "slot": definition.slot, "area": definition.area,
+		"weapon_type": definition.type, "side": unit.side, "shot_serial": unit.fire_serial}
+	if report.speed != null:
+		event.mv = report.speed
+	_emit_body_event(event)
 
 func projectile_view(viewer: BattleUnit) -> Array:
 	var states: Array = []
@@ -1769,21 +2591,29 @@ func projectile_view(viewer: BattleUnit) -> Array:
 			continue
 		var definition: Dictionary = state.definition
 		states.append({"id": state.visual_id, "key": "%s-%s-%s" % [definition.ch, definition.slot, state.side.to_lower()],
-			"position": state.position, "velocity": state.velocity, "age": state.age})
+			"position": state.position, "velocity": state.velocity, "age": state.age,
+			"speed": float(state.get("visual_speed", definition.projectile.speed))})
 	return states
 
 func present_echo(definition: Dictionary, origin: Vector3, unit: BattleUnit) -> void:
 	if world == null or over or not unit.alive():
 		return
+	_fire_squad_clones(unit, definition.slot, -1, presentation_time())
 	var reach := _launch_range(unit, definition, _aim_target(unit, TargetingMath.maximum_range(definition)))
 	if not is_finite(reach):
 		return
 	var presentation := world.ensure_projectile_visuals()
+	var direction := unit.aim_direction()
+	if unit.render_view_mode == "tps" and unit.camera != null:
+		direction = unit.camera.global_basis * Vector3.FORWARD
 	if definition.type in ["beam", "rail"]:
-		var point: Vector3 = _projectile_aim(unit, reach, definition.area == "line").point
+		var ray: Dictionary = _projectile_ray(unit, unit.camera.global_position, direction, reach, definition.area == "line") if unit.render_view_mode == "tps" and unit.camera != null else _projectile_aim(unit, reach, definition.area == "line")
+		var point: Vector3 = ray.point
 		presentation.tracer(origin, point, _fpv_tracer_color(definition.type, unit.side))
 		return
-	var target := origin + unit.aim_direction() * reach
+	if unit.render_view_mode == "tps" and unit.camera != null:
+		direction = SourceQuaternion.vector_normalized(unit.camera.global_position + direction * reach - origin)
+	var target := origin + direction * reach
 	var ground := world.ground_height(target.x, target.z) if definition.type == "launcher" else NAN
 	var surface := _weapon_surface(origin) if definition.trajectory in ["guide", "fnf"] else NAN
 	if (definition.type == "launcher" and not is_finite(ground)) or (definition.trajectory in ["guide", "fnf"] and not is_finite(surface)):
@@ -1855,6 +2685,10 @@ func _tick_projectiles(delta: float) -> void:
 		if not terminal:
 			continue
 		projectiles.remove_at(index)
+		if def.trajectory == "flat" and def.area == "line":
+			_emit_body_event({"type": "projectile_terminal", "actor": state.actor, "slot": def.slot, "side": state.side,
+				"level": float(def.get("lvl", 1)), "start": state.origin, "end": endpoint,
+				"visual_id": state.get("visual_id", ""), "clock": clock})
 		var attacker: BattleUnit = units.get(state.actor)
 		if attacker == null or not attacker.alive():
 			continue
@@ -1891,9 +2725,12 @@ func _tick_projectiles(delta: float) -> void:
 			push_error("Projectile impact has no verified standing surface")
 			continue
 		var height := maxf(endpoint.y, surface + 1)
+		_publish_local_blast(attacker, BlastFeedback.local_point(endpoint, world.ground_height(endpoint.x, endpoint.z), tunnel), BlastFeedback.local_radius(def.get("r")))
 		# Source burst reports quantize height above the standing surface to decimetres.
 		endpoint.y = surface + roundf((height - surface) * 10) / 10
 		var friendly := LobFireControl.friendly_impact(def, state.shooter_frame.position if state.has("shooter_frame") else state.origin, endpoint)
+		var report_point := _missile_world_position(Vector3(endpoint.x, endpoint.y - surface, endpoint.z))
+		_publish_blast_event({"type": "boom", "actor": attacker.entity_id, "position": report_point, "radius": float(def.get("r", 0)), "side": attacker.side})
 		blast(attacker, def, Vector3(endpoint.x, maxf(0, endpoint.y - surface), endpoint.z), friendly, true, level)
 
 func blast(unit: BattleUnit, def: Dictionary, impact: Vector3, friendly: bool = false, relative_heights: bool = false, impact_level: int = -1, npc_damage: float = NAN) -> void:
@@ -1930,11 +2767,14 @@ func blast(unit: BattleUnit, def: Dictionary, impact: Vector3, friendly: bool = 
 				_apply_hit_elements(null, def, target)
 				damage(null, target, def, amount * _weapon_multiplier(unit, target, def), friendly, context, false)
 			else:
-				damage(unit, target, def, amount, friendly, context)
+				_apply_hit_elements(unit, def, target)
+				damage(unit, target, def, amount * _weapon_multiplier(unit, target, def), friendly, context, false)
 
-func _fire_fan(unit: BattleUnit, def: Dictionary, origin: Vector3 = Vector3(INF, INF, INF)) -> void:
+func _fire_fan(unit: BattleUnit, def: Dictionary, origin: Vector3 = Vector3(INF, INF, INF), direction: Vector3 = Vector3(INF, INF, INF)) -> void:
 	if not origin.is_finite():
 		origin = _advisory_origin(unit)
+	if not direction.is_finite():
+		direction = unit.aim_direction()
 	var reference := _height_reference(unit)
 	if not is_finite(reference):
 		return
@@ -1954,8 +2794,10 @@ func _fire_fan(unit: BattleUnit, def: Dictionary, origin: Vector3 = Vector3(INF,
 		candidates.append({"id": target.entity_id, "kind": target.kind, "position": position,
 			"radius": target.radius, "height": target.height, "range_factor": range_factor})
 	var relative_origin := Vector3(origin.x, origin.y - reference, origin.z)
-	for hit in CombatMath.fan_hits(def, relative_origin, unit.aim_direction(), candidates):
-		damage(unit, units[hit.id], def, hit.amount, false, {"origin": origin})
+	for hit in CombatMath.fan_hits(def, relative_origin, direction, candidates):
+		var target: BattleUnit = units[hit.id]
+		_apply_hit_elements(unit, def, target)
+		damage(unit, target, def, hit.amount * _weapon_multiplier(unit, target, def), false, {"origin": origin}, false)
 
 func _visible_from(origin: Vector3, target: BattleUnit) -> bool:
 	if not cubic_cages.is_empty():
@@ -1971,22 +2813,61 @@ func _shooter_frame(unit: BattleUnit, surface: float) -> Dictionary:
 		"eye_y": unit.global_position.y + unit.view_eye_height(), "sight_y": unit.global_position.y - surface + Content.constants.LOS.EYE_M, "surface": surface}
 
 func camera_origin(unit: BattleUnit) -> Vector3:
+	return camera_origin_at(unit, unit.yaw)
+
+func camera_origin_at(unit: BattleUnit, yaw: float) -> Vector3:
+	if unit.view_mode == "tps":
+		# Ring framing uses only the vertical projection coefficient.
+		var projection := Projection.create_perspective(unit.authority_fov, 1.0, float(Content.balance.cameraRules.near), 3500)
+		return third_person_camera(unit, yaw, unit.pitch, projection, unit.ring_height()).origin
+	return first_person_camera_origin_at(unit, yaw)
+
+func first_person_camera_origin_at(unit: BattleUnit, yaw: float) -> Vector3:
 	var position := unit.global_position
-	var signature: Array = [position, unit.yaw, unit.flying, unit.character, unit.charge]
+	var scale_factor := SuperRules.body_scale(float(unit.upgrades.get("super", 0)))
+	var colliders := _camera_colliders()
+	var signature: Array = [position, yaw, unit.flying, unit.character, unit.charge, scale_factor, colliders]
 	var frame := Engine.get_physics_frames()
 	if unit.camera_cache_frame == frame and unit.camera_cache_signature == signature:
 		return unit.camera_cache_origin
-	var camera := CameraPose.anchor(unit.character, position, unit.yaw, unit.flying, unit.charge)
+	var camera := CameraPose.anchor(unit.character, position, yaw, unit.flying, unit.charge, scale_factor)
 	if world == null:
 		return camera
 	var blockers: Array = world.active_columns if world.native_data != null else []
 	var surface := _weapon_surface(position)
-	camera = CameraPose.clip(position, camera, unit.view_eye_height(), blockers, [], _unit_level(unit) == 1, surface,
+	camera = CameraPose.clip(position, camera, unit.view_eye_height(), blockers, colliders, _unit_level(unit) == 1, surface,
 		func(start: Vector3, end: Vector3): return world.obstruction_hit(start, end, false), _weapon_surface)
 	unit.camera_cache_frame = frame
 	unit.camera_cache_signature = signature
 	unit.camera_cache_origin = camera
 	return camera
+
+func _camera_colliders() -> Array:
+	var result: Array = []
+	if not Content.balance.has("playerView"):
+		return result
+	for entity: BattleUnit in units.values():
+		if entity.special.get("role") != "hazard":
+			continue
+		var collider := CameraPose.entity_collider(entity.kind, float(entity.special.get("scale", 1)), entity.special.get("collapsed", false))
+		if float(collider.colR) == 0:
+			continue
+		collider.position = entity.global_position
+		result.append(collider)
+	return result
+
+func third_person_camera(unit: BattleUnit, yaw: float, pitch: float, projection: Projection, ring_y: float = NAN, roll: float = 0.0) -> Transform3D:
+	var position := unit.global_position
+	var height := CameraPose.body_height(unit.character, unit.flying, SuperRules.body_scale(float(unit.upgrades.get("super", 0))))
+	var camera := CameraPose.third_person_anchor(position, height, yaw, pitch, _weapon_surface)
+	if world != null:
+		var blockers: Array = world.active_columns if world.native_data != null else []
+		camera = CameraPose.clip(position, camera, height * float(Content.balance.playerView.pullHeight), blockers, _camera_colliders(),
+			_unit_level(unit) == 1, _weapon_surface(position),
+			func(start: Vector3, end: Vector3): return world.obstruction_hit(start, end, false), _weapon_surface)
+	var frame := Transform3D(unit.recoil.third_person_basis(yaw, pitch, roll), camera)
+	# Source framing follows clipping and intentionally has no second floor/clip pass.
+	return CameraPose.frame_ring(frame, projection, Vector3(position.x, ring_y, position.z)) if is_finite(ring_y) else frame
 
 func _launch_range_from_frame(def: Dictionary, frame: Dictionary, target: BattleUnit, target_surface: float) -> float:
 	var position: Vector3 = frame.position
@@ -1995,11 +2876,15 @@ func _launch_range_from_frame(def: Dictionary, frame: Dictionary, target: Battle
 		{"hero": target.is_hero(), "position": target.position, "kind": target.kind,
 		"altitude": target.position.y - target_surface})
 
-func _advisory_origin(unit: BattleUnit) -> Vector3:
+func _advisory_origin(unit: BattleUnit, slot: String = "") -> Vector3:
 	unit.ensure_weapon_pose()
+	if unit.view_mode == "tps":
+		return _launch_pose(unit, slot if not slot.is_empty() else str(unit.input_state.get("slot", "light")), 0).origin
 	return unit.weapon_pose.current_muzzle(unit.aim_transform())
 
 func _settlement_range_factor(unit: BattleUnit, def: Dictionary, origin: Vector3, origin_surface: float, target: BattleUnit, target_surface: float, shooter_frame: Dictionary = {}) -> float:
+	if unit.is_bot:
+		return CombatMath.altitude_range(def, _height_difference(unit, target)) * StatusRules.multiplier(unit.buffs, "range", clock)
 	var gap: float
 	if target.is_pilot():
 		gap = shooter_frame.get("eye_y", origin.y) - (target.global_position.y + target.view_eye_height())
@@ -2014,12 +2899,12 @@ func _settlement_range_factor(unit: BattleUnit, def: Dictionary, origin: Vector3
 			factor *= buff.get("mul", {}).get("range", 1.0)
 	return factor
 
-func _fire_line(unit: BattleUnit, def: Dictionary, origin: Vector3, endpoint: Vector3, origin_surface: float = NAN, shooter_frame: Dictionary = {}) -> void:
+func _fire_line(unit: BattleUnit, def: Dictionary, origin: Vector3, endpoint: Vector3, origin_surface: float = NAN, shooter_frame: Dictionary = {}, options: Dictionary = {}) -> void:
 	var candidates: Array = []
 	var segment := endpoint - origin
 	if segment.length() < 0.01:
 		return
-	var maximum: float = def.range * (1 + Content.constants.ALTITUDE.RANGE * Content.constants.ALTITUDE.RANGE_HEAVY_MUL)
+	var maximum: float = options.get("maximum", def.range * (1 + Content.constants.ALTITUDE.RANGE * Content.constants.ALTITUDE.RANGE_HEAVY_MUL))
 	var length := minf(segment.length(), maximum)
 	var direction := segment.normalized()
 	if not is_finite(origin_surface):
@@ -2045,8 +2930,13 @@ func _fire_line(unit: BattleUnit, def: Dictionary, origin: Vector3, endpoint: Ve
 			"range_factor": _settlement_range_factor(unit, def, origin, origin_surface, target, surface, shooter_frame)})
 	var relative_origin := Vector3(origin.x, origin.y - origin_surface, origin.z)
 	for hit in CombatMath.line_hits(def, relative_origin, direction, length, candidates):
+		if int(hit.id) == int(options.get("skip", 0)):
+			continue
 		var target: BattleUnit = units[hit.id]
-		damage(unit, target, def, _roll_critical(unit, target, def, hit.amount), false, {"origin": origin, "direction": direction})
+		var amount: float = _roll_critical(unit, target, def, hit.amount) if options.get("critical", true) else float(hit.amount)
+		damage(unit, target, def, amount, false, {"origin": origin, "direction": direction})
+	if not options.get("intercept", true):
+		return
 	for missile: Dictionary in missiles.duplicate():
 		if missile.side != unit.side and MissileMotion.line_contains(def, relative_origin, direction, length, missile.position):
 			_damage_missile(unit, def, int(missile.id), relative_origin)
@@ -2078,8 +2968,12 @@ func _tick_base_guns(unit: BattleUnit, guns: Dictionary, delta: float) -> void:
 			"position": origin, "origin": origin, "speed": config.SPEED, "dmg": guns.dmg,
 			"pen": definition.pen, "r": definition.r, "hp": config.HP, "max_hp": config.HP,
 			"ttl": guns.range / config.SPEED + config.TTL_PAD, "range": guns.range})
-		events.append({"type": "shot", "actor": unit.entity_id, "start": _missile_world_position(origin),
-			"end": _missile_world_position(origin), "side": unit.side, "gun": index})
+		var shot := {"type": "shot", "actor": unit.entity_id, "kind": unit.kind, "start": _missile_world_position(origin),
+			"end": _npc_shot_point(target), "side": unit.side, "gun": index}
+		if unit.body_presentation != null:
+			_emit_body_event(shot)
+		else:
+			events.append(shot)
 
 func _launch_missile(state: Dictionary) -> void:
 	if not authoritative or over:
@@ -2131,15 +3025,42 @@ func _tick_missiles(delta: float) -> void:
 	for index in range(missiles.size() - 1, -1, -1):
 		var state: Dictionary = missiles[index]
 		var target: BattleUnit = units.get(int(state.target))
+		# TTL expires before attraction, including attraction away from a dead original target.
+		if target != null and not state.get("lost", false) and float(state.ttl) - delta > 0:
+			var decoys: Array = []
+			for id: int in hologram_decoys:
+				var decoy: BattleUnit = units.get(id)
+				if decoy == null:
+					continue
+				decoys.append({"id": id, "hp": decoy.hp, "dead": not decoy.alive(), "side": decoy.side,
+					"position": Vector3(decoy.position.x, _missile_target_altitude(decoy), decoy.position.z)})
+			var kamis: Array = []
+			if target.is_hero() and target.kind == "drone":
+				for id: int in target.carrier_ids:
+					var carrier: BattleUnit = units.get(id)
+					if carrier != null and carrier.kind == "kami":
+						kamis.append({"id": id, "hp": carrier.hp,
+							"position": Vector3(carrier.position.x, _missile_target_altitude(carrier), carrier.position.z)})
+			state.target = MissileMotion.attracted_target(state, target.side, decoys, kamis)
+			target = units.get(int(state.target))
 		var target_data := {}
 		if target != null and target.alive():
 			var altitude := _missile_target_altitude(target)
 			if is_finite(altitude):
 				target_data.position = Vector3(target.position.x, altitude, target.position.z)
+				target_data.phase = target.is_hero() and target.has_status("phase_until", clock)
+				target_data.reflect = target.is_hero() and target.has_status("reflect_until", clock)
+				target_data.yaw = target.facing_yaw()
+				target_data.reflect_arc = target.status.get("reflect_arc", deg_to_rad(120.0))
 		var outcome := MissileMotion.advance(state, delta, target_data, _missile_obstruction)
 		if not outcome.get("remove", false):
 			continue
 		_remove_missile(int(state.id))
+		if outcome.get("deflected", false):
+			events.append({"type": "reflect_hit", "actor": target.entity_id, "missile": state.id,
+				"position": _missile_world_position(outcome.reflection), "side": target.side, "deflected": true})
+			_publish_blast_event({"type": "missile_deflect", "actor": target.entity_id, "missile": state.id,
+				"position": _missile_world_position(outcome.flash), "radius": state.r, "side": target.side})
 		if outcome.has("blast"):
 			var point := _missile_world_position(outcome.blast)
 			if not point.is_finite():
@@ -2151,10 +3072,10 @@ func _tick_missiles(delta: float) -> void:
 				owner.side = state.side
 			var victim: BattleUnit = units.get(int(outcome.get("target", 0)))
 			var level := _unit_level(victim) if victim != null else -1
-			blast(owner, {"dmg": state.dmg, "pen": state.pen, "r": state.r}, outcome.blast, false, true, level)
+			blast(owner, {"pen": state.pen, "r": state.r}, outcome.blast, false, true, level, state.dmg)
 			if detached:
 				owner.free()
-			events.append({"type": "missile_blast", "actor": state.actor, "missile": state.id,
+			_publish_blast_event({"type": "missile_blast", "actor": state.actor, "missile": state.id,
 				"position": point, "radius": state.r, "side": state.side})
 	_sync_missile_bodies()
 
@@ -2173,9 +3094,10 @@ func _remove_missile(id: int) -> void:
 func _damage_missile(unit: BattleUnit, def: Dictionary, id: int, origin: Vector3 = Vector3(INF, INF, INF)) -> void:
 	if not authoritative or over or not unit.alive():
 		return
+	if unit.has_status("blind_until", clock) or unit.has_status("emp_until", clock):
+		return
 	if def.get("needAim", false) and not unit.input_state.get("aim", false):
-		if not origin.is_finite() or clock - unit.aim_off_at > def.projectile.flightCap:
-			return
+		return
 	if not origin.is_finite():
 		var altitude := _missile_target_altitude(unit)
 		if not is_finite(altitude):
@@ -2192,12 +3114,14 @@ func _damage_missile(unit: BattleUnit, def: Dictionary, id: int, origin: Vector3
 		for buff: Dictionary in unit.buffs:
 			if buff.until > clock:
 				amount *= buff.get("mul", {}).get("dmg", 1.0)
+		if unit.special.get("boss", false) and int(unit.special.get("boss_segment", 0)) >= 3:
+			amount *= float(Content.constants.BOSS.ENRAGE_DMG_F)
 		state.hp -= amount
 		if state.hp <= 0:
 			var point := _missile_world_position(state.position)
 			_remove_missile(id)
 			unit.money += Content.constants.ECON.BOUNTY.missile
-			events.append({"type": "missile_intercept", "actor": unit.entity_id, "missile": id,
+			_publish_blast_event({"type": "missile_intercept", "actor": unit.entity_id, "missile": id,
 				"position": point, "radius": Content.balance.missile.interceptRadius, "side": unit.side})
 		return
 
@@ -2228,6 +3152,8 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 		return
 	if attacker != null and (attacker.side == Content.constants.SUPER_SIDE and target.side in ["GUER", "MILI"] or target.side == Content.constants.SUPER_SIDE and attacker.side in ["GUER", "MILI"]):
 		return
+	if siege_locked(target):
+		return
 	if attack_modifiers:
 		if def.get("area") not in ["fan", "blast"] and not context.has("blast"):
 			_apply_hit_emp(def, target)
@@ -2235,13 +3161,16 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 		amount *= _weapon_multiplier(attacker, target, def)
 	if context.get("weather_weapon", not def.is_empty()) and not reflecting:
 		amount *= float(weather_dynamics.get("rainAtkMul", 1))
+	amount *= _ally_bot_damage_factor(target, attacker)
+	if target.special.get("boss", false) and int(target.special.get("boss_segment", 0)) >= 3 and (attacker == null or not attacker.is_hero()):
+		amount *= float(Content.constants.BOSS.ENRAGE_NPC_DMG_F)
 	if target.has_status("freeze_until", clock):
 		amount *= 1 - Content.constants.WEATHER_FREEZE.DMG_REDUCTION
 	if target.has_status("inv_until", clock) or target.has_status("phase_until", clock):
 		return
 	if target.has_status("reflect_until", clock) and attacker != null:
 		var offset := Vector2(attacker.position.x - target.position.x, attacker.position.z - target.position.z)
-		var forward := Vector2(-sin(target.yaw), -cos(target.yaw))
+		var forward := Vector2(-sin(target.facing_yaw()), -cos(target.facing_yaw()))
 		if offset.length() > 0.01 and forward.dot(offset.normalized()) >= cos(float(target.status.get("reflect_arc", deg_to_rad(120))) / 2):
 			var reflected: float = amount * float(target.status.get("reflect_ratio", 0.6))
 			if not same and not reflecting:
@@ -2250,6 +3179,14 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 				reflecting = false
 			events.append({"type": "reflect_hit", "actor": target.entity_id, "attacker": attacker.entity_id, "amount": reflected})
 			return
+	if target.kind == "base" and attacker != null and not attacker.side.is_empty() and attacker.side != Content.constants.SUPER_SIDE:
+		var supported := false
+		for ally: BattleUnit in units.values():
+			if ally.side == attacker.side and ally.alive() and not ally.is_hero() and not ally.special.get("neutral", false) and _planar_distance(ally.position, target.position) < float(Content.balance.siege.baseSupportRadius):
+				supported = true
+				break
+		if not supported:
+			amount *= float(Content.constants.GAME.BASE_ARMOR_NEED_CREEP)
 	if target.is_hero():
 		var wet := target.wet
 		if not wet and target.special.get("role") == "clone":
@@ -2278,24 +3215,62 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 	if target.special.get("third", false) and target.kind != "bunker" and attacker != null and not attacker.side.is_empty() and attacker.side != target.side and not attacker.special.get("neutral", false):
 		target.special.aggro_id = attacker.entity_id
 		target.special.aggro_at = clock
+	var floor_hp := maxf(float(context.get("floor_hp", 0)), _siege_hp_floor(target))
+	var remaining_hp := maxf(floor_hp, target.hp - hp_damage)
 	var hp_loss := minf(target.hp, hp_damage)
 	target.shield = maxf(0, target.shield - split.toSp)
-	target.hp = maxf(0, target.hp - hp_damage)
+	target.hp = remaining_hp
 	target.damaged_at = clock
 	if target.shield <= 0:
 		target.defending = false
 	var dealt := shield_loss + hp_loss
 	_record_air_sink(target, dealt)
+	_record_blood_hurt(target, attacker, dealt)
 	if attacker != null and not same and dealt > 0:
 		attacker.damage_out += dealt
-		target.threat[attacker.entity_id] = float(target.threat.get(attacker.entity_id, 0)) + dealt
+		_record_bot_hurt(target, attacker, dealt)
 		if attacker.is_hero() and attacker.alive():
 			_heal_body(attacker, dealt * StatusRules.maximum(attacker.buffs, "vamp", clock))
 		events.append({"type": "hurt", "actor": target.entity_id, "attacker": attacker.entity_id,
 			"origin": attacker.position, "amount": dealt, "side": target.side})
-	if target.hp > 0:
+	if target.hp <= 0:
+		_kill_unit(target, attacker)
+		if target.hp > 0:
+			return # Source clone death swaps cancel the segment sync for this hit.
+	_boss_sync(target)
+
+func _record_blood_hurt(target: BattleUnit, attacker: BattleUnit, amount: float) -> void:
+	if not amount > 0 or attacker == null or not target.is_pilot() or pilots.get(target.peer_id) != target:
 		return
-	_kill_unit(target, attacker)
+	var elevation: Variant = attacker.position.y + attacker.view_eye_height() if attacker.is_pilot() and not attacker.is_bot else null
+	hurt_bearings.record(target.entity_id, attacker.entity_id, attacker.position, amount, elevation)
+
+func flush_blood_hurt() -> void:
+	var order: Array = pilots.values().map(func(unit): return unit.entity_id)
+	for event: Dictionary in hurt_bearings.flush(order):
+		var target: BattleUnit = units.get(int(event.actor))
+		if target == null:
+			continue
+		blood_event_serial += 1
+		event.type = "screen_hurt"
+		event.peer = target.peer_id
+		event.blood_serial = blood_event_serial
+		events.append(event)
+
+func _record_bot_hurt(target: BattleUnit, attacker: BattleUnit, amount: float) -> void:
+	var lead: BattleUnit = pilots.get(target.peer_id, target)
+	if not lead.is_bot or amount <= 0:
+		return
+	var altitude := attacker.position.y + attacker.view_eye_height() if attacker.is_pilot() and not attacker.is_bot else _missile_target_altitude(attacker)
+	lead.bot_alert = {"point": Vector2(attacker.position.x, attacker.position.z), "altitude": altitude, "at": clock}
+	var tactics: Dictionary = Content.constants.BOT_TACTIC
+	for stale_key in lead.threat.keys():
+		if clock - float(lead.threat[stale_key].at) > float(tactics.THREAT_S):
+			lead.threat.erase(stale_key)
+	var key := BotRules.threat_key(attacker)
+	var previous: Dictionary = lead.threat.get(key, {})
+	lead.threat[key] = {"value": (float(previous.value) * BotRules.threat_decay(clock - float(previous.at), tactics) if not previous.is_empty() else 0.0) + amount,
+		"at": clock, "kind": previous.get("kind", attacker.kind)}
 
 func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 	if not authoritative:
@@ -2315,6 +3290,14 @@ func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 		return
 	if target.is_pilot() and _clone_death_swap(target):
 		return
+	_report_death(target)
+	if target.is_pilot():
+		target.recoil.clear_active()
+		if target.weapon_pose != null:
+			target.weapon_pose.bursts.pending.clear()
+		if target.cockpit != null:
+			target.cockpit.bursts.pending.clear()
+		_set_human_aim(target, false)
 	target.visible = false
 	target.collision_layer = 0
 	target.collision_mask = 0
@@ -2356,7 +3339,7 @@ func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 		var weight := float(Content.constants.UNITS.get(target.kind, {}).get("bounty", 1))
 		match_stats[attacker.side].creepKills += weight if weight != 0 else 1
 	if target.special.get("third", false):
-		_remove_field_unit(target.entity_id, true)
+		_remove_field_unit(target.entity_id)
 		_on_third_death(target, attacker)
 		return
 	if target.special.get("role") == "hazard":
@@ -2364,12 +3347,25 @@ func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 			_collapse_scene(target)
 		else:
 			hazard_blockers = hazard_blockers.filter(func(obstacle): return float(obstacle.x) != float(target.position.x) or float(obstacle.z) != float(target.position.z))
-			_remove_field_unit(target.entity_id, true)
+			_remove_field_unit(target.entity_id)
 		_drop_scene_loot(target)
 		return
 	if target.special.get("role") == "carrier":
 		_carrier_shot_down(target)
 		return
+	if target.special.get("boss", false):
+		if target.special.get("boss_down", false):
+			return
+		target.special.boss_down = true
+		target.respawn_at = INF
+		target.input_state.aim = false
+		_siege_fell(target)
+		_boss_fell(target)
+		events.append({"type": "boss_down", "actor": target.entity_id, "peer": target.peer_id, "side": target.side,
+			"character": target.character, "stage": target.special.get("siege_stage", -1)})
+		return
+	if target.kind in ["tower", "base"]:
+		_siege_fell(target)
 	if target.kind == "base":
 		over = true
 		winner = "STEEL" if target.side == "SWARM" else "SWARM"
@@ -2378,8 +3374,12 @@ func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 		target.deaths += 1
 		var times: Dictionary = Content.constants.UNITS[target.kind].respawn
 		target.respawn_at = clock + times.base + times.perDeath * target.deaths
-		var penalty: float = (target.respawn_at - clock) * Content.constants.ECON.DEATH_PENALTY_PER_S
-		target.money = maxf(0, target.money - penalty)
+		var penalty: float = floorf(target.money) if target.side == Content.constants.SUPER_SIDE else (target.respawn_at - clock) * Content.constants.ECON.DEATH_PENALTY_PER_S
+		if target.side == Content.constants.SUPER_SIDE:
+			target.money = 0
+			_set_super_level(target, floorf(float(target.upgrades.get("super", 0)) * float(Content.balance["super"].deathFactor)))
+		else:
+			target.money = maxf(0, target.money - penalty)
 		events.append({"type": "penalty", "actor": target.entity_id, "amount": roundf(penalty)})
 
 func _fire_burn(unit: BattleUnit, amount: float) -> void:
@@ -2396,15 +3396,16 @@ func _fire_burn(unit: BattleUnit, amount: float) -> void:
 	if unit.hp <= 0:
 		var killer: BattleUnit = pilots.get(int(unit.bleed.get("peer", 0)))
 		_kill_unit(unit, killer)
+	_boss_sync(unit)
 
 func _shield_defense_factor(target: BattleUnit, attacker: BattleUnit, definition: Dictionary, context: Dictionary) -> float:
 	if not target.defending or target.shield <= 0:
 		return 1.0
-	var forward := Vector2(-sin(target.yaw), -cos(target.yaw))
+	var forward := Vector2(-sin(target.facing_yaw()), -cos(target.facing_yaw()))
 	var center := Vector2(target.position.x, target.position.z)
 	var attack_slot := ""
 	for slot: String in ["heavy", "light"]:
-		var weapon := Content.weapon(target.character, slot, int(target.upgrades.hw if slot == "heavy" else target.upgrades.lw) + 1)
+		var weapon := Content.weapon(target.character, slot, target.combat_level(slot))
 		var fired: float = target.last_fired_at.get(slot, -INF)
 		if fired != 0 and clock - fired < 1.0 / (weapon.rate * 0.5):
 			attack_slot = slot
@@ -2451,7 +3452,8 @@ func _weapon_multiplier(attacker: BattleUnit, target: BattleUnit, definition: Di
 		return factor
 	if factor > 1 and CombatMath.target_class(target.kind) == "air" and _air_unit(attacker):
 		factor = 1.0
-	return factor * StatusRules.multiplier(attacker.buffs, "dmg", clock)
+	var boss_factor: float = Content.constants.BOSS.ENRAGE_DMG_F if attacker.special.get("boss", false) and int(attacker.special.get("boss_segment", 0)) >= 3 else 1.0
+	return factor * StatusRules.multiplier(attacker.buffs, "dmg", clock) * boss_factor
 
 func _air_unit(unit: BattleUnit) -> bool:
 	if unit.kind not in Content.constants.AIR.KINDS:
@@ -2473,6 +3475,10 @@ func _stamp_unbalance(target: BattleUnit, factor: float) -> void:
 func _height_difference(first: BattleUnit, second: BattleUnit) -> float:
 	if first == null or second == null:
 		return 0.0
+	if (first.is_bot or second.is_bot) and first.is_hero() and second.is_hero():
+		var a := _relative_sight_height(first) if first.is_bot else first.position.y + first.view_eye_height()
+		var b := _relative_sight_height(second) if second.is_bot else second.position.y + second.view_eye_height()
+		return a - b
 	if first.is_pilot() and second.is_pilot():
 		return first.position.y + first.view_eye_height() - second.position.y - second.view_eye_height()
 	return _relative_sight_height(first) - _relative_sight_height(second)
@@ -2500,7 +3506,8 @@ func _dodge_probability(target: BattleUnit, attacker: BattleUnit) -> float:
 		return 1.0
 	var flying := target.kind == "drone" or _missile_target_altitude(target) >= Content.constants.GAME.AA_MIN_ALT
 	var mobility: float = Content.heroes[target.character].flySpeed if flying else Content.heroes[target.character].speed
-	if mobility <= StatusRules.evasion_min_speed() or Vector2(target.velocity.x, target.velocity.z).length() < Content.constants.EVASION.MOVING_SPD:
+	var movement_speed := target.bot_dodge_speed if target.is_bot else Vector2(target.velocity.x, target.velocity.z).length()
+	if mobility <= StatusRules.evasion_min_speed() or movement_speed < Content.constants.EVASION.MOVING_SPD:
 		return 0.0
 	var probability: float = Content.constants.EVASION.GROUND + (Content.constants.EVASION.AIR_BONUS if flying else 0.0) + StatusRules.maximum(target.buffs, "evade", clock)
 	var difference := _height_difference(target, attacker)
@@ -2639,12 +3646,32 @@ func _break_on_hit(unit: BattleUnit) -> void:
 		unit.status.no_reload_until = 0
 
 func respawn(unit: BattleUnit) -> void:
+	if not authoritative or unit.special.get("boss", false):
+		return
+	var position := _super_spawn_position(unit.peer_id, unit.kind == "drone") if unit.side == Content.constants.SUPER_SIDE else world.spawn_position(unit.side, unit.spawn_slot, unit.kind == "drone")
+	if not position.is_finite():
+		unit.respawn_at = INF
+		message.emit(unit.peer_id, "unavailable_surface")
+		push_error("Respawn has no verified standing surface")
+		return
+	unit.position_trail.clear()
+	unit.recoil.clear_active()
 	unit.hp = unit.max_hp
+	unit.snap_body_presentation()
 	unit.shield = unit.max_shield
 	unit.power = unit.max_power
 	unit.flying = unit.kind == "drone"
-	unit.position = world.spawn_position(unit.side, unit.spawn_slot, unit.kind == "drone")
-	unit.yaw = world.spawn_heading(unit.side, unit.spawn_slot)
+	unit.position = position
+	if unit.side != Content.constants.SUPER_SIDE:
+		unit.yaw = world.spawn_heading(unit.side, unit.spawn_slot)
+	else:
+		unit.yaw = atan2(position.x, position.z)
+	if not unit.is_bot and not unit.player_view.rules.is_empty():
+		unit.pitch = float(Content.balance.playerView.spawnPitch)
+		unit.view_reset += 1
+	if not unit.player_view.rules.is_empty():
+		unit.player_view.body_yaw = unit.yaw
+	unit.rotation.y = unit.yaw
 	unit.velocity = Vector3.ZERO
 	unit.impulse_velocity = Vector2.ZERO
 	unit.charge = 0
@@ -2667,6 +3694,7 @@ func respawn(unit: BattleUnit) -> void:
 		unit.status.erase(key)
 	unit.cast_state.clear()
 	unit.bleed.clear()
+	unit.cast_preview.clear()
 	unit.heal_aura.clear()
 	unit.assists.clear()
 	unit.defending = false
@@ -2677,10 +3705,10 @@ func respawn(unit: BattleUnit) -> void:
 	unit.reload_at.clear()
 	unit.fire_at.clear()
 	for slot in ["light", "heavy"]:
-		unit.ammo[slot] = Content.weapon(unit.character, slot, int(unit.upgrades.lw if slot == "light" else unit.upgrades.hw) + 1).mag
+		unit.ammo[slot] = Content.weapon(unit.character, slot, unit.combat_level(slot)).mag
 
 func _regenerate(unit: BattleUnit, delta: float) -> void:
-	var charge: float = Content.balance.charge[int(unit.upgrades.ch)]
+	var charge: float = Content.balance["super"].charge[SuperRules.level(float(unit.upgrades.get("super", 0)))] if unit.side == Content.constants.SUPER_SIDE else Content.balance.charge[int(unit.upgrades.ch)]
 	var fluid := StatusRules.fluid_factor(unit.wet)
 	var regen := StatusRules.multiplier(unit.buffs, "regen", clock)
 	if unit.power < unit.max_power:
@@ -2690,7 +3718,8 @@ func _regenerate(unit: BattleUnit, delta: float) -> void:
 		unit.shield = minf(unit.max_shield, unit.shield + unit.max_shield * Content.constants.VITALS.SP_REGEN_PS * charge * regen * fluid * delta)
 	if out_of_combat:
 		_heal_body(unit, unit.max_hp * Content.constants.VITALS.HP_REGEN_PS * charge * regen * fluid * delta, "ooc")
-	var near_base := Vector2(unit.position.x - world.bases[unit.side].x, unit.position.z - world.bases[unit.side].z).length() < Content.constants.GAME.HERO_HEAL_RADIUS
+	var bases: Array = [world.bases.SWARM, world.bases.STEEL] if unit.side == Content.constants.SUPER_SIDE else [world.bases[unit.side]]
+	var near_base := bases.any(func(base): return Vector2(unit.position.x - base.x, unit.position.z - base.z).length() < Content.constants.GAME.HERO_HEAL_RADIUS)
 	if regen > 1 or near_base:
 		_heal_body(unit, Content.constants.UNITS[unit.kind].regen * regen * delta, "def" if regen > 1 else "base")
 	if unit.wet == 3 and unit.alive():
@@ -2702,6 +3731,12 @@ func _regenerate(unit: BattleUnit, delta: float) -> void:
 func buy(unit: BattleUnit, item: String) -> bool:
 	if not authoritative or over:
 		return false
+	if unit.side == Content.constants.SUPER_SIDE:
+		if item != "super" or not unit.is_pilot() or int(unit.upgrades.get("super", 0)) >= int(Content.constants.SUPER_UPG.MAX) or unit.money < float(Content.constants.SUPER_UPG.PRICE):
+			return false
+		unit.money -= float(Content.constants.SUPER_UPG.PRICE)
+		_set_super_level(unit, int(unit.upgrades.get("super", 0)) + 1)
+		return true
 	var definitions: Dictionary = Content.constants.ECON.UPGRADES
 	if not definitions.has(item) or not unit.is_pilot() or unit.special.get("boss", false) or unit.side == Content.constants.SUPER_SIDE:
 		return false
@@ -2713,26 +3748,57 @@ func buy(unit: BattleUnit, item: String) -> bool:
 		return false
 	unit.money -= step.price
 	unit.upgrades[item] += 1
+	_apply_upgrade(unit, item)
+	return true
+
+func _set_super_level(unit: BattleUnit, value: float) -> void:
+	if not authoritative or unit.side != Content.constants.SUPER_SIDE:
+		return
+	var level := SuperRules.level(value)
+	var previous := int(unit.upgrades.get("super", 0))
+	unit.upgrades["super"] = level
+	for slot: String in ["light", "heavy"]:
+		unit.ammo.erase(slot)
+		unit.reload_at.erase(slot)
 	var hero: Dictionary = Content.heroes[unit.character]
 	var stats: Dictionary = Content.constants.UNITS[unit.kind]
+	var defense := SuperRules.defense_level(level)
+	var curves: Dictionary = Content.balance["super"].curves
+	var maximum := floorf(float(stats.hp) * float(hero.mods.get("hp", 1)) * (1 + float(Content.constants.ECON.UPGRADES.hp.step) * defense) * float(curves.hp[level]) + 0.5)
+	var shields := floorf(float(stats.shield) * float(hero.mods.get("sp", 1)) * (1 + float(Content.constants.ECON.UPGRADES.sp.step) * defense) * float(curves.sp[level]) + 0.5)
+	if unit.alive():
+		unit.hp = minf(maximum, unit.hp + maxf(0, maximum - unit.max_hp))
+		unit.shield = minf(shields, unit.shield + maxf(0, shields - unit.max_shield))
+	unit.max_hp = maximum
+	unit.max_shield = shields
+	unit.armor = (float(hero.armor) + float(Content.constants.ECON.UPGRADES.ar.step) * defense) * float(curves.ar[level])
+	unit.refresh_body_scale()
+	if level != previous:
+		events.append({"type": "buy", "actor": unit.entity_id, "peer": unit.peer_id, "item": "super", "level": level})
+
+func _apply_upgrade(unit: BattleUnit, item: String) -> void:
+	var definitions: Dictionary = Content.constants.ECON.UPGRADES
+	var hero: Dictionary = Content.heroes[unit.character]
+	var stats: Dictionary = Content.constants.UNITS[unit.kind]
+	var curve: float = Content.balance.upgrade_curves[item][int(unit.upgrades[item])]
 	match item:
 		"hp":
-			var maximum := roundf(stats.hp * hero.mods.get("hp", 1) * (1 + definitions.hp.step * unit.upgrades.hp))
+			var boss_factor: float = Content.constants.BOSS.HP_MUL if unit.special.get("boss", false) or unit.side == defending_side else 1.0
+			var maximum := floorf(stats.hp * hero.mods.get("hp", 1) * boss_factor * (1 + definitions.hp.step * unit.upgrades.hp) * curve + 0.5)
 			if unit.alive():
 				unit.hp += maximum - unit.max_hp
 			unit.max_hp = maximum
 		"sp":
-			var maximum := roundf(stats.shield * hero.mods.get("sp", 1) * (1 + definitions.sp.step * unit.upgrades.sp))
+			var maximum := floorf(stats.shield * hero.mods.get("sp", 1) * (1 + definitions.sp.step * unit.upgrades.sp) * curve + 0.5)
 			if unit.alive():
 				unit.shield += maximum - unit.max_shield
 			unit.max_shield = maximum
 		"ar":
-			unit.armor = hero.armor + definitions.ar.step * unit.upgrades.ar
+			unit.armor = (hero.armor + definitions.ar.step * unit.upgrades.ar) * curve
 		"lw", "hw":
 			var slot := "light" if item == "lw" else "heavy"
-			unit.ammo[slot] = Content.weapon(unit.character, slot, int(unit.upgrades[item]) + 1).mag
+			unit.ammo.erase(slot)
 			unit.reload_at.erase(slot)
-	return true
 
 func upgrades_maxed(unit: BattleUnit) -> bool:
 	for key: String in Content.constants.ECON.UPGRADES:
@@ -2754,14 +3820,26 @@ func buy_creep(unit: BattleUnit, lane: int) -> bool:
 	events.append({"type": "creep_upgrade", "actor": unit.entity_id, "side": unit.side, "lane": lane, "level": levels[lane]})
 	return true
 
-func cast(unit: BattleUnit, slot: String) -> bool:
+func cast(unit: BattleUnit, slot: String, requested_point: Vector3 = Vector3(INF, INF, INF)) -> bool:
 	if not authoritative or over or not unit.alive() or not unit.is_pilot() or slot not in ["def", "atk"]:
 		return false
-	var def := Content.ability(unit.character, slot, int(unit.upgrades[slot]) + 1)
-	if not _ability_supported(def):
+	if not unit.is_bot and unit.has_status("freeze_until", clock):
+		return false
+	var def := Content.ability(unit.character, slot, unit.combat_level(slot))
+	if not unit.is_bot and float(def.range) > 0 and def.fx in ["strike", "emp"] and unit.lock_target == 0:
+		return false
+	if not _ability_supported(def, unit.character):
 		message.emit(unit.peer_id, "unsupported")
 		return false
-	var point := _ability_point(unit, def)
+	var point: Vector3 = unit.position if unit.is_bot else _ability_point(unit, def)
+	if unit.is_bot:
+		point = unit.position
+		if def.range and requested_point.is_finite():
+			var offset := Vector2(requested_point.x - unit.position.x, requested_point.z - unit.position.z)
+			if offset.length() > float(def.range):
+				offset = offset.normalized() * float(def.range)
+			point = unit.position + Vector3(offset.x, 0, offset.y)
+			point.y = world.ground_height(point.x, point.z)
 	if not point.is_finite() or not _companion_surfaces_available(unit, def, point):
 		message.emit(unit.peer_id, "unavailable_surface")
 		return false
@@ -2777,7 +3855,8 @@ func cast(unit: BattleUnit, slot: String) -> bool:
 	if unit.power < cost:
 		return false
 	unit.power -= cost
-	var deadline: float = clock + def.cd * float(weather_dynamics.get("snowCdMul", 1))
+	var boss_cooldown: float = Content.constants.BOSS.ENRAGE_CD_F if unit.special.get("boss", false) and int(unit.special.get("boss_segment", 0)) >= 3 else 1.0
+	var deadline: float = clock + def.cd * float(weather_dynamics.get("snowCdMul", 1)) * boss_cooldown
 	if int(def.charges) > 1:
 		var charge: Dictionary = unit.ability_charges.get(slot, {"max": int(def.charges), "recharge_at": []})
 		charge.max = int(def.charges)
@@ -2788,10 +3867,14 @@ func cast(unit: BattleUnit, slot: String) -> bool:
 		unit.cooldowns[slot] = deadline
 	if def.fx not in ["stealth", "vision", "rally", "recon"]:
 		unit.status.stealth_until = 0
+	var cast_duration: float = def.castTime
+	if slot == "atk" and cast_duration == 0:
+		cast_duration = Content.constants.ATK_CAST_S
+	unit.cast_preview = {"definition": def.duplicate(true), "point": point, "until": clock + cast_duration}
 	if slot == "def":
 		unit.cast_state = {"slot": slot, "start": clock, "duration": def.castTime, "point": point,
-			"definition": def.duplicate(true), "level": int(unit.upgrades[slot]) + 1}
-		events.append({"type": "cast_start", "actor": unit.entity_id, "slot": slot, "fx": def.fx, "duration": def.castTime})
+			"definition": def.duplicate(true), "level": unit.combat_level(slot)}
+		_emit_body_event({"type": "cast_start", "actor": unit.entity_id, "slot": slot, "fx": def.fx, "duration": def.castTime, "point": point})
 		return true
 	unit.defending = false
 	unit.status.cast_lock_until = clock + (def.castTime if def.castTime else Content.constants.ATK_CAST_S)
@@ -2799,7 +3882,7 @@ func cast(unit: BattleUnit, slot: String) -> bool:
 		_launch_carriers(unit, def, point, _ability_origin(unit, slot))
 	else:
 		_cast_effect(unit, def, unit.position if def.target == "self" or (def.add is Dictionary and def.add.get("fx") == "clone") else point)
-	events.append({"type": "cast", "actor": unit.entity_id, "slot": slot, "fx": def.fx, "point": point,
+	_emit_body_event({"type": "cast", "actor": unit.entity_id, "slot": slot, "fx": def.fx, "point": point,
 		"radius": def.r, "duration": def.dur, "fraction": 1.0})
 	return true
 
@@ -2832,12 +3915,17 @@ func _ability_origin(unit: BattleUnit, slot: String) -> Vector3:
 			distance = candidate
 	return origin
 
-func _carrier_resources_available() -> bool:
-	if not Content.balance.has("carrier"):
+func _carrier_resources_available(character: String) -> bool:
+	if not Content.balance.get("carrier", {}).has("shotDown") or not Content.balance.carrier.has("completion"):
 		return false
-	for key: String in ["steel_s01_kami", "swarm_s01_kami", "steel_decoy", "swarm_decoy", "steel_hyper", "swarm_hyper"]:
-		if not Content.balance.get("companions", {}).has(key) or not ResourceLoader.exists("res://assets/companions/%s.scn" % key):
+	for kind: String in ["kami", "decoy", "hyper"]:
+		if not Content.balance.carrier.shotDown.has(kind) or not Content.balance.carrier.completion.has(kind):
 			return false
+	for side: String in ["steel", "swarm", "super"]:
+		for model: String in [character + "_kami", "decoy", "hyper"]:
+			var key := side + "_" + model
+			if not Content.balance.get("companions", {}).has(key) or not BodyRig.available(key):
+				return false
 	return true
 
 func _launch_carriers(owner: BattleUnit, definition: Dictionary, point: Vector3, origin: Vector3) -> void:
@@ -2846,14 +3934,14 @@ func _launch_carriers(owner: BattleUnit, definition: Dictionary, point: Vector3,
 		message.emit(owner.peer_id, "unavailable_surface")
 		return
 	var start := {"x": float(origin.x), "y": float(origin.y - surface), "z": -float(origin.z)}
-	var destination := CarrierRules.destination(start, point.x, -point.z, owner.yaw)
+	var destination := CarrierRules.destination(start, point.x, -point.z, owner.facing_yaw())
 	var parts := CarrierRules.parts(owner.kind, definition.fx)
 	var total: float = definition.count if definition.fx in ["strike", "summon"] else 0.0
 	if owner.character == "s01" or owner.kind == "drone" and owner.character not in ["t09", "m07"]:
 		var rule: Dictionary = Content.constants.SQUAD.KAMI
-		var count: int = int(definition.count if definition.count else rule.N) if owner.character == "s01" else parts
+		var count: float = float(definition.count if definition.count else rule.N) if owner.character == "s01" else float(parts)
 		var speed: float = Content.constants.UNITS.drone.speed * rule.SPEED_MUL
-		for index in range(count):
+		for index in range(ceili(count)):
 			var side := CarrierRules.side(index)
 			var state := {"kind": "kami", "x": start.x - sin(destination.yaw) * rule.FWD + cos(destination.yaw) * rule.SIDE * side,
 				"z": start.z + cos(destination.yaw) * rule.FWD + sin(destination.yaw) * rule.SIDE * side, "y": start.y,
@@ -2863,18 +3951,18 @@ func _launch_carriers(owner: BattleUnit, definition: Dictionary, point: Vector3,
 			_spawn_carrier(owner, definition, state)
 	elif owner.character == "m06" or owner.kind == "morph" and owner.character != "m07":
 		var rule: Dictionary = Content.constants.DECOY
-		var count: int = int(definition.count if definition.count else 5) if owner.character == "m06" else parts
+		var count: float = float(definition.count if definition.count else 5) if owner.character == "m06" else float(parts)
 		var drops: Array = []
-		for index in range(count):
+		for index in range(floori(count)):
 			drops.append({"fraction": 1.0 / count, "count": CarrierRules.integer_part(total, parts, index) if total else -1})
 		_spawn_carrier(owner, definition, {"kind": "decoy", "x": start.x, "z": start.z, "y": start.y + rule.ALT,
 			"yaw": destination.yaw, "tx": destination.x, "tz": destination.z, "drops": drops, "next_bomb": 0.0,
 			"die_at": clock + destination.distance / rule.SPEED + count * rule.BOMB_GAP + rule.TTL_S, "target": 0})
 	else:
-		var count := 1
+		var count := 1.0
 		if owner.character in ["t09", "m07"]:
-			count = int(definition.count if definition.count else 8 if owner.character == "t09" else 6)
-		for index in range(count):
+			count = float(definition.count if definition.count else 8 if owner.character == "t09" else 6)
+		for index in range(ceili(count)):
 			var tx: float = destination.x
 			var tz: float = destination.z
 			if owner.character == "t09":
@@ -2946,12 +4034,18 @@ func _tick_carriers(delta: float) -> void:
 				unit.yaw = state.yaw
 				unit.rotation.y = unit.yaw
 				unit.special.phase = state.get("phase", "flight")
-				for arrival: Dictionary in outcome.arrivals:
-					_carrier_arrive(unit, Vector3(arrival.x, 0, -arrival.z), arrival.fraction, int(arrival.count))
-				if outcome.remove:
-					events.append({"type": "boom", "actor": owner.entity_id, "position": unit.position, "radius": 6.0 if kind == "kami" else 8.0, "side": unit.side})
-					_remove_carrier(id)
-					continue
+				_finish_carrier_step(unit, outcome)
+
+func _finish_carrier_step(unit: BattleUnit, outcome: Dictionary) -> void:
+	# Original completion reports precede delivery effects, including lethal ones.
+	if outcome.remove:
+		for report: Dictionary in Content.balance.carrier.completion[unit.kind]:
+			_publish_blast_event({"type": "boom", "actor": int(unit.special.owner_id), "position": unit.position,
+				"radius": float(report.radius), "side": unit.side, "sam": report.sam, "kami": report.kami, "hyper": report.hyper})
+	for arrival: Dictionary in outcome.arrivals:
+		_carrier_arrive(unit, Vector3(arrival.x, 0, -arrival.z), arrival.fraction, int(arrival.count))
+	if outcome.remove:
+		_remove_carrier(unit.entity_id)
 
 func _carrier_arrive(unit: BattleUnit, point: Vector3, fraction: float, count_override: int = -1) -> void:
 	var state: Dictionary = carrier_states.get(unit.entity_id, {})
@@ -2967,8 +4061,9 @@ func _carrier_arrive(unit: BattleUnit, point: Vector3, fraction: float, count_ov
 		"fraction": fraction, "count": count_override, "fx": state.definition.fx, "side": owner.side})
 
 func _carrier_shot_down(unit: BattleUnit) -> void:
-	events.append({"type": "boom", "actor": int(unit.special.owner_id), "position": unit.position, "radius": 6.0,
-		"side": unit.side, "intercept": true})
+	for report: Dictionary in Content.balance.carrier.shotDown[unit.kind]:
+		_publish_blast_event({"type": "boom", "actor": int(unit.special.owner_id), "position": unit.position, "radius": float(report.radius),
+			"side": unit.side, "intercept": true, "sam": report.sam, "kami": report.kami})
 	_remove_carrier(unit.entity_id)
 
 func _remove_carrier(id: int) -> void:
@@ -2979,17 +4074,17 @@ func _remove_carrier(id: int) -> void:
 	carrier_states.erase(id)
 	_remove_field_unit(id)
 
-func _ability_supported(definition: Dictionary) -> bool:
+func _ability_supported(definition: Dictionary, character: String) -> bool:
 	if definition.support or definition.fx not in ["buff", "heal", "emp", "vision", "stealth", "rally", "recon", "intercept", "reflect", "phaseshift", "shield_bash", "strike", "fog", "cube", "summon", "decoy_beacon"]:
 		return false
-	if definition.carrier and not _carrier_resources_available():
+	if definition.carrier and not _carrier_resources_available(character):
 		return false
 	if definition.fx == "summon" and definition.unit not in SUMMON_KINDS:
 		return false
 	if definition.fx in ["summon", "decoy_beacon"]:
 		var kind: String = definition.unit if definition.fx == "summon" else "decoy_beacon"
-		for side: String in ["steel", "swarm"]:
-			if not Content.balance.get("companions", {}).has(side + "_" + kind) or not ResourceLoader.exists("res://assets/companions/%s_%s.scn" % [side, kind]):
+		for side: String in ["steel", "swarm", "super"]:
+			if not Content.balance.get("companions", {}).has(side + "_" + kind) or not BodyRig.available(BodyRig.entity_key(side, kind)):
 				return false
 	var added: Variant = definition.get("add")
 	return not added is Dictionary or added.fx in ["haste", "leap", "dodge", "vamp", "mark", "evade", "overdrive", "alpha", "stun", "slow", "confuse", "bleed", "pull", "siege", "clone"]
@@ -3018,7 +4113,7 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 		return
 	var boost := {"dmgMul": 0.0, "heal": 0.0, "alphaX": 1.0}
 	if definition.id == "atk":
-		boost = StatusRules.self_attack_boost(unit.character, int(unit.upgrades.atk) + 1, int(unit.upgrades.lw) + 1, int(unit.upgrades.hw) + 1)
+		boost = StatusRules.self_attack_boost(unit.character, unit.combat_level("atk"), unit.combat_level("light"), unit.combat_level("heavy"))
 	var allies: Array = _ability_allies(unit, center, definition.r) if definition.target == "team" else [unit]
 	var modifiers: Dictionary = definition.mul if definition.mul is Dictionary else {}
 	var added: Dictionary = definition.add if definition.add is Dictionary else {}
@@ -3047,7 +4142,7 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 						if once:
 							ally.status.clones_until = clock + definition.dur
 							ally.status.no_light_reload_until = clock + definition.dur
-							_spawn_clones(ally, int(added.get("count", 2)) if added.get("count", 2) else 2)
+							_spawn_clones(ally, float(added.get("count", 2)) if added.get("count", 2) else 2)
 					"siege":
 						if once:
 							_refill_all(ally)
@@ -3089,17 +4184,18 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 					damage(unit, target, definition, definition.dmg * fraction, false, {"origin": center}, false)
 			if not added.is_empty():
 				_apply_cc(unit, added, center, definition.r)
-			vision_until[unit.side] = maxf(float(vision_until[unit.side]), clock + definition.vision * fraction)
+			vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
 		"vision", "intercept":
 			if definition.fx == "intercept":
 				var radius: float = definition.r * sqrt(maxf(0.01, fraction))
-				for missile: Dictionary in missiles.duplicate():
+				for index in range(missiles.size() - 1, -1, -1):
+					var missile: Dictionary = missiles[index]
 					if missile.side == unit.side or Vector2(missile.position.x - unit.position.x, missile.position.z - unit.position.z).length() > radius:
 						continue
 					_remove_missile(int(missile.id))
-					events.append({"type": "missile_intercept", "actor": unit.entity_id, "missile": missile.id,
+					_publish_blast_event({"type": "missile_intercept", "actor": unit.entity_id, "missile": missile.id,
 						"position": _missile_world_position(missile.position), "radius": 8.0, "side": unit.side})
-			vision_until[unit.side] = maxf(float(vision_until[unit.side]), clock + definition.vision * fraction)
+			vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
 		"stealth":
 			if once:
 				unit.status.stealth_until = clock + definition.dur * fraction
@@ -3134,7 +4230,7 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 						_cleanse(ally)
 					_add_modifier(ally, "ccImm", 1, definition.dur)
 			if definition.vision and once:
-				vision_until[unit.side] = maxf(float(vision_until[unit.side]), clock + definition.vision)
+				vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision)
 		"strike":
 			for index in range(count_override if count_override >= 0 else maxi(0, ceili(float(definition.count)))):
 				var angle := rng.next() * TAU
@@ -3148,7 +4244,7 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 				if not added.is_empty():
 					_apply_cc(unit, added, point, definition.r)
 	if definition.fx == "buff" and definition.vision and once:
-		vision_until[unit.side] = maxf(float(vision_until[unit.side]), clock + definition.vision * fraction)
+		vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
 	for ally: BattleUnit in allies:
 		if definition.spRestore and once and not definition.aura and ally.alive():
 			ally.shield = minf(ally.max_shield, ally.shield + definition.spRestore * fraction)
@@ -3166,7 +4262,7 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 func _refill_all(unit: BattleUnit) -> void:
 	unit.reload_at.clear()
 	for slot: String in ["light", "heavy"]:
-		unit.ammo[slot] = Content.weapon(unit.character, slot, int(unit.upgrades.hw if slot == "heavy" else unit.upgrades.lw) + 1).mag
+		unit.ammo[slot] = Content.weapon(unit.character, slot, unit.combat_level(slot)).mag
 
 func _cleanse(unit: BattleUnit) -> void:
 	for key: String in ["stun_until", "slow_until", "confuse_until", "emp_until"]:
@@ -3179,7 +4275,11 @@ func _cleanse(unit: BattleUnit) -> void:
 	events.append({"type": "cleanse", "actor": unit.entity_id, "side": unit.side})
 
 func _revive_body(unit: BattleUnit, fraction: float) -> void:
+	if not authoritative or unit.special.get("boss", false):
+		return
+	unit.position_trail.clear()
 	unit.hp = maxf(1, floorf(unit.max_hp * fraction + 0.5))
+	unit.snap_body_presentation()
 	unit.shield = unit.max_shield * fraction
 	unit.respawn_at = 0
 	unit.damaged_at = clock
@@ -3204,11 +4304,12 @@ func _interrupt_cast(unit: BattleUnit) -> void:
 		return
 	var state := unit.cast_state.duplicate(true)
 	unit.cast_state.clear()
+	unit.cast_preview.clear()
 	unit.status.cast_lock_until = 0
 	var ratio: float = clampf(clock - state.start, 0, state.duration) / state.duration if state.duration > 0 else 1.0
 	var fraction := ratio * ratio
 	_cast_effect(unit, state.definition, state.point, fraction)
-	events.append({"type": "cast", "actor": unit.entity_id, "slot": "def", "fx": state.definition.fx,
+	_emit_body_event({"type": "cast", "actor": unit.entity_id, "slot": "def", "fx": state.definition.fx,
 		"fraction": fraction, "interrupted": true, "point": state.point})
 
 func _apply_cc(unit: BattleUnit, added: Dictionary, center: Vector3, radius: float) -> void:
@@ -3270,7 +4371,7 @@ func _tick_element_buildup(unit: BattleUnit, delta: float) -> void:
 func _tick_shield_bash(unit: BattleUnit, delta: float) -> void:
 	if not unit.is_hero() or not unit.defending or unit.shield <= 0 or not unit.has_status("shield_bash_until", clock):
 		return
-	var forward := Vector2(-sin(unit.yaw), -cos(unit.yaw))
+	var forward := Vector2(-sin(unit.facing_yaw()), -cos(unit.facing_yaw()))
 	for target: BattleUnit in units.values():
 		if not target.alive() or target.side == unit.side:
 			continue
@@ -3341,30 +4442,30 @@ func _companion_surfaces_available(unit: BattleUnit, definition: Dictionary, cen
 			if not entry.position.is_finite():
 				return false
 	elif definition.fx == "decoy_beacon":
-		for index in range(int(definition.count if definition.count else 2)):
-			var offset := Vector2(cos(unit.yaw), -sin(unit.yaw)) * (-3 if index == 0 else 3)
+		for index in range(ceili(float(definition.count if definition.count else 2))):
+			var offset := Vector2(cos(unit.facing_yaw()), -sin(unit.facing_yaw())) * (-3 if index == 0 else 3)
 			if not _companion_position(unit.position, offset, 2).is_finite():
 				return false
 	elif definition.add is Dictionary and definition.add.get("fx") == "clone":
-		for index in range(int(definition.add.get("count", 2)) if definition.add.get("count", 2) else 2):
-			var angle := unit.yaw + (2.1 if index == 0 else -2.1)
+		for index in range(ceili(float(definition.add.get("count", 2))) if definition.add.get("count", 2) else 2):
+			var angle := unit.facing_yaw() + (2.1 if index == 0 else -2.1)
 			if not _companion_position(unit.position, Vector2(cos(angle), -sin(angle)) * 4, _missile_target_altitude(unit)).is_finite():
 				return false
 	return true
 
-func _spawn_clones(owner: BattleUnit, count: int = 2) -> void:
+func _spawn_clones(owner: BattleUnit, count: float = 2) -> void:
 	_despawn_clones(owner)
 	owner.clones_initialized = true
 	var altitude := _missile_target_altitude(owner)
-	for index in range(count):
-		var angle := owner.yaw + (2.1 if index == 0 else -2.1)
+	for index in range(ceili(count)):
+		var angle := owner.facing_yaw() + (2.1 if index == 0 else -2.1)
 		var direction := Vector2(cos(angle), -sin(angle))
 		var point := _companion_position(owner.position, direction * 4, altitude)
 		if not point.is_finite():
 			message.emit(owner.peer_id, "unavailable_surface")
 			continue
 		var clone := spawn({"character": owner.character, "kind": owner.kind, "side": owner.side,
-			"peer": owner.peer_id, "position": point, "yaw": owner.yaw, "effect_radius": owner.effect_radius if owner.effect_radius else 1.8,
+			"peer": owner.peer_id, "position": point, "yaw": owner.facing_yaw(), "effect_radius": owner.effect_radius if owner.effect_radius else 1.8,
 			"special": {"role": "clone", "owner_id": owner.entity_id, "offset": direction * 12,
 				"hp": owner.hp, "max_hp": owner.max_hp, "shield": owner.shield, "max_shield": owner.max_shield, "armor": owner.armor, "speed": 0.0, "cd": 0.0}})
 		clone.flying = owner.flying
@@ -3420,7 +4521,7 @@ func _tick_clones(delta: float) -> void:
 				events.append({"type": "clone_time_swap", "actor": owner.entity_id, "side": owner.side, "position": owner.position})
 			_despawn_clones(owner)
 			continue
-		var weapon := Content.weapon(owner.character, "light", int(owner.upgrades.lw) + 1)
+		var weapon := Content.weapon(owner.character, "light", owner.combat_level("light"))
 		var sight: float = Content.constants.UNITS[owner.kind].get("sight", weapon.range if weapon.range else 200)
 		for id: int in owner.clone_ids.duplicate():
 			var clone: BattleUnit = units.get(id)
@@ -3453,12 +4554,14 @@ func _tick_clones(delta: float) -> void:
 			var distance := _planar_distance(clone.position, point)
 			if distance > 6:
 				_move_companion(clone, point, minf(21 * _companion_weather_speed(clone) * delta, distance - 4))
-			clone.yaw = owner.yaw
+			clone.yaw = owner.facing_yaw()
 			clone.rotation.y = clone.yaw
 
 func _spawn_autonomous_summons(owner: BattleUnit, definition: Dictionary, center: Vector3, fraction: float = 1.0, count_override: int = -1) -> void:
 	var profile: Dictionary = Content.constants.UNITS[definition.unit]
-	var scale_factor := 1.0 + float(int(owner.upgrades[definition.id]) if definition.id in ["def", "atk"] else 0) * 0.35
+	var scale_factor := 1.0 + (owner.combat_level(definition.id) - 1.0 if definition.id in ["def", "atk"] else 0.0) * 0.35
+	if owner.side == Content.constants.SUPER_SIDE:
+		scale_factor *= NpcRules.creep_multiplier(float(owner.upgrades.get("super", 0)))
 	for entry: Dictionary in _summon_plan(owner, definition, center, fraction, rng, count_override):
 		if not entry.position.is_finite():
 			message.emit(owner.peer_id, "unavailable_surface")
@@ -3498,15 +4601,15 @@ func _tick_summons(delta: float) -> void:
 				_move_companion(summon, point, minf(summon.speed * _companion_weather_speed(summon) * delta, distance - 4))
 
 func _spawn_holograms(owner: BattleUnit, definition: Dictionary, fraction: float = 1.0) -> void:
-	var weapon := Content.weapon(owner.character, "light", int(owner.upgrades.lw) + 1)
+	var weapon := Content.weapon(owner.character, "light", owner.combat_level("light"))
 	var duration: float = (definition.dur if definition.dur else 6.0) * fraction
-	for index in range(int(definition.count if definition.count else 2)):
-		var offset := Vector2(cos(owner.yaw), -sin(owner.yaw)) * (-3 if index == 0 else 3)
+	for index in range(ceili(float(definition.count if definition.count else 2))):
+		var offset := Vector2(cos(owner.facing_yaw()), -sin(owner.facing_yaw())) * (-3 if index == 0 else 3)
 		var point := _companion_position(owner.position, offset, 2)
 		if not point.is_finite():
 			message.emit(owner.peer_id, "unavailable_surface")
 			continue
-		var decoy := spawn({"kind": "decoy_beacon", "side": owner.side, "position": point, "yaw": owner.yaw, "effect_radius": 1.5,
+		var decoy := spawn({"kind": "decoy_beacon", "side": owner.side, "position": point, "yaw": owner.facing_yaw(), "effect_radius": 1.5,
 			"special": {"role": "hologram", "owner_id": owner.entity_id, "offset": offset * 3, "cd": 0.0,
 				"range": weapon.range if weapon.range else 200, "sight": weapon.range if weapon.range else 200, "rate": weapon.rate if weapon.rate else 3,
 				"until": clock + duration, "blind_radius": definition.get("blindR", 14) if definition.get("blindR", 14) else 14,
@@ -3531,7 +4634,7 @@ func _tick_holograms(delta: float) -> void:
 		decoy.special.cd = maxf(0, float(decoy.special.cd) - delta)
 		var target := _auto_target(decoy, owner)
 		if target != null and owner != null and owner.alive():
-			var weapon := Content.weapon(owner.character, "light", int(owner.upgrades.lw) + 1)
+			var weapon := Content.weapon(owner.character, "light", owner.combat_level("light"))
 			var distance := _planar_distance(decoy.position, target.position)
 			if distance <= float(decoy.special.range):
 				_face_companion(decoy, target.position)
@@ -3578,8 +4681,14 @@ func _face_companion(unit: BattleUnit, point: Vector3) -> void:
 	unit.rotation.y = unit.yaw
 
 func _companion_shot(unit: BattleUnit, target: BattleUnit, weapon: Dictionary) -> void:
-	events.append({"type": "shot", "actor": unit.entity_id, "start": unit.position, "end": target.position, "side": unit.side,
-		"weapon_type": weapon.get("type", ""), "companion": true})
+	var shot := {"type": "shot", "actor": unit.entity_id, "kind": unit.kind, "start": unit.position, "end": _npc_shot_point(target, false), "side": unit.side,
+		"weapon_type": weapon.get("type", ""), "companion": true}
+	if unit.special.has("wid"):
+		shot.wid = unit.special.wid
+	if unit.body_presentation != null:
+		_emit_body_event(shot)
+	else:
+		events.append(shot)
 
 func _spawn_fog(unit: BattleUnit, definition: Dictionary, center: Vector3) -> void:
 	var duration: float = definition.dur if definition.dur else 8.0
@@ -3606,12 +4715,144 @@ func _spawn_cubic_slabs(unit: BattleUnit, definition: Dictionary, center: Vector
 		"owner": unit.entity_id, "members": members})
 	events.append({"type": "cube_spawn", "actor": unit.entity_id, "position": center, "radius": 5.5, "duration": duration, "side": unit.side})
 
+func _publish_blast_event(event: Dictionary) -> void:
+	if not authoritative:
+		return
+	blast_event_serial += 1
+	event.blast_serial = blast_event_serial
+	events.append(event)
+	pending_blast_feedback.append(event.duplicate(true))
+
+func _blast_requests(event: Dictionary) -> Array[Dictionary]:
+	var requests: Array[Dictionary] = []
+	if world == null:
+		return requests
+	if event.type == "die" and not DeathPresentation.has_effects(event.kind):
+		return requests
+	var ground := _npc_presentation_ground(event.position)
+	if not is_finite(ground):
+		push_error("Blast feedback requires a verified source terrain height")
+		return requests
+	if event.type == "die":
+		for command: Dictionary in DeathPresentation.commands(event.kind, event.get("side", ""), event.position, ground):
+			if command.type == "blast":
+				requests.append({"point": command.point, "radius": float(command.radius)})
+	else:
+		requests.append({"point": BlastFeedback.point(event, ground), "radius": float(event.radius)})
+	return requests
+
+func _settle_blast_feedback(point: Vector3, radius: float, serial: int, only_peer: int = 0) -> Array[BattleUnit]:
+	var changed: Array[BattleUnit] = []
+	if not authoritative or not point.is_finite() or not is_finite(radius):
+		return changed
+	for pilot: BattleUnit in pilots.values():
+		if pilot.peer_id <= 0 or pilot.is_bot or not pilot.is_pilot():
+			continue
+		if only_peer != 0 and pilot.peer_id != only_peer:
+			continue
+		if pilot.camera == null or not pilot.alive() or pilot.side.is_empty():
+			continue
+		var eye := camera_origin(pilot)
+		if not eye.is_finite():
+			push_error("Blast feedback requires a finite authority camera")
+			continue
+		var response := BlastFeedback.reaction(point, radius, pilot.position, eye, pilot.height, pilot.yaw, pilot.flying, pilot.recoil.trauma)
+		var impulse: Vector3 = response.velocity
+		if pilot.flying:
+			pilot.velocity += impulse
+		else:
+			# Source ground vel.y is discarded; vy receives its separate lift account.
+			pilot.impulse_velocity += Vector2(impulse.x, impulse.z)
+			pilot.velocity += Vector3(impulse.x, float(response.lift), impulse.z)
+		if float(response.trauma) != pilot.recoil.trauma:
+			changed.append(pilot)
+		pilot.recoil.trauma = float(response.trauma)
+		pilot.blast_applied_serial = maxi(pilot.blast_applied_serial, serial)
+	return changed
+
+func flush_blast_feedback() -> void:
+	if not authoritative:
+		return
+	var queued := pending_blast_feedback
+	pending_blast_feedback = []
+	var changed: Dictionary = {}
+	for event: Dictionary in queued:
+		for request: Dictionary in _blast_requests(event):
+			for pilot: BattleUnit in _settle_blast_feedback(request.point, float(request.radius), int(event.blast_serial)):
+				changed[pilot.entity_id] = pilot
+	# One fresh private shake sample after the whole published event batch.
+	for pilot: BattleUnit in changed.values():
+		pilot.recoil.advance(0, _recoil_next)
+
+func _publish_local_blast(unit: BattleUnit, point: Vector3, radius: float) -> void:
+	if not authoritative or not unit.is_pilot() or unit.is_bot or unit.peer_id <= 0 or unit.camera == null or pilots.get(unit.peer_id) != unit:
+		return
+	blast_event_serial += 1
+	for pilot: BattleUnit in _settle_blast_feedback(point, radius, blast_event_serial, unit.peer_id):
+		pilot.recoil.advance(0, _recoil_next)
+	_emit_body_event({"type": "local_blast", "actor": unit.entity_id, "only_peer": unit.peer_id, "position": point,
+		"radius": radius, "side": unit.side, "blast_serial": blast_event_serial,
+		"feedback_recoil": unit.recoil.snapshot(), "clock": clock})
+
+func apply_owner_recoil(state: Dictionary) -> bool:
+	if authoritative:
+		return false
+	var pilot: BattleUnit = pilots.get(multiplayer.get_unique_id())
+	if pilot == null:
+		return false
+	var serial := int(state.get("blast_serial", 0))
+	if serial < pilot.blast_received_serial:
+		return false
+	pilot.blast_received_serial = serial
+	pilot.recoil.apply_snapshot(state.get("recoil", {}))
+	return true
+
+func _report_death(unit: BattleUnit) -> void:
+	death_event_serial += 1
+	_publish_blast_event({"type": "die", "actor": unit.entity_id, "kind": unit.kind, "position": unit.position,
+		"side": unit.side, "peer": unit.peer_id, "death_serial": death_event_serial})
+
+func _retain_removed_body(unit: BattleUnit) -> void:
+	if Session.dedicated or world == null or not victim_reports.has(unit.entity_id) or not RetiredBody.eligible(unit):
+		return
+	unit_view_removed.emit(unit.model)
+	if footprint_glows != null and footprint_glows.active.has(unit.entity_id):
+		footprint_glows._drop(unit.entity_id)
+	if skill_glows != null and skill_glows.active.has(unit.entity_id):
+		skill_glows._drop(unit.entity_id)
+	if lock_glow != null and lock_glow.target_id == unit.entity_id:
+		lock_glow.clear()
+	retired_bodies[unit.entity_id] = RetiredBody.capture(unit, self)
+
+func _present_retired_bodies(received: Array) -> void:
+	var dead := {}
+	for event: Dictionary in received:
+		if event.get("type") in ["die", "moon_boom"]:
+			dead[int(event.get("actor", 0))] = true
+	var pending := retired_bodies
+	retired_bodies = {}
+	for id: int in pending:
+		var view: RetiredBody = pending[id]
+		if dead.has(id):
+			if view.begin(world.ensure_combat_effects()):
+				dissolve_ghosts.append(view)
+		else:
+			view.dispose()
+
+func step_dissolve_ghosts(delta: float) -> void:
+	if not is_finite(delta) or delta < 0:
+		return
+	for index in range(dissolve_ghosts.size() - 1, -1, -1):
+		if not dissolve_ghosts[index].advance(delta):
+			dissolve_ghosts.remove_at(index)
+
 func _remove_field_unit(id: int, report: bool = false) -> void:
 	var unit: BattleUnit = units.get(id)
 	if unit == null:
 		return
 	if report:
-		events.append({"type": "die", "actor": id, "kind": unit.kind, "position": unit.position, "side": unit.side})
+		_report_death(unit)
+	_retain_removed_body(unit)
 	unit.hp = 0
 	unit.visible = false
 	unit.collision_layer = 0
@@ -3693,6 +4934,7 @@ func _tick_ability_states(delta: float) -> void:
 		unit.buffs = unit.buffs.filter(func(buff): return float(buff.until) > clock)
 		if not unit.alive():
 			unit.cast_state.clear()
+			unit.cast_preview.clear()
 			unit.heal_aura.clear()
 			unit.bleed.clear()
 			unit.status.erase("phase_until")
@@ -3753,6 +4995,7 @@ func _prune_dead_creeps() -> void:
 			continue
 		if unit.path_follower != null:
 			unit.path_follower.queue_free()
+		_retain_removed_body(unit)
 		unit.queue_free()
 		units.erase(id)
 
@@ -3762,24 +5005,36 @@ func snapshot(peer: int = 0) -> Dictionary:
 	for unit: BattleUnit in units.values():
 		if viewer != null and not visible_to_side(unit, viewer.side):
 			continue
-		visible_units.append(unit.snapshot())
+		var state := unit.snapshot()
+		if unit.body_presentation != null:
+			unit.presented_altitude = _missile_target_altitude(unit) if unit.is_hero() or unit.flying else 0.0
+			state.hero_y = unit.presented_altitude
+		visible_units.append(state)
 	var visible_ids := {}
 	for unit in visible_units:
 		visible_ids[unit.id] = true
-	var visible_events: Array = events
+	var visible_events: Array = events.filter(func(event): return not event.has("only_peer") or int(event.only_peer) == peer)
 	if viewer != null:
 		visible_events = []
 		for event: Dictionary in events:
-			if event.type == "lightning_strike":
+			if event.has("only_peer"):
+				if int(event.only_peer) == viewer.peer_id:
+					visible_events.append(event)
+			elif event.type == "lightning_strike":
 				var points: Array = event.points.filter(func(point): return point.get("absolute", false) or visible_ids.has(int(point.id)))
 				if not points.is_empty():
 					visible_events.append({"type": "lightning_strike", "actor": 0, "points": points})
-			elif event.type in ["airfall", "airdrop", "relay"] or event.has("missile") or visible_ids.has(event.actor):
+			elif event.type == "die" or str(event.type) in BlastFeedback.REPORT_TYPES:
+				# Source death/explosion broadcasts survive entity removal and fog filtering.
 				visible_events.append(event)
-	return {"clock": clock, "wave": wave, "over": over, "winner": winner, "stats": match_stats.duplicate(true),
+			elif event.type == "lock" and int(event.get("target_peer", 0)) == viewer.peer_id:
+				visible_events.append(event)
+			elif event.type in ["airfall", "airdrop", "relay", "siege", "siege_talk", "boss_segment", "boss_down"] or event.has("missile") or visible_ids.has(event.actor):
+				visible_events.append(event)
+	return {"clock": clock, "body_time": presentation_time(), "wave": wave, "over": over, "winner": winner, "stats": match_stats.duplicate(true),
 		"weather": {"vector": weather_vector.duplicate(true), "dynamics": weather_dynamics.duplicate(true), "surface": weather_surface.duplicate(true),
 			"seed": weather_seed, "schedule": weather_schedule.duplicate(true), "season": weather_start.get("season", "summer"), "hour": WeatherRules.clock_hour(weather_start.get("time", "day"), weather_elapsed, weather_schedule)},
-		"creep_upgrades": creep_upgrades.duplicate(true),
+		"creep_upgrades": creep_upgrades.duplicate(true), "siege": {"enabled": siege, "defender": defending_side, "open": siege_open.duplicate()},
 		"fires": fire_fields.duplicate(true), "weather_scars": weather_scars.duplicate(true),
 		"loots": loots.duplicate(true),
 		"mines": mines.duplicate(true),
@@ -3787,8 +5042,13 @@ func snapshot(peer: int = 0) -> Dictionary:
 		"fogs": _fog_snapshot(),
 		"units": visible_units, "events": visible_events.duplicate(), "fire_control": _control_snapshot(viewer),
 		"lock": _lock_snapshot(viewer), "reachability": _reachability_snapshot(viewer),
-		"footprint": _footprint_snapshot(viewer), "missiles": _missile_snapshot(), "weapon_pose": _weapon_pose_snapshot(viewer),
-		"projectile_view": projectile_view(viewer)}
+		"footprint": _footprint_snapshot(viewer), "skill_footprint": _skill_footprint_snapshot(viewer),
+		"missiles": _missile_snapshot(), "weapon_pose": _weapon_pose_snapshot(viewer),
+		"projectile_view": projectile_view(viewer),
+		"view_velocity": viewer.velocity if viewer != null else Vector3.ZERO,
+		"blast_serial": viewer.blast_applied_serial if viewer != null else 0,
+		"recoil": viewer.recoil.snapshot() if viewer != null else {},
+		"aim_control": {"on": viewer.input_state.get("aim", false), "request": viewer.aim_request} if viewer != null else {}}
 
 func _weapon_pose_snapshot(viewer: BattleUnit) -> Dictionary:
 	if viewer == null or viewer.weapon_pose == null or not viewer.alive() or over:
@@ -3797,7 +5057,8 @@ func _weapon_pose_snapshot(viewer: BattleUnit) -> Dictionary:
 	if not is_finite(pose.clock):
 		return {}
 	return {"clock": pose.clock, "serial": pose.accepted_serial, "visual_serial": pose.weapons.last_serial, "slot": pose.slot, "form": pose.form,
-		"gun": pose.gun, "kick": pose.kick, "muzzle": pose.current_muzzle(viewer.aim_transform())}
+		"gun": pose.gun, "kick": pose.kick, "view_mode": viewer.view_mode,
+		"muzzle": _launch_pose(viewer, pose.slot, 0).origin if viewer.view_mode == "tps" else pose.current_muzzle(viewer.aim_transform())}
 
 func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
 	if viewer == null or world == null or over or not viewer.alive() or not viewer.is_hero():
@@ -3805,7 +5066,7 @@ func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
 	var slot: String = viewer.input_state.get("slot", "light")
 	if slot not in ["light", "heavy"]:
 		return {}
-	var definition := Content.weapon(viewer.character, slot, int(viewer.upgrades.hw if slot == "heavy" else viewer.upgrades.lw) + 1)
+	var definition := Content.weapon(viewer.character, slot, viewer.combat_level(slot))
 	if definition.get("needAim", false) and not viewer.input_state.get("aim", false):
 		return {}
 	var origin := _advisory_origin(viewer)
@@ -3834,7 +5095,7 @@ func _footprint_snapshot(viewer: BattleUnit) -> Dictionary:
 		var cached: Dictionary = fire_controls.get(viewer.entity_id, {})
 		if cached.is_empty():
 			return {}
-		if cached.clock != clock or cached.camera != viewer.aim_transform() or cached.direction != viewer.aim_direction() or int(cached.level) != int(viewer.upgrades.hw):
+		if cached.clock != clock or cached.camera != viewer.aim_transform() or cached.direction != viewer.aim_direction() or float(cached.level) != viewer.combat_level("heavy"):
 			return {}
 		control = {"on": true, "ok": cached.ok, "close": cached.close, "has_impact": cached.arc.has_impact,
 			"impact": cached.arc.impact, "aim": cached.aim}
@@ -3848,13 +5109,37 @@ func apply_footprint(footprint: Dictionary, lock_state: Dictionary = {}) -> void
 		add_child(footprint_glows)
 	footprint_glows.apply(units, footprint, int(lock_state.get("anchor", 0)))
 
+func _skill_footprint_snapshot(viewer: BattleUnit) -> Dictionary:
+	if viewer == null or over or not viewer.alive() or viewer.cast_preview.is_empty() or clock >= float(viewer.cast_preview.until):
+		return {}
+	var targets: Array = []
+	for target: BattleUnit in units.values():
+		targets.append({"id": target.entity_id, "side": target.side, "position": target.position, "radius": target.radius,
+			"visible": visible_to_side(target, viewer.side), "dead": not target.alive(),
+			"garrison": target.special.get("garrison", false), "neutral": target.special.get("neutral", false)})
+	var hits := ShotFootprintMath.skill_victims(viewer.cast_preview.definition, viewer.cast_preview.point, targets, viewer.side)
+	return {"hits": hits, "side": viewer.side, "warn": false}
+
+func apply_skill_footprint(footprint: Dictionary) -> void:
+	if skill_glows == null:
+		skill_glows = FootprintGlows.new()
+		skill_glows.skill_layer = true
+		add_child(skill_glows)
+	skill_glows.apply(units, footprint, 0)
+
+func apply_lock_glow(lock_state: Dictionary) -> bool:
+	if lock_glow == null:
+		lock_glow = LockGlowPresentation.new()
+		add_child(lock_glow)
+	return lock_glow.apply(units, lock_state)
+
 func _reachability_snapshot(viewer: BattleUnit) -> Dictionary:
 	if viewer == null or world == null or over or not viewer.alive() or not viewer.is_hero():
 		return {}
 	var slot: String = viewer.input_state.get("slot", "light")
 	if slot not in ["light", "heavy"]:
 		return {}
-	var level := int(viewer.upgrades.hw if slot == "heavy" else viewer.upgrades.lw) + 1
+	var level := viewer.combat_level(slot)
 	var definition := Content.weapon(viewer.character, slot, level)
 	# Source fan/line footprints have no single-target entrance gate.
 	if definition.area in ["fan", "line"]:
@@ -3907,7 +5192,15 @@ func apply_snapshot(data: Dictionary) -> void:
 	if authoritative or data.clock < clock:
 		return
 	clock = data.clock
+	if is_nan(body_clock_offset) and data.get("body_time") is float and is_finite(float(data.body_time)):
+		# Align once per room; snapshot jitter cannot rewind the local animation clock.
+		body_clock_offset = float(data.body_time) - BodyPresentation.time_now()
 	match_stats = data.get("stats", match_stats).duplicate(true)
+	var stages: Dictionary = data.get("siege", {})
+	if not stages.is_empty():
+		siege = bool(stages.enabled)
+		defending_side = String(stages.defender)
+		siege_open = stages.open.duplicate()
 	loots.clear()
 	for loot: Dictionary in data.get("loots", []):
 		loots.append(loot.duplicate(true))
@@ -3951,7 +5244,11 @@ func apply_snapshot(data: Dictionary) -> void:
 		seen[id] = true
 		var fresh := not units.has(id)
 		var unit: BattleUnit = spawn(state) if fresh else units[id]
+		present_victim_snapshot(unit, state)
 		unit.apply_snapshot(state, fresh)
+		if unit.body_presentation != null:
+			unit.body_presentation.capture_snapshot(state, float(data.clock))
+			_prime_body_view(unit)
 		if fresh and unit.kind == "bunker":
 			world.clear_camp_columns([{"x": state.position.x, "z": state.position.z}])
 		if unit.is_pilot():
@@ -3962,27 +5259,310 @@ func apply_snapshot(data: Dictionary) -> void:
 		var removed: BattleUnit = units[id]
 		if removed.is_pilot():
 			pilots.erase(removed.peer_id)
+		_retain_removed_body(removed)
+		victim_reports.erase(id)
 		removed.queue_free()
 		units.erase(id)
-	for event in data.events:
-		if event.type == "lightning_strike":
-			world.present_lightning(event.points)
-		if event.type == "shot":
-			present_shot(event)
+	view_snapshot_ready.emit(data)
+	_present_retired_bodies(data.get("events", []))
+	pending_missile_view = data.get("missiles", []).duplicate(true)
+	missile_view_pending = true
+	receive_body_events(data.events, presentation_time())
+	present_world_events(data.events)
 	if data.over and not over:
 		over = true
 		winner = data.winner
 		result.emit(winner)
 
+func present_world_events(received: Array) -> void:
+	if Session.dedicated or world == null:
+		return
+	for event: Dictionary in received:
+		if event.type == "die":
+			present_death(event)
+		if event.type == "screen_hurt":
+			screen_hurt.emit(event)
+		if event.type == "lightning_strike":
+			world.present_lightning(event.points)
+		if event.type == "shot":
+			present_shot(event)
+		if event.type == "projectile_terminal":
+			present_projectile_terminal(event)
+		if event.type == "plasma":
+			present_plasma(event)
+		if str(event.type) in BlastFeedback.REPORT_TYPES or event.type == "local_blast":
+			present_blast(event)
+	if missile_view_pending:
+		var states := pending_missile_view
+		pending_missile_view = []
+		missile_view_pending = false
+		sync_missile_presentations(states, received)
+
+func present_blast(event: Dictionary) -> void:
+	if Session.dedicated or world == null:
+		return
+	var local := event.type == "local_blast"
+	if local and int(event.only_peer) != multiplayer.get_unique_id():
+		return
+	var stream := "local" if local else "global"
+	var serial := int(event.get("blast_serial", -1))
+	if serial <= int(presented_blast_serials.get(stream, -1)):
+		return
+	presented_blast_serials[stream] = serial
+	if local and not authoritative:
+		var pilot: BattleUnit = pilots.get(multiplayer.get_unique_id())
+		if pilot != null and serial > pilot.blast_received_serial:
+			pilot.blast_received_serial = serial
+			pilot.recoil.apply_snapshot(event.feedback_recoil)
+	var ground := _npc_presentation_ground(event.position)
+	if not is_finite(ground):
+		push_error("Explosion presentation requires a verified source terrain height")
+		return
+	var point := BlastFeedback.point(event, ground)
+	var effects := world.ensure_combat_effects()
+	if local:
+		effects.explosion(point, float(event.radius) * .8, 0xffaa33)
+	else:
+		effects.blast_burst(point, ground, float(event.radius), bool(event.get("kami", false)), BlastFeedback.sam(event))
+
+func present_death(event: Dictionary) -> void:
+	if Session.dedicated or world == null:
+		return
+	var serial := int(event.get("death_serial", -1))
+	if serial <= presented_death_serial:
+		return
+	presented_death_serial = serial
+	death_presented.emit(event)
+	if not DeathPresentation.has_effects(event.kind):
+		return
+	var ground := _npc_presentation_ground(event.position)
+	if not is_finite(ground):
+		push_error("Death presentation requires a verified source terrain height")
+		return
+	world.ensure_combat_effects().death(event, ground)
+
 func present_shot(event: Dictionary) -> void:
+	if Session.dedicated or world == null:
+		return
 	var owner: BattleUnit = units.get(int(event.actor))
+	var origin: Vector3 = event.start
+	if event.get("physical", false):
+		return
+	if event.get("hero_report", false):
+		owner = _hero_representative(int(event.actor))
+		var is_self := int(event.get("shooter_peer", owner.peer_id if owner != null else 0)) == multiplayer.get_unique_id()
+		if is_self and (owner == null or not owner.is_pilot()):
+			return
+		if owner != null and not owner.is_hero():
+			return
+		var serial := int(event.body_serial)
+		if serial <= int(hero_report_serials.get(int(event.actor), -1)):
+			return
+		hero_report_serials[int(event.actor)] = serial
+		if owner == null:
+			var plan := RemoteShotState.plan({}, event.slot, origin, event.end, bool(event.get("hit", false)), bool(event.get("bot_report", false)), world.clip_shot)
+			world.ensure_combat_effects().shot(origin, plan.target, event.slot == "heavy", event.side, plan.impact)
+			return
+		if not is_self:
+			_present_remote_shot(owner, event)
+			return
+		if event.get("remote_only", false):
+			if event.slot == "heavy":
+				world.ensure_combat_effects().muzzle(origin, true, event.side)
+			return
+	if owner != null and owner.body_presentation != null and event.has("body_serial") and not event.get("hero_report", false):
+		var serial := int(event.body_serial)
+		if serial <= owner.body_presentation.presented_shot:
+			return
+		owner.body_presentation.presented_shot = serial
+		origin = owner.body_presentation.npc_origin(int(event.body_serial), origin)
+		if not event.has("slot"):
+			var report := NpcShotMotion.report_style(event, owner.kind)
+			var kind: String = report.kind
+			var style: Dictionary = report.style
+			var velocity: Variant = null
+			var flight := 0.0
+			var gravity := 0.0
+			if style.mode == "shell":
+				var arc := NpcShotMotion.artillery(origin, event.end)
+				velocity = arc.velocity
+				flight = arc.flight
+				gravity = float(Content.constants.BALLISTIC.G)
+				NpcShotMotion.aim(owner.body, owner.body_presentation.entity, arc.angle, presentation_time())
+			world.ensure_combat_effects().npc(origin, event.end, kind, report.wid, event.side, world.clip_shot, velocity, gravity, flight)
+			return
+	# Base launch visuals follow the authoritative missile stream.
+	if event.get("kind") == "base" or owner != null and owner.kind == "base":
+		return
+	if owner != null and owner.is_pilot() and not event.get("physical", false) and event.get("area") in ["fan", "line"]:
+		var definition := _hero_effect_definition(owner, event)
+		origin = _hero_effect_origin(owner, event.slot, origin, int(event.get("shot_serial", -1)))
+		var effects := world.ensure_combat_effects()
+		if event.area == "fan":
+			effects.fan_blast(origin, event.direction, definition, float(event.range), event.side,
+				Content.heroes[owner.character].get("visual", {}).get("hue"), world.clip_shot)
+		else:
+			var target: Vector3 = event.end if owner.peer_id == multiplayer.get_unique_id() else world.clip_shot(origin, event.end).to
+			_present_hero_lance(owner, definition, event.side, origin, target, true)
+		return
 	if owner != null and owner.is_pilot() and owner.peer_id == multiplayer.get_unique_id():
 		if event.get("physical", false):
 			return
 		if event.get("slot") == "light" and event.get("area") == null and event.get("weapon_type") in ["beam", "rail"]:
 			world.ensure_projectile_visuals().tracer(event.start, event.end, _fpv_tracer_color(event.weapon_type, event.side))
+			var effects := world.ensure_combat_effects()
+			effects.muzzle(event.start, false, event.side)
+			if event.get("hit", false):
+				effects.spark(event.end, 2.2, int(_fpv_tracer_color(event.weapon_type, event.side).to_rgba32() >> 8))
 			return
-	world.tracer(event.start, event.end, event.side)
+	world.tracer(origin, event.end, event.side)
+
+func present_plasma(event: Dictionary) -> void:
+	if Session.dedicated or world == null:
+		return
+	var owner := _hero_representative(int(event.actor))
+	if owner != null and not owner.is_hero():
+		return
+	if int(event.get("shooter_peer", owner.peer_id if owner != null else 0)) == multiplayer.get_unique_id():
+		return
+	if event.has("body_serial"):
+		var serial := int(event.body_serial)
+		if serial <= int(hero_report_serials.get(int(event.actor), -1)):
+			return
+		hero_report_serials[int(event.actor)] = serial
+	if owner != null:
+		owner.remote_burst_driven = true
+	var definition := _hero_effect_definition(owner, event) if owner != null else {}
+	var origin: Vector3 = _hero_effect_origin(owner, event.slot, event.start) if owner != null else event.start
+	var hue: Variant = Content.heroes[owner.character].get("visual", {}).get("hue") if owner != null else null
+	world.ensure_combat_effects().remote_plasma(origin, SourceQuaternion.vector_normalized(event.direction), definition,
+		float(event.radius), float(event.get("arc", 15)), event.slot, event.side,
+		hue, bool(event.get("bar", false)), world.clip_shot)
+	if owner != null:
+		_remote_fire_pose(owner, event.slot, null, presentation_time(), false)
+
+func present_projectile_terminal(event: Dictionary) -> void:
+	if Session.dedicated or world == null:
+		return
+	var owner: BattleUnit = units.get(int(event.actor))
+	if owner == null or not owner.is_pilot() or owner.peer_id != multiplayer.get_unique_id():
+		return
+	var serial := int(event.body_serial)
+	if serial <= int(terminal_event_serials.get(owner.entity_id, -1)):
+		return
+	terminal_event_serials[owner.entity_id] = serial
+	if not str(event.get("visual_id", "")).is_empty():
+		world.ensure_projectile_visuals().retire_round(event.visual_id, float(event.clock))
+	_present_hero_lance(owner, _hero_effect_definition(owner, event), event.side, event.start, event.end, false)
+
+func _present_hero_lance(owner: BattleUnit, definition: Dictionary, side: String, origin: Vector3, target: Vector3, muzzle: bool) -> void:
+	var effects := world.ensure_combat_effects()
+	var hue: Variant = Content.heroes[owner.character].get("visual", {}).get("hue")
+	effects.lance_visual(origin, target, definition, side, hue)
+	if muzzle:
+		effects.muzzle(origin, true, side)
+
+func _hero_effect_definition(owner: BattleUnit, event: Dictionary) -> Dictionary:
+	var slot: String = event.get("slot", "heavy")
+	var is_self := owner.peer_id == multiplayer.get_unique_id()
+	return Content.weapon(owner.character, slot, float(event.get("level", owner.combat_level(slot))) if is_self else 1.0)
+
+func _hero_effect_origin(owner: BattleUnit, slot: String, fallback: Vector3, serial: int = -1) -> Vector3:
+	if owner.peer_id == multiplayer.get_unique_id():
+		return fallback
+	var candidates: Array = []
+	for candidate: BattleUnit in _hero_group(owner):
+		var point := candidate.body.next_muzzle(slot)
+		if serial >= 0 and candidate.body_presentation != null:
+			point = candidate.body_presentation.hero_origin(serial, point)
+		candidates.append({"position": candidate.body.global_position, "muzzle": point if point.is_finite() else null})
+	return RemoteShotState.muzzle(candidates, fallback)
+
+func _hero_group(owner: BattleUnit) -> Array[BattleUnit]:
+	var group: Array[BattleUnit] = []
+	var id := int(owner.special.get("owner_id", owner.entity_id)) if owner.special.get("role") == "clone" else owner.entity_id
+	for candidate: BattleUnit in units.values():
+		if candidate.entity_id != id and not (candidate.special.get("role") == "clone" and int(candidate.special.get("owner_id", 0)) == id):
+			continue
+		if candidate.body == null or not candidate.presentation_visible or candidate.body_presentation == null or candidate.body_presentation.report.is_empty():
+			continue
+		group.append(candidate)
+	return group
+
+func _hero_representative(id: int) -> BattleUnit:
+	var owner: BattleUnit = units.get(id)
+	if owner != null and owner.presentation_visible and (owner.body_presentation == null or not owner.body_presentation.report.is_empty()):
+		return owner
+	for candidate: BattleUnit in units.values():
+		if candidate.special.get("role") == "clone" and int(candidate.special.get("owner_id", 0)) == id and candidate.presentation_visible:
+			if candidate.body_presentation == null or not candidate.body_presentation.report.is_empty():
+				return candidate
+	return null
+
+func _fire_squad_clones(owner: BattleUnit, slot: String, serial: int, now: float) -> void:
+	if serial >= 0:
+		hero_pose_serials[owner.entity_id] = maxi(int(hero_pose_serials.get(owner.entity_id, -1)), serial)
+	for candidate: BattleUnit in _hero_group(owner):
+		if candidate == owner:
+			continue
+		if serial >= 0:
+			candidate.body_presentation.cache_hero_port(serial, slot, now)
+		candidate.body_presentation.fire_local(slot, now)
+
+func _remote_fire_pose(owner: BattleUnit, slot: String, target: Variant, now: float, prepared: bool) -> void:
+	for candidate: BattleUnit in _hero_group(owner):
+		if not prepared:
+			candidate.body_presentation.fire_local(slot, now)
+		if target is Vector3:
+			candidate.body_presentation.entity._aimAt = {"x": target.x, "y": target.y, "z": target.z,
+				"until": now + float(Content.balance.bodyRules.presentation.aimHold)}
+
+func _present_remote_shot(owner: BattleUnit, event: Dictionary) -> void:
+	var definition := Content.weapon(owner.character, event.slot, 1)
+	var now := presentation_time()
+	owner.remote_burst_driven = true
+	var prepared := not event.get("bot_report", false) and int(hero_pose_serials.get(int(event.actor), -1)) >= int(event.get("shot_serial", 0))
+	var origin := _hero_effect_origin(owner, event.slot, event.start, int(event.get("shot_serial", -1)))
+	if event.get("area") == "fan" and not event.get("remote_only", false):
+		world.ensure_combat_effects().remote_plasma(origin, SourceQuaternion.vector_normalized(event.direction), definition,
+			float(event.range), float(definition.get("arc", 15)), event.slot, event.side,
+			Content.heroes[owner.character].get("visual", {}).get("hue"), bool(event.get("bar", false)), world.clip_shot)
+		_remote_fire_pose(owner, event.slot, null, now, prepared)
+		return
+	var plan := RemoteShotState.plan(definition, event.slot, origin, event.end,
+		bool(event.get("hit", false)), bool(event.get("bot_report", false)), world.clip_shot)
+	match plan.kind:
+		"lance":
+			_present_hero_lance(owner, definition, event.side, origin, plan.target, true)
+		"shell":
+			var ground := _npc_presentation_ground(plan.target) if definition.type == "launcher" else NAN
+			var surface := world.visual_surface(origin) if definition.trajectory in ["guide", "fnf"] else NAN
+			if definition.type == "launcher" and not is_finite(ground) or definition.trajectory in ["guide", "fnf"] and not is_finite(surface):
+				push_error("Remote projectile presentation requires verified terrain/standing surfaces")
+				return
+			var state := VisualShellMotion.launch(definition, origin, plan.target, ground, surface, float(event.get("mv", NAN)))
+			world.ensure_projectile_visuals().spawn_shell(state, "%s-%s-%s" % [owner.character, event.slot, event.side.to_lower()])
+			world.ensure_combat_effects().muzzle(origin, true, event.side)
+			if definition.type == "launcher":
+				for candidate: BattleUnit in _hero_group(owner):
+					RemoteShotState.aim_heavy(candidate.body, SourceQuaternion.vector_normalized(state.velocity))
+		"shot":
+			world.ensure_combat_effects().shot(origin, plan.target, event.slot == "heavy", event.side, plan.impact)
+			remote_bursts.schedule(definition, now, {"actor": int(event.actor), "slot": event.slot,
+				"side": event.side, "aim": event.end, "definition": definition})
+	_remote_fire_pose(owner, event.slot, event.end, now, prepared)
+
+func step_remote_shots(now: float) -> void:
+	if Session.dedicated or world == null:
+		return
+	for callback: Dictionary in remote_bursts.take_due(now):
+		var payload: Dictionary = callback.payload
+		var owner := _hero_representative(int(payload.actor))
+		var origin := _hero_effect_origin(owner, payload.slot, payload.aim) if owner != null else payload.aim
+		var plan := RemoteShotState.echo(payload.definition, origin, payload.aim, world.clip_shot)
+		world.ensure_combat_effects().shot(origin, plan.target, payload.slot == "heavy", payload.side, plan.impact)
+		if owner != null:
+			_remote_fire_pose(owner, payload.slot, payload.aim, now, false)
 
 func _fpv_tracer_color(type: String, side: String) -> Color:
 	var style: Dictionary = Content.balance.projectileVisual

@@ -21,7 +21,8 @@ remaining seats with bots. For LAN, create a room and let the other player join
 your IP on UDP port 8620, then start the match. All peers need this Godot project;
 the browser game's websocket protocol is different.
 
-WASD moves, mouse looks, left mouse fires, right mouse zooms, 1/2 changes weapon,
+WASD/arrows move, mouse looks, left mouse fires, wheel/keypad +/- toggles scope
+and light/heavy mode, and RMB/keypad / casts the current shield-stance ability.
 Hold/release Space charges a ground jump or morph launch; Space/C ascends/descends
 in flight. F toggles the defensive shield stance, Shift sprints, R reloads, Q/E requests abilities,
 B opens the supply shop, M expands the map, G requests a nearby civilian to
@@ -135,6 +136,54 @@ rows retain source faction colors and Chinese labels. Original death-settlement
 cases and snapshot isolation checks are prepared but unexecuted. Complete
 squad/mode statistics, leaderboards and replay integration remain pending.
 
+Bots now use the original four difficulty policies, role priorities, shared APM
+deadlines, retreat/rally state machine, alert search, heavy/skill/guard/purchase
+decisions and native body collision. Authority bot fire shares ammunition/power
+settlement and preserves original immediate direct damage, heavy impact-report
+reload backdating, threat decay and source RNG draw order. The lobby exposes bot
+difficulty. Original decision/fire/history oracles, native wall checks and
+`tools/test_network.ps1 -Bots` cases are prepared but unexecuted. Full frame-order,
+mode/traversal and seeded complete-match verification remain pending.
+
+Campaign BOSS/siege authority paths now preserve source weighted HP segments,
+eight-track enrage, HP fraction during capacity upgrades, shield restoration,
+transition invulnerability, absolute body/collision scale, permanent death and
+revive rejection. Stage immunity and local BOSS/dialogue HP floors share damage
+settlement and targeting; allied bot and base-support damage gates are source
+based. The native segmented BOSS HUD retains original view/obstruction selection
+and look-away hysteresis. Original lifecycle/HUD oracles and `-Bosses` transport
+cases are prepared but unexecuted. Campaign resource generation, full transition
+VFX, super mode and complete chapter certification remain pending.
+
+Native campaign menus, pilot/art selection, six authored rosters/environments,
+increasing chapter difficulty, faction progress and intro saves are now written.
+Source prologue/chapter scenes use native text crawl, bounded pan/zoom, image
+fallback and skip controls. Combat radio remains automatic and non-blocking;
+victory unlocks the next chapter and displays the source base-stage transcript.
+Campaign rooms share the normal authority lifecycle and select source base
+assignment before launch. The exporter/capture/baker prepares both assignments
+of every faction chapter map. Missing original resources disable deployment.
+Source progress/deployment/dialogue/cinematic/spawn cases and `-Campaign`
+transport cases are prepared but unexecuted; complete campaign certification
+and its generated map resources remain pending.
+
+After all implementation is complete, the deferred campaign pipeline is
+`tools/import_source.mjs`, `tools/capture_campaign_inputs.mjs`, world baking,
+`tools/world_references.mjs`, a second source import to capture the new structure
+profiles, and native world/asset packing. Then run the complete fixture, runtime,
+render and transport checks. These steps have not been executed for this work.
+
+Server missile hologram/active drone-carrier attraction, phase loss, harmless front-sector reflection,
+blindness/EMP report gates and reverse-order skill interception now have native
+paths and prepared original references. Warheads use captured NPC damage through
+the shared blast path. Original player bodies remain single units (`SQUAD.N=1`);
+legacy wing salvos and removed saturation attacks remain unavailable. Full impact
+presentation/timing remains pending. Confirmed lock halos/rings and independent
+skill-preview sprites now use native materials/meshes and private authority
+snapshots. The current authored roster retains the source's empty skill preview
+lists; original helper cases exercise positive preview geometry separately.
+All new assets, fixtures, compilation and validation remain deferred.
+
 After the deferred source import, `tools/import_cockpits.tscn -- --hazards` packs
 hazards/AA/relays/mines and `-- --loot` packs cash/ammo/affix loot plus S/M/L airdrops. These generation
 steps, Godot compilation and all final validations remain deferred until the
@@ -230,6 +279,10 @@ godot --headless --path . res://tests/bursts.tscn
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Bursts
 godot --headless --path . res://tests/projectile_visuals.tscn
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Projectiles
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Aiming
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -MissileDefenses
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Bodies
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Tps
 ```
 
 The test scene compares GDScript against fixtures evaluated by the original
@@ -243,6 +296,10 @@ source projectile/tracer fixtures also verify native geometry, flight, opacity,
 pooling and private owner poses. `-Projectiles` checks light/heavy meshes, moving
 snapshot poses, echo emission and clearing. Impact particles, remote mounts,
 client interpolation and view/body reaction remain pending.
+Prepared `-Aiming` cases cover native confirmed locks, private source-helper
+preview lists, incoming warnings, independent clearing and hidden targets. `-MissileDefenses`
+prepares original hologram/active carrier redirect, permanent phase loss, reflection events and
+harmless removal. Both suites remain unexecuted until final migration validation.
 `-KineticShots` verifies light-round flight
 and heavy-round termination events. `-MissileShots` checks base launches, missile
 geometry/HP snapshots, fire commands, interception events and bounty replication.
@@ -300,6 +357,11 @@ animated visual-mesh collision remain pending.
 node tools/import_source.mjs ../steel_vs_swarm
 godot --headless --path . res://tools/import_cockpits.tscn
 godot --headless --path . res://tools/import_cockpits.tscn -- --projectiles
+godot --headless --path . res://tools/import_cockpits.tscn -- --bodies
+godot --headless --path . res://tools/import_cockpits.tscn -- --civilian-parts
+godot --headless --path . res://tools/import_cockpits.tscn -- --npc-effects
+godot --headless --path . res://tools/import_cockpits.tscn -- --weapon-effects
+godot --headless --path . res://tools/import_cockpits.tscn -- --first-person-shields
 node tools/bake_worlds.mjs --reuse
 node tools/world_references.mjs
 godot --headless --path . res://tools/import_worlds.tscn
@@ -332,6 +394,434 @@ cache reuse. The native importer packs geometry and collision into compressed
 Godot resources. Development JSON bundles and raw tiles are excluded from
 exports. Runtime requires neither the source checkout nor the bake tools.
 
+Super battle implementation is prepared but unverified. The native lobby mode
+switch permits all source pilots and creates one third-faction human against
+both full Bot factions. `--super` selects the same mode for an offline launch
+or a dedicated `--server` host. The generated source tables cover all 101 legal
+levels; native authority purchases/deaths share their recomputation path, and
+combat, summons, body collision and FPV eye/forward offsets consume that state.
+Respawn sampling uses an independent random generator. The native shop exposes
+one Super track with automatic purchase enabled initially; wallet/HP/ammo always
+settle on the authority. Third-faction projectile/carrier/summon export is
+prepared. Before that metadata is generated, deployment remains unavailable.
+Original Super reference cases and `tools/test_network.ps1 -Super` routes are
+written but have not been generated or run. Full presentation, persistent mode
+preferences, spectators/recovery and complete-match verification remain pending.
+All verification still waits until the migration implementation is complete.
+
+Native controls/recoil implementation is prepared but unverified. Wheel/keypad
++/- toggle scope and select heavy/light weapons; RMB/keypad / immediately casts
+according to current shield stance. Arrow keys and additive numpad look retain
+source rules. Authority fire applies source recoil after its shot, preserves
+movement penalties and reverse impulses, and processes burst echoes without
+second damage/ammo expenditure. Recoil randomness stays separate from combat.
+Reliable aim acknowledgements keep later movement from undoing mode changes or
+empty-heavy fallback. The owner receives private recoil/view state; local camera
+look remains responsive. Source control/recoil references and native suites are
+written, and `tools/test_network.ps1 -Controls` routes both transports through
+real bindings, ordered shield/cast actions and an original recoil pulse trace.
+Metadata generation and every compile/runtime/render/transport check are deferred
+until all migration implementation is complete. Complete body/view feedback,
+spectator controls and frame/traversal certification remain
+pending.
+
+Native touch/gyro and personal control settings are also written but unverified.
+The lobby and battle menu share one native settings panel. The host chooses any,
+kbm or pad for the whole room, including live changes; only any permits a player
+to choose their own current controls. `--ctrl pad` also shows the virtual pad on
+a desktop. Two sticks, action/shoulder/system buttons and original strict
+empty-area double-tap-hold/drag firing feed shared controls. The shop remains
+accessible while dead and has a touch-accessible return button. Button/HUD
+mirroring, look inversion, level flight, sensitivities, sensor source and haptics
+persist in `user://controls.cfg`. Browser localStorage is not a native save file.
+Gyro uses Godot sensors on supported mobile exports; unavailable platforms or
+missing sensor readings show a reason. Source mobile references and native
+scalar/persistence suites are prepared. `tools/test_network.ps1 -Mobile` adds
+actual touch/mode/release checks over both transports. Data generation, all
+compilation/tests, sensor hardware, safe-area and populated mobile/render/export
+verification remain deferred. ZR view-lock now has the further unverified
+implementation below.
+
+Native ZR view assistance is written with original acquisition/cycle references.
+A press selects the next enemy from left to right; a hold tracks with the source
+angular-speed budget and hysteresis. NPCs/towers participate, release retains the
+cycle anchor, death clears it, and system look bypasses preference inversion while
+respecting freeze. It changes ordinary view angles and does not confirm a weapon
+lock or settle combat. Rendered cameras retain recoil/shake and source FOV easing.
+Fire dwell and dense weather share original scope-radius rules with acquisition.
+Native under-HUD ring/fog gradients use source palettes and anchors; Godot screen
+mipmaps and Tween ease-out replace browser blur/CSS timing. Scalar suites and
+`tools/test_network.ps1 -View` are prepared but unexecuted. Actual map LOS, live
+rosters, shader raster/transition appearance, complete frame order, TPS/body/muzzle
+integration and combined render/transport certification remain pending. No data
+generation, compilation or tests have run for these changes.
+
+Player TPS camera/state/occlusion is wired into the selectable native view but
+remains ungenerated and unverified. It retains source visual-height scaling,
+shoulder/floor/ring framing, local recoil, body turning, temporary FPV while
+aiming and per-object occlusion fades using native TriangleMesh queries. Shared
+source obstacle dimensions now drive dynamic camera clipping and native hazard
+movement cylinders, including fixed AA/relay radii and collapsed rubble. Original
+camera/mode/fade oracles and native suites are prepared. Body posing, private
+authority muzzle convergence, heading separation, mode input and persisted
+settings are connected below. Generation, compilation and all tests remain
+deferred until the migration implementation is complete.
+
+Full body scene export/packing and native `BodyRig` loading are prepared for
+ordinary/mercenary/Super appearances. Shared rig references, morph part plans,
+per-slot weapon event identity, payload recovery, spinner motion and moving
+muzzle attachments are retained. The source energy shield now has a native
+shader and scene-local materials with an independent presentation phase RNG.
+`--bodies` packs these assets after source generation. Original hierarchy/event
+and shield-clock suites are written but unexecuted; assets remain ungenerated.
+Anatomical locomotion and morph/defense/combat pose driving are written below;
+complete render shaders and owner/remote/TPS muzzle integration remain pending. No compilation,
+generation or tests have run for this implementation.
+
+Original per-part morph swap/post-pass driving is now written for the native
+body rig. It preserves source inferred part pairs, signed transforms, rest-joint
+settle, shrink/fade and material restoration, with prepared original traces and
+complete-state native comparisons. Source trace storage uses lossless deltas.
+Full locomotion/combat/equipment/shield ordering and remote hero binding are now
+written below, including owner TPS. No generation, compilation or tests have run.
+
+Source gait curves, movement state, animation weights and biped/hop/aerial poses are now
+written for the native body rig. The driver retains human/animal limb profiles,
+movement personality, weapon recoil, head/neck stabilization, held-arm bracing,
+jump leg synchronization and tail compensation. Logical Euler angles preserve
+source rotation order and accumulated revolutions independently of signed TRS.
+Aerial rigs retain distinct fixed-wing, bird, insect, membrane, rotor and swim
+motion, with private jet opacity/emission and stable-head axial waves.
+Quad rigs retain walk/tripod/crawl and gallop phases, insect lift joints,
+tentacle search/guard waves and rider stabilization. Wheel/track rigs use native
+MultiMesh tread plates with signed travel, differential turning and suspension;
+instance transforms/materials stay private to each body.
+Vehicle source profiles include original APC/tank faction/Super bodies; current
+hero assets use biped, quad or aerial rigs. Companion packing also retains
+instanced geometry and bounds.
+Original per-body traces and scalar/joint suites are prepared but unexecuted.
+Legacy single-tree morph driving remains unsupported. The complete captured-rig
+pass sequence and remote hero binding are written below; owner TPS remains pending.
+Generation and tests remain deferred.
+
+Body combat clocks and rigid weapon mechanisms are written with original
+event-identity, recoil, aim/charge/release windows, muzzle flames, deployment and
+blink behavior. Logical emission retains double precision beside native material
+values. Source traces and complete-state native comparisons are prepared but
+unexecuted; full frame ordering and remote game binding are written below.
+
+Source jump-pose overlays now retain takeoff/landing latches, apex tuck, jump-peak
+classification and separate biped/quad/insect landing loads. Original gait-plus-
+jump traces and exact gate cases are prepared; compilation and tests remain
+deferred. Anatomical/equipment/shield ordering is connected in the composed driver.
+
+All eleven source cast-pose archetypes are written, with original directional
+anticipation/strike curves, omni envelopes, per-clip durations and event expiry.
+Prepared traces compose gait/cast/jump helpers across both skill slots and
+direction modes. The complete body post-pass order and remote game binding are
+written below; no generation, compilation or tests have run.
+
+Species post-passes now retain aerial held-arm aiming, predatory posture,
+ground-wing folding and slot-dependent tentacle convergence in the original
+gait/cast/jump order. Original source blocks drive the prepared complete-node
+references. World stabilization and anatomical/aim/equipment/shield integration
+are composed in the frame driver; generation and tests remain deferred.
+
+World-frame quaternion math, mounted-part stabilization, weapon-axis correction,
+anatomical hand/gaze poses, burst hair flicks, bow draw/release and grip/stowed
+equipment clearance are now written. Source references compare reset and final
+body poses across mirrors, nonuniform scale, partial aim, raised soles and event
+boundaries. Native-width math fixtures are prepared; no generation, compilation
+or tests have run. Complete shield/reference-motion/morph ordering and remote
+hero game binding are written; owner TPS and full muzzle integration remain pending.
+
+Heroes now load captured body scenes and use a native presentation wrapper for
+the complete gait/combat/morph/anatomical/aim/equipment sequence. Actor physics
+and authority aiming retain ownership of movement and hit settlement. The local
+FPV body stays hidden. Source LOD staggering accumulates time between distant
+body updates, while spinners continue every frame. Weapon/cast delivery uses
+presentation serials to reject replays without losing distinct same-time shots.
+Revival/respawn snaps reset old presentation clocks. Original event/LOD/direction
+and complete-frame comparisons plus `-Bodies` ENet/WebSocket checks are prepared
+but unexecuted. Body scenes/fixtures remain ungenerated; missing scenes report
+unavailable content. Owner TPS and muzzle/aim separation are wired below;
+primary NPC binding is written below and final equivalence remains pending.
+
+A hidden authority body now reuses the captured pose pipeline independently of
+render cadence and LOD. Source TPS next-emitter selection and camera-ray
+convergence have native helpers and prepared animated/fallback references,
+including FPV pose freezes and TPS resumption. Every human authority pilot now
+owns this graph; accepted rounds, lob controls and advisory origins select its
+next port. Snapshots distinguish physical body heading from camera heading.
+Native owner camera/occlusion and saved view selection retain the original
+temporary FPV/restore order while aiming. The last scoped heavy round uses its
+restored TPS port with the previous FPV camera ray, and immediate feedback guards
+against stale scoped snapshots. Respawns reset local view/body orientation using
+an authority generation. Local echoes advance their body once; public self-echo
+notifications only consume transport identity. FX time aligns once to authority
+monotonic time and keeps advancing independently of match-clock snapshots.
+Prepared `-Tps` transport cases cover modes, ring framing, separate headings,
+private last-heavy emission and stale snapshot rejection. Existing transport
+fixtures explicitly select FPV. Complete death/revival cameras, carrier/civilian bodies,
+animated mesh queries and source frame/render/transport certification remain
+pending. Generation, compilation and tests remain deferred.
+
+Body weapon/cast/charge notifications now use a separate reliable native channel
+with visibility filtering and serial deduplication. Snapshot copies remain as
+delivery fallback. Native rail/steady entry, release and cancellation now emit
+the original charge-on/off transitions; source notification references and an
+immediate-RPC-only body transport case are prepared but unexecuted.
+
+Primary NPCs now load source-built soldier/APC/tank/rocketeer/howitzer/helicopter
+body scenes with native gait, wheels/tracks, rigid recoil and rotors. Independent
+vehicle turrets and aircraft gun pitch retain original shot memory, mechanical
+limits and visual target-cache rules before the composed body pass. NPC shot
+identity advances alternating emitters and recoil mounts once across immediate
+and snapshot delivery. Source mount/muzzle/acquisition references, complete-node
+native suites and a populated `-Bodies` NPC/replay case are prepared. These
+changes remain ungenerated and unverified. Static/camp/summon binding and
+MultiMesh occlusion are written below; remaining validation is still deferred.
+
+Towers, source base batteries, actual camp rosters, all six autonomous summon
+builders and the hologram/wingman alias now share the native captured body driver.
+Buildings retain their orientation while mounts track independently. Each base
+gun keeps its own target, rest angle and recoil; gameplay missile origins and
+cooldowns retain their existing authority path. Missing body content rejects
+camp preparation or casting before spending. NPC target-height reports preserve
+the distinct ordinary/companion quantization rules, with captured garrison and
+air-height fallback ports and individual snapshot tracer origins.
+
+MultiMesh view occlusion now queries individual instances and fades their batch
+with isolated material bindings. Material restoration keeps ongoing instance
+animation and external replacements. Source cases cover empty/mixed/mirrored
+batches, moving instances and instanced owner bounds; native resource-isolation
+checks and expanded `-Bodies` static-mount transport cases are prepared.
+These changes remain ungenerated and unverified. Complete surface/frame
+integration, artillery arc production,
+styled discharge/impact effects, final shaders and complete runtime/render/
+transport certification remain pending. All tests remain deferred.
+
+Carrier bodies now use the captured native body pipeline: per-pilot kamikaze
+escorts retain the actual chassis and source root scale; bomber/hypersonic bodies
+retain their original absence of a locomotion rig. Native attitude follows source
+heading easing and displacement-derived hypersonic pitch in `YXZ` order. Casting
+checks the actual pilot's carrier resources before spending. Clone shots now
+drive only the firing entity, with its current muzzle sampled before the next
+combat pass advances either morph tree. Original-method pose/event references
+and native binding, cadence and replay cases are prepared. The remote position/
+surface driver is written below; complete integration and populated transport/render certification remain pending; no
+generation, compilation or test has run.
+
+Per-ID civilian bodies now assemble native scenes exported from the original
+body, hair, clothing, accessory and profession helpers. Source appearance RNG
+selects the components and private palettes; waist, head/shoulder proportions,
+source centering/height fit and team rings preserve the independent body stream.
+The source articulated chains use the existing native biped pose pipeline.
+Missing parts reject preparation; `--civilian-parts` packs the prepared graphs.
+Original complete-model geometry, normals, colours and motion references cover
+every occupation and all appearance categories, with native comparison suites
+written. Assets remain ungenerated and all verification remains deferred;
+head marks, final surface shaders and complete frame/transport integration remain.
+Prepared `-Bodies` transport cases also include clone, kamikaze, hypersonic and
+per-ID civilian binding, event replay and unchanged authority resources/RNG.
+
+Remote bodies now keep an independent native rendered transform. Original
+planar/heading easing, stationary shot/nearest-enemy facing, carrier pitch and
+previous-position LOD share the same visual frame; physics and hit volumes stay
+authoritative. Offline and network bodies consume the same published snapshot,
+retaining source ground/factory placement before the first frame. Ground sampling
+retains accumulated-LOD caches and source
+water/deck rules, while flight uses terrain/deck/closed-roof maxima. Native lane
+profiles march source paths after initial weather setup and preserve strict
+nearest-sample ordering. Original remote-frame/profile references and native
+cadence, geometry-frame and resource-isolation suites are prepared. Standing
+platform/blocker metadata, static pads, visibility re-entry and full integration/
+render/transport certification remain pending. No generation or test has run.
+
+NPC firing now has original gun/cannon, wingman-beam, compact-rocket and
+eight-chord artillery presentation, with the source launch-angle barrel pose,
+delayed endpoint stars and base-only launch flashes. Native pools and MultiMesh
+batches retain the source layered colours, fade curves and nested effect limits;
+immediate/snapshot replay cannot allocate another discharge. Shared muzzle,
+contact and explosion bursts are written, and existing boom snapshots use the
+same offline/network presentation entry. Effects use a separate visual RNG and
+never settle combat. Original geometry/texture exports, `--npc-effects` packing,
+source-method burst references and howitzer transport checks are prepared.
+Missing resources stop rendered match preparation. Generation, compilation and
+all tests remain deferred. Full hero discharges/fans, explosion producer coverage,
+kamikaze embers, blast reactions, low-power preferences, remaining FX budgets,
+visibility lifecycle and final shaders/render/transport certification remain.
+
+Hero fan and lance effects now have native authored scene/mesh drivers. Offline
+exports execute the original discharge geometry and retain each fan vertex's
+ownership bin. Runtime clipping preserves the source sub-cone edges, elevation
+limit, central reach and obstacle backoff; a vertex shader animates sweep
+brightness without rotating the clipped cone. Full-width penetration channels,
+source envelope curves, payload travel and delayed EMP release share the bounded
+effect list. Instant hero fan/line and bot plasma snapshots use those drivers.
+`--weapon-effects` packs their scenes; raw graphs stay out of exports. Source
+geometry/fade/query fixtures and production event/resource checks are prepared.
+Generation, compilation and tests remain deferred. Low-power
+preferences and populated shader/render/transport certification remain pending.
+
+Owner kinetic penetration now presents its launch-to-impact channel once at
+terminal flight, independently of damage settlement. Immediate events and
+snapshot copies share replay rejection; timestamped visual retirement prevents
+older or same-clock snapshots from recreating the spent projectile. Pure visual
+shells retain factory tail poses, draw source contact stars only on collision
+and expire silently at range. Owner FX speed stays distinct from gravity
+velocity. Original terminal/contact traces and native production/lifecycle
+checks are prepared; generation, compilation and tests remain deferred. Remaining
+terminal feedback still requires work.
+
+Remote human and bot reports now share source weapon dispatch, visual shells
+and compressed burst callbacks. Initial shots preserve their pre-fire emitter;
+callbacks query the current nearest owner/clone muzzle. Same-pilot squad rigs
+share one fire pose, surviving clones retain pilot identity, and duplicate
+RPC/snapshot reports cannot repeat effects or callbacks. Private bot poses keep
+every paid attack while public poses follow source report cadence. Prepared
+`-Bodies` transport cases cover immediate delivery and replay.
+
+Original local fan, remote plasma and missing-asset lance fallbacks are written.
+Ion breath uses captured throat geometry plus native MultiMesh coils/arcs, with
+source low-power counts, colours and fade curves. Source-method fixtures cover
+fallback ordering, scatter, clipping, vertical/zero directions and actual ion
+transforms. These paths remain ungenerated and unverified; all generation,
+compilation and tests remain deferred until migration implementation is complete.
+
+Fire/smoke sprites now use captured original textures and separate native
+billboard pools. Embers retain source gravity; smoke/plumes retain frame-delta
+drift and normalized delayed visibility. Kamikaze explosions include their
+original ember burst. Pool prewarm/caps and the shared oldest-first effect budget
+remain source-derived.
+
+Observed HP/shield snapshots now present source victim contacts offline and on
+replicas, including shield priority, building variants and camera-distance size
+compensation. First observations, healing, replay and visibility re-entry cannot
+invent a hit. Guard flashes target the original spawn material and retain the
+stronger active peak. Source producer/tick/gate/guard references and native
+resource/lifecycle checks are prepared; generation, compilation and tests remain
+deferred. Remaining private damage/death/scenery reactions and populated
+render/transport certification remain pending.
+
+First-person shields now pack original six-sided geometry, per-pilot patterns
+and native shield materials through `--first-person-shields`. The camera owns
+the shield separately from cockpit visibility and weapon recoil. Source FPV/TPS,
+defense/cast/death gates, horizontal expansion, hidden-frame clocks and style
+retargeting are written. Snapshot vital loss selects either a shield flash or
+the original red hurt vignette; first observations, healing, death and view
+resets do not invent hits. Native UI timing retains browser ease-out keyframes
+and the source repeated-hit animation guard. Original setup/update/snapshot/CSS
+references and native scene/material/production checks are prepared; generation,
+compilation and tests remain deferred. Blood, hitstop, death sequences and full
+render/transport certification remain pending.
+
+Blood/glint authority aggregation and native presentation state are written.
+Actual primary-pilot losses merge by attacker until publication, preserving the
+first bearing, optional human eye height and source rounding. Native state keeps
+source camera projection, dose/drop curves, immutable stains, caps and fade/
+clear behavior on an independent visual RNG. Original-method fixtures and native
+resource checks are prepared. Native overlay/transport binding and compositing
+are now written below. Generation, compilation and tests remain deferred.
+
+Native glass overlays retain source DOM identity, immutable drop patterns,
+percentage positions, exact decimal serialization and per-frame opacity. Pooled
+SubViewport chains compose the original gradients, blur and alpha shadows once
+per new stain or resize. Local publication serials reject replay; view/death/room
+changes clear both source layers. Source DOM and landscape/portrait browser PNG
+capture plus native lifecycle and `-Bodies` transport cases are prepared.
+After all implementation and deferred imports, the rendered scene
+`godot --path . res://tests/splat_render.tscn` compares native glass pixels with
+the source PNGs and writes mismatches under `build/splat_render`. Raster/filter,
+frame-order and full runtime/transport certification remain pending; no
+generation, compilation or test has run.
+
+Death camera transitions now have an unverified native state machine, synchronous
+source effect callbacks, cockpit fire/smoke bands, independent Camera3D ownership
+and respawn/room cancellation. Source CSS drives native red-rim pulse and climax
+whiteout, with the shop remaining above the flash. Original initializer/update,
+surface-query, effect-order and CSS fixtures are prepared. After all implementation
+and source imports, run `godot --path . res://tests/death_render.tscn` for browser
+pixel comparison and `tools/test_network.ps1 -Godot <path> -Deaths` for lethal
+damage, early respawn, aerial climax and camera-release transport certification.
+Exact blur raster/performance, TPS death-body presentation and configurable wipe
+transitions remain pending; no generation, compilation or test has run.
+
+Blast feedback now has unverified authority settlement for camera trauma,
+ground lift and airborne impulse. Immediate owner projectile feedback and later
+global reports retain separate replay guards and source tunnel/terrain points.
+Original-method fixtures and `tools/test_network.ps1 -Godot <path> -Blasts`
+cover delivery, accumulation and resource isolation over ENet and WebSocket.
+Remaining producers and complete frame/packet timing still require migration
+and certification. Generation, compilation and tests remain deferred.
+
+Carrier completion now derives explosion flags/radii from original tick reports
+and publishes them before delivery effects. Bomber mission expiry retains its
+source fracture report and does not deliver unused payloads. Per-step source
+fixtures cover report points, ordering and removal; they remain unexecuted.
+
+Scenery collapse now shares the hitstop/effect clock and finalizes on expiry or
+budget eviction. Captured dimensions and source profiles drive ID-seeded chunks
+and shock rings without consuming combat or ordinary visual randomness. Replay,
+removed-target and source-clock cases are prepared. Generation and tests remain
+deferred.
+
+Static damage geometry, private material tint, surface cracks and repair are now
+written but unverified. Source geometry IDs preserve shared-hull deformation and
+original full indices across material groups. Observed health bands emit one
+destination burst; first appearance and fog re-entry establish a quiet baseline.
+Original geometry/snapshot fixtures cover buffers, alias isolation and effect
+order. Generation and tests remain deferred.
+
+Mobile bodies now have unverified private opaque-material tint and articulated
+local scars, with source exclusions, a twelve-part cap, stage opacity and light
+damage draw ranges. Release restores material bindings; visibility re-entry and
+healing avoid replaying hidden damage. Source fixtures cover indexed/non-indexed
+parts, skin/material-array exclusions, joint motion and instance-buffer retention.
+Hero and ordinary damage retain their distinct publication order. Removal
+dissolve and complete raster/performance/
+transport acceptance remain pending; no generation or tests have run.
+
+Persistent low-health smoke, crack planes, authored flames and embers now have
+unverified native groups. Original PNG/geometry capture and constructor/update
+fixtures retain random order, stage reuse, visibility, local wind and separate
+presentation/wall clocks. Healing, fog loss and collapse release each group;
+combat resources and RNG stay authority-owned. GPU depth/transparency, full toon/
+curve appearance, performance and combined render/transport acceptance remain
+pending. No generation, compilation or tests have run.
+
+Missiles now have unverified source-scene views separate from authority collision
+bodies, with snapshot interpolation, jet animation, mobile damage and persistent
+smoke/fire. Matching blast/intercept reports fracture the last rendered position;
+silent removal and deflection preserve their source gates. Original puff geometry,
+strict timing, fade and shared expiry are prepared alongside source-method and
+publication-order fixtures. Interpolated owner aiming, complete packet/frame
+timing and render/transport acceptance remain pending. No generation or tests
+have run.
+
+Known non-neutral body removal now has an unverified native retirement path.
+Last-rendered models detach from gameplay actors; same-publication death IDs
+authorize source stage-three damage, a seeded burst and static/mobile Y squash.
+Silent removal stays immediate. Original-method fixtures cover lifetime, hidden
+bodies, global FX eviction, repeat guards and resource isolation.
+
+Remaining removal paths now have unverified material-gated dissolve. Original
+GLSL noise functions feed native ShaderMaterial discard; private bindings retain
+source anchors, material aliases, outline visibility and instance animation.
+Civilian component flags preserve their distinct renderer neutrality. Deferred
+source-method fixtures cover material support, grouped slots, clocks, neutral
+collapse guards and ghost retirement. Full toon/weather/shadow appearance,
+GPU raster, dynamic materials and combined render/transport acceptance remain
+pending. No generation, compilation or tests have run.
+
+Interpolated missiles now have an unverified visual triangle query, including
+animated/hidden mesh parts, source material sides and persistent-damage meshes.
+FPV echo shells stop at the nearest missile/environment hit while penetrating
+shells skip missiles. Minimap missile markers follow rendered positions. Original
+candidate/raycast fixtures and authority-state isolation cases are prepared.
+Complete owner intent, ordinary-unit mesh queries, frame/precision and combined
+render/transport acceptance remain pending; no generation or tests have run.
+
 ## Architecture
 
 | Responsibility | Native implementation |
@@ -341,7 +831,7 @@ exports. Runtime requires neither the source checkout nor the bake tools.
 | Collision and movement | Built-in Jolt, `CharacterBody3D`, `StaticBody3D`, native ray queries |
 | Terrain and roads | Source-derived `ArrayMesh`, compressed `Resource`/`PackedScene`, native triangle/convex collision |
 | Lane path sampling | `Curve3D`, `Path3D`, `PathFollow3D` |
-| Model and animation import | glTF `PackedScene`, `AnimationPlayer` |
+| Model and animation import | `PackedScene`, captured rigid body rigs, `MultiMesh`, glTF and `AnimationPlayer` |
 | Menu, HUD, shop and input | `Control`, `Container`, `CanvasLayer`, `InputMap` |
 | Environment and audio | `WorldEnvironment`, `ProceduralSkyMaterial`, `DirectionalLight3D`, `AudioStreamPlayer` |
 

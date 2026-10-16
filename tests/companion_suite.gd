@@ -111,10 +111,12 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		var scene: PackedScene = load("res://assets/companions/%s.scn" % item.key)
 		var root: Node3D = scene.instantiate()
 		h.add_child(root)
-		var meshes := root.find_children("*", "MeshInstance3D", true, false)
+		var meshes := root.find_children("*", "GeometryInstance3D", true, false).filter(func(node): return node is MeshInstance3D or node is MultiMeshInstance3D)
 		h._check(meshes.size() == item.meshes.size(), "Original companion graph preserves all source body meshes")
 		for index in range(mini(meshes.size(), item.meshes.size())):
-			var bounds: AABB = meshes[index].global_transform * meshes[index].get_aabb()
+			var node: Node3D = meshes[index]
+			var local_bounds: AABB = node.multimesh.get_aabb() if node is MultiMeshInstance3D else node.get_aabb()
+			var bounds: AABB = node.global_transform * local_bounds
 			h._check(bounds.position.distance_to(vector(item.meshes[index].bounds[0])) < 0.0001 and bounds.end.distance_to(vector(item.meshes[index].bounds[1])) < 0.0001,
 				"Original source-built companion mesh dimensions and hierarchy")
 		root.free()
@@ -168,6 +170,16 @@ static func combat(h: Node, item: Dictionary) -> void:
 			h._check(absf(hit.amount - expected.amount) < maxf(0.00001, absf(expected.amount) * 0.000001), "Original autonomous damage within native position precision")
 			h._near(hit.pen, expected.pen, "Original companion authored penetration")
 		StatusHelper.compare(h, simulation.controls, step.controls, "Original hologram detonation applies confusion")
+		var shots: Array = simulation.events.filter(func(event): return event.type == "shot")
+		h._check(shots.size() == step.shots.size(), "Original companion shots publish entity events independently of player volleys")
+		for index in range(mini(shots.size(), step.shots.size())):
+			var shot: Dictionary = shots[index]
+			var expected: Dictionary = step.shots[index]
+			h._check(simulation.order.find(int(shot.actor)) == int(expected.actor) and shot.kind == expected.kind
+				and shot.get("pid") == expected.pid and shot.get("slot") == expected.slot,
+				"Original clone/summon firing identity cannot broadcast a player-wide body event")
+			h._check(shot.has("body_serial"), "Every supported companion body receives its independent reliable presentation event")
+		simulation.events.clear()
 		simulation.hits.clear()
 		simulation.controls.clear()
 	StatusHelper.check_draws(h, simulation, int(item.draws))

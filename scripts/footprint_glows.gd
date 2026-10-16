@@ -7,6 +7,7 @@ var quad: QuadMesh
 var normal: StandardMaterial3D
 var warning: StandardMaterial3D
 var material_side := ""
+var skill_layer := false
 
 func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -29,12 +30,19 @@ func _prepare(side: String) -> void:
 	if material_side == side:
 		return
 	var style: Dictionary = Content.balance.footprintGlow
-	var color := Color(Content.constants.SIDES[side].color)
-	color.a = style.opacity
-	normal = _material(color)
-	color = Color.hex((int(style.warningColor) << 8) | 0xff)
-	color.a = style.warningOpacity
-	warning = _material(color)
+	if skill_layer:
+		var skill: Dictionary = Content.balance.aimingPresentation.skillGlow
+		var color := Color.hex((int(skill.color) << 8) | 0xff)
+		color.a = skill.opacity
+		normal = _material(color)
+		warning = normal
+	else:
+		var color := Color(Content.side_info(side).color)
+		color.a = style.opacity
+		normal = _material(color)
+		color = Color.hex((int(style.warningColor) << 8) | 0xff)
+		color.a = style.warningOpacity
+		warning = _material(color)
 	material_side = side
 
 func _drop(id: int) -> void:
@@ -62,6 +70,8 @@ func apply(units: Dictionary, footprint: Dictionary, anchor: int) -> void:
 		return
 	_prepare(footprint.side)
 	var style: Dictionary = Content.balance.footprintGlow
+	if skill_layer:
+		style = Content.balance.aimingPresentation.skillGlow
 	for id: int in lit:
 		var unit: BattleUnit = lit[id]
 		var cached: Variant = active.get(id)

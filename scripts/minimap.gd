@@ -3,6 +3,7 @@ extends Control
 var state: Dictionary = {}
 var map_data: Dictionary = {}
 var side := "STEEL"
+var missile_points: Array = []
 
 func _draw() -> void:
 	if map_data.is_empty():
@@ -19,6 +20,12 @@ func _draw() -> void:
 		var color := Color(Content.side_info(unit.side).color)
 		var radius := 4.0 if unit.kind in ["base", "tower"] else 2.0
 		draw_circle(_project(unit.position), radius, color)
+	if not missile_points.is_empty():
+		var marker: Dictionary = Content.balance.missile.presentation.minimap
+		var extent := Vector2(marker.size[0], marker.size[1])
+		var color := Color.hex((int(marker.color) << 8) | 0xff)
+		for point: Vector3 in missile_points:
+			draw_rect(Rect2(_project(point) - extent * .5, extent), color)
 
 func _project(point: Vector3) -> Vector2:
 	var bounds: Dictionary = map_data.bounds

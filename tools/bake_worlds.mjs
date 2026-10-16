@@ -96,9 +96,11 @@ export function bakeNativeHeightGrid(terrain) {
 }
 `;
 const fixtures = [];
-for (const directory of ['test/fixtures/osm', 'test/fixtures/venue_roads']) {
-  const folder = join(source, directory);
-  for (const name of (await readdir(folder)).filter(name => /\.json(?:\.gz)?$/.test(name))) {
+for (const folder of [join(source, 'test/fixtures/osm'), join(source, 'test/fixtures/venue_roads'), join(root, 'data/source_campaign')]) {
+	let files;
+	try { files = await readdir(folder); }
+	catch(error) { if(error.code==='ENOENT'&&folder.startsWith(root))continue;throw error; }
+  for (const name of files.filter(name => /\.json(?:\.gz)?$/.test(name))) {
     const capture = readOsmCapture(join(folder, name));
     const elevation = loadElevationFixture(capture.data.name, join(folder, 'elevation'), { validate: false });
     if (!elevation || !Array.isArray(capture.data.responses?.roads?.elements)) continue;
@@ -110,7 +112,7 @@ for (const directory of ['test/fixtures/osm', 'test/fixtures/venue_roads']) {
     const bounds = { z: elevation.source.zoom, tx0: Math.min(...xs), ty0: Math.min(...ys),
       cols: Math.max(...xs) - Math.min(...xs) + 1, rows: Math.max(...ys) - Math.min(...ys) + 1 };
     if (tiles.length !== bounds.cols * bounds.rows) throw new Error(`${name}: incomplete tile mosaic`);
-    fixtures.push({ capture, elevation, bounds, mosaic: mosaicOf(tiles, bounds), directory });
+    fixtures.push({ capture, elevation, bounds, mosaic: mosaicOf(tiles, bounds), directory:folder });
   }
 }
 const chromium = await chromiumOrNull();
@@ -119,7 +121,9 @@ const server = await serve(18765);
 const browser = await chromium.launch({ headless: true });
 const reuse=process.argv.includes('--reuse');
 const selected = process.argv.slice(2).filter(arg=>arg!=='--reuse');
-const maps = JSON.parse(await readFile(join(root, 'data/maps.json'), 'utf8')).filter(map => !selected.length || selected.includes(map.id));
+const campaignMaps = JSON.parse(await readFile(join(root, 'data/campaign.json'), 'utf8')).maps;
+const maps = [...JSON.parse(await readFile(join(root, 'data/maps.json'), 'utf8')), ...campaignMaps]
+  .filter(map => !selected.length || selected.includes(map.id) || selected.includes(map.source_id));
 if (!maps.length) throw new Error('No matching map IDs');
 await mkdir(join(root, 'data/worlds'), { recursive: true });
 try {
@@ -156,8 +160,9 @@ try {
     };
   });
   for (const map of maps) {
-    const candidates = fixtures.filter(fixture => fixture.capture.data.venue?.id === map.id);
-    const cfg = map.variants['5'].config;
+    const candidates = fixtures.filter(fixture => fixture.capture.data.venue?.id === (map.source_id || map.id));
+    const sizes = Object.keys(map.variants).map(Number).sort((a,b)=>a-b);
+    const cfg = map.variants[String(sizes.at(-1))].config;
     const rect = d.battleRect(cfg);
     const covered = fixture => {
       const { bounds, mosaic } = fixture;
@@ -197,7 +202,7 @@ try {
     const roads = osmRoadsFromElements(fixture.capture.data.responses.roads.elements);
     const features = fixture.capture.data.responses.features?.elements;
     const osm = features ? parseOsmFeatureElements(features).pointFeatures : {};
-    for (const size of [1, 2, 3, 4, 5]) {
+    for (const size of sizes) {
       const target = join(root,'data/worlds',`${map.id}_${size}.json`);
       const provenance = {
         capture: basename(fixture.capture.data.name), captureSha256: fixture.capture.sha256,

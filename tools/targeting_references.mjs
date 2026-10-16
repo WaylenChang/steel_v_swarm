@@ -131,11 +131,16 @@ export async function targetingReferences(d, gameSource, source, BattleSim, conf
       t.z = Math.fround(reach + d.hitR(t) + scenario.edge);
     } else t.z = scenario.distance || 150;
     if (scenario.dead) h.dead = true;
+    if (scenario.blind) h.blindUntil = sim.t + 1;
+    if (scenario.neutral) t.neutral = true;
+    if (scenario.garrison) t.gar = true;
     const before = sq.lockAt;
     sim.heroLock(1, 2);
     lockConfirmation.push({ character, level, aiming, name: scenario.name,
       distance: t.z, previous: scenario.previous || 0, lockAge: scenario.lockAge || 0,
-      releaseAge: scenario.releaseAge || 0, dead: !!scenario.dead, accepted: sq.lockAt !== before || sim.events.some(e => e.e === 'lock') });
+      releaseAge: scenario.releaseAge || 0, dead: !!scenario.dead, blind: !!scenario.blind,
+      neutral: !!scenario.neutral, garrison: !!scenario.garrison,
+      accepted: sq.lockAt !== before || sim.events.some(e => e.e === 'lock') });
   };
   for (const character of ['t09', 't04', 's04']) for (let level = 1; level <= 4; level++) {
     for (const aiming of [false, true]) for (const edge of [-.01, .01])
@@ -151,6 +156,9 @@ export async function targetingReferences(d, gameSource, source, BattleSim, conf
     { name: 'lock TTL expired', previous: 2, lockAge: d.LOCK.TTL + .01 },
     { name: 'other previous target', previous: 3 },
     { name: 'dead shooter rejected', previous: 2, dead: true },
+    { name: 'blind shooter rejected', previous: 2, blind: true },
+    { name: 'neutral body rejected', previous: 2, neutral: true },
+    { name: 'garrison body rejected', previous: 2, garrison: true },
   ]) confirm('t09', 1, false, scenario);
   return { targetingCone, launchRange, lockCandidates, aimPriority, lockConfirmation };
 }

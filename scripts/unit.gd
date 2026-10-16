@@ -42,22 +42,35 @@ var speed := 0.0
 var flying := false
 var yaw := 0.0
 var pitch := 0.0
+var view_mode := "fpv"
+var render_view_mode := "fpv"
+var authority_fov := 68.0
+var player_view := PlayerViewState.new()
 var input_state: Dictionary = {}
 var upgrades: Dictionary = {"lw": 0, "hw": 0, "def": 0, "atk": 0, "hp": 0, "ar": 0, "sp": 0, "ch": 0}
 var ammo: Dictionary = {}
 var reload_at: Dictionary = {}
 var fire_at: Dictionary = {}
 var fire_serial := 0
+var last_launch_direction := Vector3.FORWARD
 var cooldowns: Dictionary = {}
 var buffs: Array = []
 var status: Dictionary = {}
 var cast_state: Dictionary = {}
+var cast_preview: Dictionary = {}
 var ability_charges: Dictionary = {}
 var defending := false
 var last_fired_at: Dictionary = {}
+var recoil := RecoilState.new()
+var body_charge_on := false
+var aim_request := 0
 var assists: Dictionary = {}
 var damage_out := 0.0
 var threat: Dictionary = {}
+var bot_alert: Dictionary = {}
+var bot_dodge_speed := 0.0
+var bot_shot_count := 0
+var position_trail: Array = []
 var bleed: Dictionary = {}
 var heal_aura: Dictionary = {}
 var wet := 0
@@ -72,12 +85,21 @@ var air_sink_speed := 0.0
 var lift_lock_until := 0.0
 var damaged_at := -100.0
 var respawn_at := 0.0
+var view_reset := 0
+var presentation_camera_owned := false
+var blast_applied_serial := 0
+var blast_received_serial := 0
 var target_position := Vector3.ZERO
 var target_yaw := 0.0
 var model: Node3D
+var body: BodyRig
+var body_presentation: BodyPresentation
+var presented_altitude := NAN
 var camera: Camera3D
 var cockpit: CockpitRig
+var first_person_shield: FirstPersonShield
 var weapon_pose: AuthorityWeaponPose
+var authority_body: AuthorityBodyPose
 var animation_player: AnimationPlayer
 var path_follower: PathFollow3D
 var reaction_at := 0.0
@@ -93,11 +115,23 @@ var animation_until := 0.0
 var movement_shape: CollisionShape3D
 var hit_area: Area3D
 var presentation_visible := true
+var remote_burst_driven := false
 var view_offset := Vector3.ZERO
 var view_offset_ready := false
 var camera_cache_frame := -1
 var camera_cache_signature: Array = []
 var camera_cache_origin := Vector3.ZERO
+var body_scale := 1.0
+var model_base_scale := Vector3.ONE
+var model_base_position := Vector3.ZERO
+var collapse_presented := false
+var scene_damage := SceneDamageGeometry.new()
+var mobile_damage := MobileDamageGeometry.new()
+var damage_fx_binding := DamageFxBinding.new()
+var damage_fx: DamageFx:
+	get: return damage_fx_binding.node
+var damage_fx_stage: int:
+	get: return damage_fx_binding.stage
 
 func configure(info: Dictionary) -> void:
 	entity_id = int(info.id)
@@ -110,6 +144,8 @@ func configure(info: Dictionary) -> void:
 	has_lane = bool(info.get("has_lane", info.has("lane")))
 	spawn_slot = int(info.get("spawn_slot", 0))
 	is_bot = info.get("bot", false)
+	if side == Content.constants.SUPER_SIDE:
+		upgrades["super"] = 0
 	effect_radius = float(info.get("effect_radius", 0))
 	creep_multiplier = float(info.get("creep_multiplier", 1))
 	if not Content.constants.UNITS.has(kind) and not (kind == "slab" and special.get("role") == "slab") and not (kind == "decoy_beacon" and special.get("role") == "hologram") and not (kind == "kami" and special.get("role") == "carrier") and not (special.get("role") == "hazard" and (Content.constants.HAZARDS.has(kind) or kind in ["aasite", "relay"])):
@@ -149,7 +185,7 @@ func configure(info: Dictionary) -> void:
 		height = hero.height
 		armor = hero.armor
 		speed = hero.speed
-		max_hp = round(unit.hp * hero.mods.get("hp", 1))
+		max_hp = floorf(unit.hp * hero.mods.get("hp", 1) * (Content.constants.BOSS.HP_MUL if special.get("boss", false) else 1.0) + 0.5)
 		max_shield = round(unit.get("shield", 0) * hero.mods.get("sp", 1))
 		max_power = round(unit.get("mp", 0) * hero.mods.get("mp", 1))
 		lift = Content.constants.FLIGHT.LIFT_MAX
@@ -205,10 +241,19 @@ func configure(info: Dictionary) -> void:
 	add_child(hit_area)
 	refresh_collision()
 	_build_model()
+	if model != null:
+		model_base_scale = model.scale
+		model_base_position = model.position
+	refresh_body_scale()
 	if is_pilot():
+		if Content.balance.has("playerView"):
+			player_view.configure(Content.balance.playerView, "fpv", yaw)
+			if not is_bot:
+				pitch = float(Content.balance.playerView.spawnPitch)
 		camera = Camera3D.new()
 		camera.position = CameraPose.anchor(character, Vector3.ZERO, 0, flying)
 		camera.fov = unit.get("fov", 68)
+		authority_fov = camera.fov
 		camera.near = Content.balance.cameraRules.near
 		camera.far = 3500
 		add_child(camera)
@@ -216,24 +261,24 @@ func configure(info: Dictionary) -> void:
 			ammo[slot] = Content.weapon(character, slot).mag
 
 func _build_model() -> void:
-	if special.get("role") in ["third", "civilian"]:
-		var key := "%s_%s" % [side.to_lower(), kind] if special.role == "third" else "%s_civilian_%02d" % [String(special.civil_side).to_lower(), int(special.profession)]
-		var path := "res://assets/companions/%s.scn" % key
-		if not Content.balance.get("companions", {}).has(key) or not ResourceLoader.exists(path):
-			push_error("Missing original camp/civilian model; regenerate and pack companion content: " + path)
+	if special.get("role") == "third":
+		var key := "%s_%s" % [side.to_lower(), kind]
+		if not Content.balance.get("companions", {}).has(key):
+			push_error("Missing original camp dimensions: " + key)
 			return
-		model = load(path).instantiate()
-		add_child(model)
-		model.rotation.y = PI
-		var profile: Dictionary = Content.balance.companions[key]
-		geometry_override = profile.dimensions.duplicate()
-		if special.role == "civilian":
-			var body := CivilianRules.body(entity_id)
-			var scale_factor := Vector3(float(body.radiusScale) / float(profile.body.radiusScale), float(body.heightScale) / float(profile.body.heightScale), float(body.radiusScale) / float(profile.body.radiusScale))
-			model.scale = scale_factor
-			for property: String in ["height", "top", "centre"]:
-				geometry_override[property] = float(geometry_override[property]) * scale_factor.y
-			geometry_override.radius = float(geometry_override.radius) * scale_factor.x
+		geometry_override = Content.balance.companions[key].dimensions.duplicate()
+		_configure_body(BodyRig.entity_key(side, kind))
+		return
+	if special.get("role") == "civilian":
+		body = BodyRig.new()
+		model = body
+		add_child(body)
+		if not CivilianBodyBuilder.configure(body, entity_id, int(special.profession), special.civil_side):
+			return
+		geometry_override = body.profile.dimensions
+		body.rotation.y = PI
+		body_presentation = BodyPresentation.new()
+		body_presentation.configure(body, str(entity_id))
 		return
 	if special.get("role") == "hazard":
 		var file := "res://assets/hazards/%s.scn" % kind
@@ -253,15 +298,12 @@ func _build_model() -> void:
 		return
 	if special.get("role") in ["summon", "hologram", "carrier"]:
 		var model_key: String = special.model_key if special.get("role") == "carrier" else "%s_%s" % [side.to_lower(), kind]
-		var file := "res://assets/companions/%s.scn" % model_key
-		if not ResourceLoader.exists(file):
-			push_error("Missing source companion model: " + file)
+		if special.get("role") != "carrier":
+			geometry_override = Content.balance.modelGeometry.units[kind][side]
+			_configure_body(BodyRig.entity_key(side, kind))
 			return
-		var scene: PackedScene = load(file)
-		model = scene.instantiate()
-		add_child(model)
-		model.rotation.y = PI
-		geometry_override = Content.balance.companions[model_key].dimensions if special.get("role") == "carrier" else Content.balance.modelGeometry.units[kind][side]
+		geometry_override = Content.balance.companions[model_key].dimensions
+		_configure_body(model_key)
 		return
 	if kind == "slab":
 		model = Node3D.new()
@@ -281,6 +323,9 @@ func _build_model() -> void:
 			panel.material_override = bronze if index == 0 else rune
 			model.add_child(panel)
 		geometry_override = {"height": 6.0, "top": 6.0, "centre": 3.0, "radius": 1.75}
+		return
+	if is_hero() or Content.balance.get("bodyRules", {}).get("entityKeys", {}).has(kind):
+		_configure_body("%s_%s" % [side.to_lower(), character] if is_hero() else BodyRig.entity_key(side, kind))
 		return
 	var file := "res://assets/models/reference/%s.glb" % character if not character.is_empty() else "res://assets/models/factions/%s_%s.glb" % [side.to_lower(), kind]
 	if ResourceLoader.exists(file):
@@ -306,9 +351,21 @@ func _build_model() -> void:
 		model.mesh = mesh
 		model.position.y = height / 2
 		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(Content.constants.SIDES[side].color)
+		material.albedo_color = Color(Content.side_info(side).color)
 		model.material_override = material
 		add_child(model)
+
+func _configure_body(key: String) -> void:
+	body = BodyRig.new()
+	model = body
+	add_child(body)
+	if not body.configure(key):
+		return
+	body.rotation.y = 0 if body.profile["static"] else PI
+	body_presentation = BodyPresentation.new()
+	body_presentation.configure(body, str(entity_id))
+	if is_pilot() and peer_id == multiplayer.get_unique_id():
+		body_presentation.pending_snap = false
 
 func is_hero() -> bool:
 	return not character.is_empty()
@@ -321,8 +378,50 @@ func ensure_weapon_pose() -> void:
 		weapon_pose = AuthorityWeaponPose.new()
 		weapon_pose.configure(character)
 
+func ensure_authority_body() -> bool:
+	if not is_pilot():
+		return false
+	if authority_body != null:
+		return authority_body.body.source_root != null
+	authority_body = AuthorityBodyPose.new()
+	add_child(authority_body)
+	if not authority_body.configure(character, side, str(entity_id)):
+		return false
+	authority_body.place(global_position, facing_yaw(), body_scale, view_mode != "tps", not alive())
+	return true
+
+func facing_yaw() -> float:
+	return player_view.report_yaw(yaw, defending) if not player_view.rules.is_empty() else yaw
+
+func advance_player_view(delta: float, motion: Vector2) -> void:
+	if player_view.rules.is_empty():
+		return
+	var selected: Variant = input_state.get("view_mode", view_mode)
+	var mode: String = selected if selected is String and selected in player_view.rules.modeKeys else view_mode
+	if input_state.get("aim", false):
+		mode = "fpv"
+	if player_view.mode != mode:
+		player_view.select_mode(mode, yaw)
+	view_mode = mode
+	player_view.aiming = bool(input_state.get("aim", false))
+	var movement := Basis(Vector3.UP, yaw) * Vector3(motion.x, 0, motion.y)
+	var simulation: BattleSimulation = get_parent()
+	if has_status("freeze_until", simulation.clock):
+		movement = Vector3.ZERO
+	player_view.advance_body(delta, movement, yaw, defending, input_state.get("fire", false))
+
+func ring_height() -> float:
+	var rig: BodyRig = authority_body.body if authority_body != null else body
+	return rig.ring_height(global_position.y) if rig != null and rig.source_root != null else NAN
+
 func ensure_cockpit() -> void:
-	if cockpit != null or camera == null:
+	if camera == null:
+		return
+	if first_person_shield == null:
+		first_person_shield = FirstPersonShield.new()
+		camera.add_child(first_person_shield)
+		first_person_shield.configure(character)
+	if cockpit != null:
 		return
 	cockpit = CockpitRig.new()
 	camera.add_child(cockpit)
@@ -338,24 +437,24 @@ func eye() -> Vector3:
 	return global_position + Vector3.UP * height * Content.constants.SELF_F.eye
 
 func view_eye_height() -> float:
-	return CameraPose.eye_height(character, flying, charge) if is_pilot() else height * Content.constants.SELF_F.eye
+	return CameraPose.eye_height(character, flying, charge, SuperRules.body_scale(float(upgrades.get("super", 0)))) if is_pilot() else height * Content.constants.SELF_F.eye
 
 func view_origin() -> Vector3:
 	if not is_pilot():
 		return eye()
 	var parent := get_parent()
-	if parent is BattleSimulation and parent.authoritative:
+	if parent is BattleSimulation and (parent.authoritative or camera != null and camera.current):
 		return parent.camera_origin(self)
-	return global_position + (Basis(Vector3.UP, rotation.y) * view_offset if view_offset_ready else CameraPose.anchor(character, Vector3.ZERO, rotation.y, flying, charge))
+	return global_position + (Basis(Vector3.UP, yaw) * view_offset if view_offset_ready else CameraPose.anchor(character, Vector3.ZERO, yaw, flying, charge, SuperRules.body_scale(float(upgrades.get("super", 0)))))
 
 func sync_view_camera() -> void:
-	if camera != null:
+	if camera != null and not presentation_camera_owned:
 		var parent := get_parent()
 		if parent is BattleSimulation and parent.authoritative:
 			camera.global_transform = aim_transform()
 		else:
 			camera.global_position = view_origin()
-			camera.rotation = Vector3(pitch, 0, 0)
+			camera.global_basis = aim_basis()
 
 func visual_dimensions() -> Dictionary:
 	if not geometry_override.is_empty():
@@ -388,13 +487,18 @@ func refresh_collision() -> void:
 	if movement_shape == null or hit_area == null:
 		return
 	if special.get("role") == "hazard":
-		var definition: Dictionary = Content.constants.HAZARDS.get(kind, {})
-		collision_layer = 1 if definition.get("block", false) or kind in ["aasite", "relay"] else 0
+		if not Content.balance.has("playerView"):
+			push_error("Missing original obstacle collider metadata; regenerate source content")
+			return
+		var dimensions := CameraPose.entity_collider(kind, float(special.get("scale", 1)), special.get("collapsed", false))
+		collision_layer = 1 if float(dimensions.colR) > 0 else 0
 		hit_area.collision_layer = 2 if alive() and not special.get("collapsed", false) else 0
+		movement_shape.disabled = collision_layer == 0
+		if collision_layer == 0:
+			return
 		var obstacle := CylinderShape3D.new()
-		var collapsed := bool(special.get("collapsed", false))
-		obstacle.radius = (3.2 if kind == "aasite" else 1.6 if kind == "relay" else float(definition.get("r", 6))) * float(special.scale) * (float(Content.constants.SCENE_STRUCT.RUBBLE_F) if collapsed else 1.0)
-		obstacle.height = (3.5 if kind == "aasite" else 8.0 if kind == "relay" else float(definition.get("hgt", 6))) * (0.35 if collapsed else 1.0)
+		obstacle.radius = dimensions.colR
+		obstacle.height = dimensions.colH
 		movement_shape.shape = obstacle
 		movement_shape.position.y = obstacle.height / 2
 		return
@@ -403,18 +507,58 @@ func refresh_collision() -> void:
 	hit_area.collision_layer = 2 if active else 0
 	var spec := {"r": radius, "bot": 0.0, "top": height}
 	if is_hero():
-		spec = Content.heroes[character].colliders["air" if flying else "ground"]
+		spec = Content.heroes[character].colliders["air" if flying else "ground"].duplicate()
+		for key: String in ["r", "bot", "top"]:
+			spec[key] = float(spec[key]) * body_scale
 	var cylinder := CylinderShape3D.new()
 	cylinder.radius = spec.r
 	cylinder.height = spec.top - spec.bot
 	movement_shape.shape = cylinder
 	movement_shape.position.y = (spec.top + spec.bot) / 2
+	if is_hero():
+		for child in hit_area.get_children():
+			if child is CollisionShape3D and child.shape is CylinderShape3D:
+				var hit := CylinderShape3D.new()
+				hit.radius = radius
+				hit.height = height
+				child.shape = hit
+				child.position.y = height / 2
+
+func refresh_body_scale() -> void:
+	if not is_hero():
+		return
+	var factor := SiegeRules.body_scale(int(special.get("boss_segment", 0))) if special.get("boss", false) else 1.0
+	factor *= SuperRules.body_scale(float(upgrades.get("super", 0)))
+	if factor == body_scale:
+		return
+	body_scale = factor
+	radius = float(Content.heroes[character].radius) * factor
+	height = float(Content.heroes[character].height) * factor
+	if model != null:
+		model.scale = model_base_scale * factor
+		if not model.top_level:
+			model.position = model_base_position * factor
+	if authority_body != null:
+		authority_body.place(global_position, facing_yaw(), factor, view_mode != "tps", not alive())
+	geometry_override = Content.balance.modelGeometry.heroes[character].duplicate()
+	for key: String in ["height", "top", "centre", "radius"]:
+		geometry_override[key] = float(geometry_override[key]) * factor
+	refresh_collision()
+
+func combat_level(slot: String) -> float:
+	if side == Content.constants.SUPER_SIDE:
+		return SuperRules.combat_level(float(upgrades.get("super", 0)))
+	var track := "lw" if slot == "light" else "hw" if slot == "heavy" else slot
+	return float(upgrades.get(track, 0)) + 1.0
 
 func aim_direction() -> Vector3:
-	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch) * Vector3.FORWARD
+	return aim_basis() * Vector3.FORWARD
+
+func aim_basis() -> Basis:
+	return recoil.third_person_basis(yaw, pitch) if view_mode == "tps" else recoil.basis(yaw, pitch)
 
 func aim_transform() -> Transform3D:
-	return Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch), view_origin())
+	return Transform3D(aim_basis(), view_origin())
 
 func simulate_movement(delta: float) -> void:
 	if not alive() or speed <= 0:
@@ -433,17 +577,17 @@ func simulate_movement(delta: float) -> void:
 	var movement_factor := (slow if slow else 0.6) if has_status("slow_until", now) else 1.0
 	if has_status("stun_until", now) or has_status("freeze_until", now):
 		movement_factor = 0
-	yaw = float(input_state.get("yaw", yaw))
-	pitch = float(input_state.get("pitch", pitch))
+	if not has_status("freeze_until", now):
+		yaw = float(input_state.get("yaw", yaw))
+		pitch = float(input_state.get("pitch", pitch))
 	if has_status("confuse_until", now):
 		yaw += sin(now * 2.7) * 0.5 * delta
-	rotation.y = yaw
-	if camera != null:
+	advance_player_view(delta, motion)
+	rotation.y = facing_yaw()
+	if camera != null and not presentation_camera_owned:
 		camera.rotation.x = pitch
 		camera.fov = stats.get("zoomFov", 35) if input_state.get("aim", false) else stats.get("fovAir", stats.get("fov", 68)) if flying else stats.get("fov", 68)
-	var move_basis := Basis(Vector3.UP, yaw)
-	if flying and is_hero():
-		move_basis *= Basis(Vector3.RIGHT, pitch)
+	var move_basis := InputRules.movement_basis(yaw, pitch, flying and is_hero(), input_state.get("level_move", false))
 	var direction := move_basis * Vector3(motion.x, 0, motion.y)
 	var weather_direction := direction
 	if has_status("confuse_until", now):
@@ -459,6 +603,7 @@ func simulate_movement(delta: float) -> void:
 		if input_state.get("sprint", false):
 			current_speed *= Content.balance.movement.sprint
 	current_speed *= StatusRules.movement_modifier(buffs, "speed", now) * movement_factor * terrain_factor
+	current_speed *= recoil.movement_factor(flying)
 	current_speed *= simulation.weather_movement(self, weather_direction, flying or low_gravity or velocity.y > 0 or not is_on_floor(), not flying)
 	if has_status("sup_until", now):
 		current_speed *= 1 - Content.constants.HIGH_SUP.SPEED * float(status.get("sup_factor", 0))
@@ -588,6 +733,22 @@ func play_action(action: String) -> void:
 		animation_player.play(action, 0.05)
 		animation_until = Time.get_ticks_msec() / 1000.0 + animation_player.get_animation(action).length
 
+func present_body_event(event: Dictionary, now: float) -> bool:
+	if body_presentation != null:
+		var is_self := is_pilot() and peer_id == multiplayer.get_unique_id()
+		if event.get("type") == "body_echo" and not is_self and remote_burst_driven:
+			return false
+		if not is_self and (body_presentation.report.is_empty() or not presentation_visible):
+			return false
+		return body_presentation.accept(event, now, global_position, is_self)
+	return false
+
+func snap_body_presentation() -> void:
+	if body_presentation != null:
+		body_presentation.request_snap()
+	if authority_body != null:
+		authority_body.request_snap()
+
 func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	var previous_flight := flying
 	var was_alive := alive()
@@ -613,6 +774,7 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	ability_charges = state.get("ability_charges", {}).duplicate(true)
 	defending = state.get("defending", false)
 	special = state.get("special", {}).duplicate(true)
+	refresh_body_scale()
 	if was_garrison != bool(special.get("garrison", false)):
 		refresh_collision()
 	if special.get("role") == "hazard" and special.get("collapsed", false) and not was_collapsed:
@@ -622,20 +784,30 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	charge = state.get("charge", 0)
 	lift = state.get("lift", Content.constants.FLIGHT.LIFT_MAX)
 	respawn_at = state.respawn_at
+	view_reset = int(state.get("view_reset", 0))
 	flying = state.flying
+	presented_altitude = float(state.get("hero_y", NAN))
+	if not was_alive and alive():
+		instant = true
+		snap_body_presentation()
 	view_offset = state.get("view_offset", Vector3.ZERO)
 	view_offset_ready = state.has("view_offset")
 	if previous_flight != flying or was_alive != alive():
 		refresh_collision()
 	target_position = state.position
 	target_yaw = state.yaw
-	yaw = state.yaw
+	yaw = state.get("view_yaw", state.yaw)
 	pitch = state.pitch
+	view_mode = state.get("view_mode", "fpv")
+	authority_fov = state.get("view_fov", authority_fov)
+	if not player_view.rules.is_empty():
+		player_view.mode = view_mode
+		player_view.body_yaw = state.yaw
 	if instant:
 		global_position = target_position
 		rotation.y = target_yaw
 	visible = (alive() or special.get("collapsed", false)) and not special.get("garrison", false)
-	if camera != null:
+	if camera != null and not presentation_camera_owned:
 		camera.rotation.x = pitch
 		sync_view_camera()
 
@@ -644,19 +816,81 @@ func interpolate(delta: float) -> void:
 	rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-12.0 * delta))
 	sync_view_camera()
 
-func apply_collapse(instant: bool = false) -> void:
+func present_scene_damage(state: Dictionary, effects: CombatEffects = null, initial: bool = false) -> void:
 	if model == null:
 		return
-	var original_scale := model.scale
-	var original_rotation := model.rotation
-	var pose := func(fraction):
-		var state := SceneRules.collapse_pose(entity_id, original_scale, original_rotation, fraction)
-		model.scale = state.scale
-		model.rotation = state.rotation
-	if instant:
-		pose.call(1.0)
+	var profile: Dictionary = Content.balance.destruction.sceneProfiles.get(kind, {})
+	if profile.is_empty() or state.get("special", {}).get("collapsed", false):
+		return
+	var mobile := bool(profile.get("mobile", false))
+	var destination := SceneDamageGeometry.health_stage(float(state.hp), float(state.max_hp))
+	if destination >= 3 and not initial and not (is_hero() and float(state.hp) <= 0):
+		return
+	var dimensions: Dictionary = body.profile.dimensions if body != null else geometry_override
+	if dimensions.is_empty():
+		push_error("Scene damage requires captured model dimensions")
+		return
+	var previous_stage := mobile_damage.stage if mobile else scene_damage.stage
+	if not initial and previous_stage >= 0 and destination > previous_stage:
+		if effects == null:
+			var simulation := get_parent() as BattleSimulation
+			if simulation == null or simulation.world == null:
+				push_error("Scene damage bursts require a presentation world")
+				return
+			effects = simulation.world.ensure_combat_effects()
+		effects.scene_damage_burst(entity_id, kind, model.global_position, float(dimensions.height), float(dimensions.radius), destination)
+	if mobile:
+		mobile_damage.apply(model, kind, destination)
 	else:
-		create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).tween_method(pose, 0.0, 1.0, 0.7)
+		scene_damage.apply(model, kind, entity_id, dimensions, destination, special.get("neutral", false))
+
+func present_damage_fx(state: Dictionary, effects: CombatEffects = null) -> void:
+	if model == null:
+		return
+	var properties: Dictionary = state.get("special", special)
+	var flags := {"isSelf": is_pilot() and peer_id == multiplayer.get_unique_id(),
+		"civ": properties.get("role") == "civilian", "decoy": kind == "decoy", "kami": kind == "kami",
+		"neutral": properties.get("neutral", false), "collapsed": properties.get("collapsed", false),
+		"dead": state.get("dead", is_hero() and float(state.hp) <= 0)}
+	var destination := DamageFx.observed_stage(kind, float(state.hp), state.max_hp, flags)
+	if destination < 0 or destination == damage_fx_stage:
+		return
+	if destination == 0:
+		clear_damage_fx()
+		return
+	if damage_fx == null:
+		if effects == null:
+			var simulation := get_parent() as BattleSimulation
+			if simulation == null or simulation.world == null:
+				push_error("Persistent damage FX require a presentation world")
+				return
+			effects = simulation.world.ensure_combat_effects()
+	var size: Dictionary = body.profile.dimensions if body != null else geometry_override
+	damage_fx_binding.set_stage(destination, model, kind, size, effects._sample_random if effects != null else Callable())
+
+func clear_damage_fx() -> void:
+	damage_fx_binding.clear()
+
+func apply_collapse(instant: bool = false) -> void:
+	if model == null or collapse_presented:
+		return
+	if not Session.dedicated:
+		scene_damage.apply(model, kind, entity_id, geometry_override, 3, special.get("neutral", false))
+	clear_damage_fx()
+	if instant or Session.dedicated:
+		var pose := SceneRules.collapse_pose(entity_id, model.scale, model.rotation, 1)
+		model.scale = pose.scale
+		model.rotation = pose.rotation
+		collapse_presented = true
+		return
+	var simulation := get_parent() as BattleSimulation
+	if simulation == null or simulation.world == null or geometry_override.is_empty():
+		push_error("Scene collapse requires captured dimensions and a presentation world")
+		return
+	collapse_presented = true
+	var effects := simulation.world.ensure_combat_effects()
+	effects.scene_collapse(model, entity_id)
+	effects.scene_damage_burst(entity_id, kind, global_position, float(geometry_override.height), float(geometry_override.radius), 3)
 
 func snapshot() -> Dictionary:
 	var public_special := special.duplicate(true)
@@ -668,11 +902,12 @@ func snapshot() -> Dictionary:
 		"effect_radius": effect_radius,
 		"creep_multiplier": creep_multiplier,
 		"wet": wet, "fluid_environment": fluid_environment.duplicate(true),
-		"lane": lane, "has_lane": has_lane, "bot": is_bot, "position": global_position, "yaw": yaw, "pitch": pitch,
+		"lane": lane, "has_lane": has_lane, "bot": is_bot, "position": global_position, "yaw": facing_yaw(), "pitch": pitch,
+		"view_yaw": yaw, "view_mode": view_mode, "view_fov": authority_fov,
 		"hp": hp, "max_hp": max_hp, "shield": shield, "max_shield": max_shield,
 		"power": power, "money": money, "score": score, "deaths": deaths,
 		"ammo": ammo.duplicate(), "upgrades": upgrades.duplicate(), "reload_at": reload_at.duplicate(),
-		"cooldowns": cooldowns.duplicate(), "respawn_at": respawn_at, "flying": flying,
+		"cooldowns": cooldowns.duplicate(), "respawn_at": respawn_at, "view_reset": view_reset, "flying": flying,
 		"status": status.duplicate(true), "defending": defending,
 		"buffs": buffs.duplicate(true),
 		"charge": charge, "lift": lift,

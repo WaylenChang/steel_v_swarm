@@ -77,7 +77,10 @@ export function companionReferences(d, BattleSim, config, makeRng) {
     const result=seeded(()=>{
       for(const delta of [.1,.1,.6]) {
         if(role==='clone')s._tickClones(delta);else if(role==='summon')s._tickSummons(delta);else s._tickDecoyBeacons(delta);
-        steps.push({delta,actors:roster(s,group),owner:{position:[h.x,h.y,-h.z],hp:h.hp,shield:h.sp},hits:hits.splice(0),controls:controls.splice(0)});
+        const shots=s.events.filter(event=>event.e==='shot').map(event=>({actor:group.findIndex(actor=>actor.id===event.id),
+          kind:event.kind,pid:event.pid??null,slot:event.slot??null}));
+        s.events.length=0;
+        steps.push({delta,actors:roster(s,group),owner:{position:[h.x,h.y,-h.z],hp:h.hp,shield:h.sp},hits:hits.splice(0),controls:controls.splice(0),shots});
       }
     });
     companionCombat.push({role,level,scenario,character:h.ch,initial,now:s.t,target:[enemy.x,enemy.y,-enemy.z],draws:result.draws,steps});

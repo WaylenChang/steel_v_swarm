@@ -32,6 +32,8 @@ func _ready() -> void:
 	for index in range(meshes.size()):
 		var model := MeshInstance3D.new()
 		model.mesh = meshes[index]
+		# Authority collision remains independent of the interpolated source view.
+		model.visible = false
 		add_child(model)
 		var collision := CollisionShape3D.new()
 		collision.shape = shapes[index]

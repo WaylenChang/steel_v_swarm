@@ -28,16 +28,19 @@ export function carrierReferences(d, BattleSim, config, makeRng) {
     return result;
   };
   const carrierLaunch=[];
-  for(const character of Object.keys(d.CHARACTERS))for(const level of [1,4])for(const near of [false,true]) {
+  const levels=[...[1,4].map(level=>({level})),...[1,7,19,21,39,41,99,100].map(superLevel=>({level:d.superCombatLvl(superLevel),superLevel}))];
+  for(const character of Object.keys(d.CHARACTERS))for(const sample of levels)for(const near of [false,true]) {
+    const {level,superLevel}=sample;
     const h=actor(character),s=context(h),A=d.heroAbility(character,'atk',level);h.abil.atk=level;
+    if(superLevel!=null){h.side='SUPER';h.upg.super=superLevel;}
     // Generic branches are parameterized by the original authored effect; unsupported effects stay gated natively.
     const point=near?[h.x,h.z]:[200,140],origin={x:-80,y:0,z:-30};
     if(near){origin.x=h.x;origin.z=h.z;origin.y=h.y;}
     const result=seeded(()=>s._launchAtkCarrier(h,A,...point,origin));
-    carrierLaunch.push({character,level,near,point:[point[0],0,-point[1]],origin:[origin.x,origin.y,-origin.z],
+    carrierLaunch.push({character,level,...(superLevel!=null?{superLevel}:{}),near,point:[point[0],0,-point[1]],origin:[origin.x,origin.y,-origin.z],
       draws:result.draws,actors:[...s.ents.values()].filter(e=>e.uA).map(e=>({state:state(e),hp:e.hp,max_hp:e.maxHp,radius:d.hitR(e),height:d.hitH(e)}))});
   }
-  const carrierMotion=[];
+  const carrierMotion=[],completion={};
   for(const kind of ['kami','decoy','hyper'])for(const scenario of ['normal','timeout','owner_dead','owner_missing','deferred','tracking','tracking_lost','antipodal']) {
     const h=actor(kind==='kami'?'s01':kind==='decoy'?'m06':'t01'),s=context(h),A=d.heroAbility(h.ch,'atk',1);
     s._launchAtkCarrier(h,A,200,140,{x:-80,y:0,z:-30});
@@ -53,8 +56,14 @@ export function carrierReferences(d, BattleSim, config, makeRng) {
     if(scenario==='antipodal')e.ry=Math.atan2(-((e.pt?.x??e.tx)-e.x),(e.pt?.z??e.tz)-e.z)-Math.PI;
     const target={id:99,hero:true,kind:'drone',side:'SWARM',x:205,z:145,y:30,hp:100,dead:false};
     if(['tracking','tracking_lost'].includes(scenario)&&kind==='hyper'){s.ents.set(99,target);e.tid=99;}
-    const initial=state(e),steps=[],arrivals=[];
-    s._atkArrive=(v,x,z,frac=v.uFrac??1,nImp=v.uImp??null)=>arrivals.push({x,z,fraction:frac,count:nImp??-1});
+    const initial=state(e),steps=[],arrivals=[],order=[];
+    s.events.push=function(...events) {
+      for(const event of events)if(event.e==='boom')order.push('boom');
+      return Array.prototype.push.apply(this,events);
+    };
+    s._atkArrive=(v,x,z,frac=v.uFrac??1,nImp=v.uImp??null)=>{
+      order.push('arrival');arrivals.push({x,z,fraction:frac,count:nImp??-1});
+    };
     for(let index=0;index<160;index++) {
       const delta=index%3===0 ? .05 : .1;s.t+=delta;
       if(index===70&&scenario==='tracking_lost'){target.hp=0;target.dead=true;}
@@ -62,8 +71,17 @@ export function carrierReferences(d, BattleSim, config, makeRng) {
       const aim=e.tid&&target.hp>0&&!target.dead?{x:target.x,z:target.z,height:s._tgtY(target)}:null;
       if(kind==='kami')s._tickKamis(delta);else if(kind==='decoy')s._tickDecoys(delta);else s._tickHypers(delta);
       const alive=s.ents.has(e.id);
+      const booms=s.events.splice(0).filter(event=>event.e==='boom');
+      const reports=booms.map(event=>({
+        radius:event.r,sam:!!event.sam,kami:!!event.kami,hyper:!!event.hyper}));
+      if(!alive) {
+        if(completion[kind]&&JSON.stringify(completion[kind])!==JSON.stringify(reports))
+          throw new Error('Carrier completion reports vary by lifecycle: '+kind);
+        completion[kind]=reports;
+      }
       steps.push({now:s.t,delta,target:aim,
-        state:state(e),alive,arrivals:arrivals.splice(0)});
+        state:state(e),alive,arrivals:arrivals.splice(0),reports,
+        points:booms.map(event=>[event.x,event.y||0,-event.z]),order:order.splice(0)});
       if(!alive)break;
     }
     // Owner absence is tested at the shared delivery seam below; hypersonic owner rosters intentionally stop advancing when removed.
@@ -100,7 +118,7 @@ export function carrierReferences(d, BattleSim, config, makeRng) {
     const result=seeded(()=>s._castEffect(h,A,30,-40,fraction,count));
     carrierStrike.push({character,fraction,count,draws:result.draws,hits});
   }
-  const carrierInterceptions=[];
+  const carrierInterceptions=[],shotDown={};
   for(const character of ['s01','m06','t01','t09','m07']) {
     const h=actor(character),s=context(h),A=d.heroAbility(character,'atk',1),enemy=actor('t05');
     Object.assign(enemy,{id:99,pid:'99',side:'SWARM',money:100,kn:0});s.heroes.set(enemy.pid,enemy);s.ents.set(enemy.id,enemy);
@@ -108,8 +126,16 @@ export function carrierReferences(d, BattleSim, config, makeRng) {
     const e=[...s.ents.values()].find(e=>e.uA);let effects=0,blasts=0;
     s._castEffect=()=>effects++;s._blast=()=>blasts++;
     s._damage(e,e.hp+1,enemy,0,0,{type:'gun'});
-    carrierInterceptions.push({character,kind:e.kind,present:s.ents.has(e.id),earned:enemy.money-100,score:enemy.kn,effects,blasts});
+    const reports=s.events.filter(event=>event.e==='die'||event.e==='boom').map(event=>({type:event.e,kind:event.kind??null,
+      radius:event.r??null,sam:!!event.sam,kami:!!event.kami}));
+    const plan=reports.filter(event=>event.type==='boom').map(event=>({radius:event.radius,sam:event.sam,kami:event.kami}));
+    if(shotDown[e.kind]&&JSON.stringify(shotDown[e.kind])!==JSON.stringify(plan))
+      throw new Error('Carrier fracture reports vary by payload: '+e.kind);
+    shotDown[e.kind]=plan;
+    carrierInterceptions.push({character,kind:e.kind,present:s.ents.has(e.id),earned:enemy.money-100,score:enemy.kn,effects,blasts,reports});
   }
-  return {rules:{hp:{kami:d.kamiHp(),decoy:d.decoyHp(),hyper:d.hyperHp()}},
+  for(const kind of ['kami','decoy','hyper'])if(!(kind in shotDown))throw new Error('Missing original carrier fracture report: '+kind);
+  for(const kind of ['kami','decoy','hyper'])if(!(kind in completion))throw new Error('Missing original carrier completion report: '+kind);
+  return {rules:{hp:{kami:d.kamiHp(),decoy:d.decoyHp(),hyper:d.hyperHp()},shotDown,completion},
     fixtures:{carrierLaunch,carrierMotion,carrierOrigin,carrierArrival,carrierMath,carrierStrike,carrierInterceptions}};
 }

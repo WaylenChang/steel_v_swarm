@@ -1,5 +1,7 @@
 extends RefCounted
 
+const StatusSuite = preload("res://tests/status_suite.gd")
+
 static func run(h: Node, fixtures: Dictionary) -> void:
 	var models: Dictionary = {}
 	var meshes := 0
@@ -42,6 +44,8 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 	print("PROJECTILE_VISUAL_GEOMETRY_PASS profiles=", fixtures.projectileGeometry.size(), " meshes=", meshes, " fx_cases=", fixtures.projectileFx.size())
 	var maximum_error := 0.0
 	var frames := 0
+	var shell_view := ProjectilePresentation.new()
+	h.add_child(shell_view)
 	for fixture: Dictionary in fixtures.visualShells:
 		var definition := Content.weapon(fixture.character, fixture.slot, int(fixture.level))
 		var state := VisualShellMotion.launch(definition, h._reference_vector(fixture.origin), h._reference_vector(fixture.target),
@@ -49,16 +53,41 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._check(state.velocity.distance_to(h._reference_vector(fixture.initial.velocity)) < 0.001, "Original visual launch priority, AA and 45-degree throw")
 		h._near(state.range, fixture.initial.range, "Original visual range stops at the target sphere")
 		h._check(state.guided == fixture.initial.guided and state.launch_distance == fixture.initial.launch_distance, "Original visual launch lift before steering")
+		var key: String = "%s-%s-steel" % [fixture.character, fixture.slot]
+		var rendered_state := state.duplicate(true)
+		shell_view.spawn_shell(rendered_state, key)
+		var model: ProjectileVisual = rendered_state.model
+		var initial_fx: Array = fixtures.projectileFx.filter(func(item): return item.key == key and item.age == 0 and item.speed == 0)
+		if not initial_fx.is_empty():
+			for part: Dictionary in initial_fx[0].nodes:
+				var node := model.nodes[int(part.id)] as MeshInstance3D
+				h._check(node.position.distance_to(h._reference_vector(part.position)) < .00001 and node.scale.distance_to(h._reference_vector(part.scale)) < .00001,
+					"Visual shell factory frame retains source zero-age/zero-speed tails before the first flight step")
+		var impacts: Array = []
 		for index in range(fixture.steps.size()):
 			frames += 1
 			var collision := func(start: Vector3, end: Vector3) -> Dictionary:
 				return {"position": start.lerp(end, 0.6)} if index == int(fixture.hitFrame) else {}
 			var actual := VisualShellMotion.advance(state, fixture.delta, collision)
+			shell_view.advance(fixture.delta, collision, func(point, radius, color):
+				impacts.append({"position": [point.x, point.y, point.z], "radius": radius, "color": color}))
 			var expected: Dictionary = fixture.steps[index]
 			var error: float = maxf(state.position.distance_to(h._reference_vector(expected.position)), state.velocity.distance_to(h._reference_vector(expected.velocity)))
 			maximum_error = maxf(maximum_error, error)
 			h._check(error < 0.001, "Original visual flight: %s/%s/%s frame=%d error=%s" % [fixture.character, fixture.slot, fixture.name, index, error])
 			h._check(actual.terminal == expected.terminal and actual.hit == expected.hit, "Original collision precedes silent range expiry; small segments skip collision")
+			if expected.get("impact") != null:
+				h._check(not impacts.is_empty(), "Original visual-shell collision produces its contact star")
+				if not impacts.is_empty():
+					StatusSuite.compare(h, impacts[-1], expected.impact, "Original visual-shell collision star position, radius and colour")
+			else:
+				h._check(impacts.is_empty(), "Visual-shell range expiry remains silent")
+			h._check(model.visible != bool(expected.terminal), "Actual visual shell returns to its pool at the source terminal boundary")
+			h._check(rendered_state.position.distance_to(h._reference_vector(expected.position)) < .001, "Rendered visual shell follows the source collision endpoint")
+		for remaining: Dictionary in shell_view.shells:
+			shell_view._drop(remaining.model, remaining.key)
+		shell_view.shells.clear()
+	shell_view.free()
 	print("VISUAL_SHELL_REFERENCE_PASS sequences=", fixtures.visualShells.size(), " frames=", frames, " maximum_error=", maximum_error)
 	for fixture: Dictionary in fixtures.tracerPresentation:
 		var presentation := ProjectilePresentation.new()
@@ -100,6 +129,15 @@ static func integration(h: Node) -> void:
 	h._check(not live.visible and presentation.rounds.is_empty(), "Terminal snapshots recycle owner meshes")
 	presentation.sync_rounds(view)
 	h._check(presentation.rounds[view[0].id].model == live, "Source projectile models reuse the matching variant pool")
+	presentation.retire_round(view[0].id, 10)
+	h._check(not live.visible and presentation.rounds.is_empty(), "An immediate terminal notification removes the owner mesh before the next snapshot")
+	presentation.sync_rounds(view, 9.9)
+	h._check(presentation.rounds.is_empty(), "A pre-impact snapshot cannot recreate a retired projectile")
+	presentation.sync_rounds([], 10)
+	presentation.sync_rounds(view, 10)
+	h._check(presentation.rounds.is_empty() and presentation.retired_rounds.has(view[0].id), "Same-clock publications cannot clear the terminal guard early")
+	presentation.sync_rounds([], 10.1)
+	h._check(not presentation.retired_rounds.has(view[0].id), "A newer authoritative absence releases the terminal guard")
 	actor.ensure_cockpit()
 	actor.cockpit.echo_fired.connect(sim.present_echo.bind(actor))
 	var event: Dictionary = sim.events.filter(func(item): return item.type == "weapon_fire" and int(item.actor) == actor.entity_id)[0]

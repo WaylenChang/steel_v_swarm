@@ -26,6 +26,18 @@ class CarrierSimulation extends BattleSimulation:
 	func _apply_cc(_owner: BattleUnit, _added: Dictionary, _center: Vector3, _radius: float) -> void:
 		pass
 
+class LifecycleSimulation extends CarrierSimulation:
+	var order: Array = []
+	var arrivals: Array = []
+
+	func _publish_blast_event(event: Dictionary) -> void:
+		order.append("boom")
+		super._publish_blast_event(event)
+
+	func _carrier_arrive(_unit: BattleUnit, point: Vector3, fraction: float, count_override: int = -1) -> void:
+		order.append("arrival")
+		arrivals.append({"x": point.x, "z": -point.z, "fraction": fraction, "count": count_override})
+
 static func run(h: Node, fixtures: Dictionary) -> void:
 	for key: String in ["carrierLaunch", "carrierMotion", "carrierOrigin", "carrierArrival", "carrierMath", "carrierStrike", "carrierInterceptions"]:
 		if not fixtures.has(key):
@@ -48,8 +60,12 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 	for item: Dictionary in fixtures.carrierLaunch:
 		var simulation := context(h)
 		var owner := pilot(simulation, item.character)
-		owner.upgrades.atk = int(item.level) - 1
-		simulation._launch_carriers(owner, Content.ability(item.character, "atk", int(item.level)), vector(item.point), vector(item.origin))
+		if item.has("superLevel"):
+			owner.side = "SUPER"
+			owner.upgrades["super"] = int(item.superLevel)
+		else:
+			owner.upgrades.atk = int(item.level) - 1
+		simulation._launch_carriers(owner, Content.ability(item.character, "atk", float(item.level)), vector(item.point), vector(item.origin))
 		h._check(owner.carrier_ids.size() == item.actors.size(), "Original dedicated and chassis-default carrier count")
 		for index in range(mini(owner.carrier_ids.size(), item.actors.size())):
 			var id: int = owner.carrier_ids[index]
@@ -64,7 +80,23 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		StatusHelper.check_draws(h, simulation, int(item.draws))
 		simulation.free()
 	for item: Dictionary in fixtures.carrierMotion:
+		var simulation := LifecycleSimulation.new()
+		h.add_child(simulation)
+		simulation.set_physics_process(false)
+		var owner := pilot(simulation, "s01")
+		var carrier := BattleUnit.new()
+		carrier.entity_id = 2
+		carrier.kind = item.kind
+		carrier.side = owner.side
+		carrier.hp = 100
+		carrier.special = {"role": "carrier", "owner_id": owner.entity_id, "owner_peer": owner.peer_id}
+		carrier.hit_area = Area3D.new()
+		carrier.add_child(carrier.hit_area)
+		simulation.add_child(carrier)
+		simulation.units[carrier.entity_id] = carrier
+		owner.carrier_ids.append(carrier.entity_id)
 		var state: Dictionary = item.initial.duplicate(true)
+		simulation.carrier_states[carrier.entity_id] = state
 		var alive := true
 		for step: Dictionary in item.steps:
 			var outcome := {"arrivals": [], "remove": false}
@@ -74,6 +106,24 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			compare(h, state, step.state, "Original scalar carrier trajectory and fixed-step ordering")
 			compare(h, outcome.arrivals, step.arrivals, "Original delivery location, fraction and integer budget")
 			h._check(alive == bool(step.alive), "Original carrier arrival, timeout and deferred launch lifecycle")
+			carrier.position = Vector3(state.x, state.y, -state.z)
+			simulation._finish_carrier_step(carrier, outcome)
+			var reports: Array = []
+			var points: Array = []
+			for event: Dictionary in simulation.events:
+				reports.append({"radius": event.radius, "sam": event.sam, "kami": event.kami, "hyper": event.hyper})
+				var point: Vector3 = event.position
+				points.append([point.x, point.y, point.z])
+			compare(h, reports, step.reports, "Original carrier completion report flags and radius")
+			compare(h, points, step.points, "Original carrier event-time explosion points")
+			compare(h, simulation.order, step.order, "Original completion boom precedes delivery effects")
+			compare(h, simulation.arrivals, step.arrivals, "Authority carrier dispatch retains each delivery budget")
+			h._check(simulation.units.has(carrier.entity_id) == bool(step.alive), "Authority completion removes only the finished carrier")
+			simulation.events.clear()
+			simulation.pending_blast_feedback.clear()
+			simulation.order.clear()
+			simulation.arrivals.clear()
+		simulation.free()
 	for item: Dictionary in fixtures.carrierArrival:
 		var simulation := context(h)
 		var owner := pilot(simulation, "s01")
@@ -110,6 +160,12 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._near(enemy.money - 100, item.earned, "Original carrier interception bounty")
 		h._near(enemy.score, item.score, "Original carrier interception battle score")
 		h._check(simulation.deliveries.size() == int(item.effects) and simulation.strikes.size() == int(item.blasts), "Shot-down carriers cancel their effect budget without generic damage")
+		var reports: Array = []
+		for event: Dictionary in simulation.events:
+			if event.type in ["die", "boom"]:
+				reports.append({"type": event.type, "kind": event.get("kind"), "radius": event.get("radius"),
+					"sam": bool(event.get("sam", false)), "kami": bool(event.get("kami", false))})
+		StatusHelper.compare(h, reports, item.reports, "Original carrier death/fracture report order, absent decoy blast and SAM style")
 		simulation.free()
 	print("CARRIER_REFERENCE_PASS launch=", fixtures.carrierLaunch.size(), " motion=", fixtures.carrierMotion.size(),
 		" arrival=", fixtures.carrierArrival.size(), " strikes=", fixtures.carrierStrike.size(), " interception=", fixtures.carrierInterceptions.size())

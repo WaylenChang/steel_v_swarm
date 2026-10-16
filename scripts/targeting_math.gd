@@ -1,6 +1,52 @@
 class_name TargetingMath
 extends RefCounted
 
+static func foe(side: String, target_side: String, neutral: bool = false) -> bool:
+	return not target_side.is_empty() and target_side != side and not neutral and not (side == Content.constants.SUPER_SIDE and Content.constants.THIRD.SIDES.has(target_side))
+
+static func view_roster(position: Vector3, frame: Transform3D, projection: Projection, viewport: Vector2,
+		candidates: Array, reach: float, keep_id: int, scoped: bool, scope_radius: float, obstruction: Callable = Callable()) -> Array:
+	var result: Array = []
+	var inverse := frame.affine_inverse()
+	var canvas := Vector2(1 if viewport.x == 0 else viewport.x, 1 if viewport.y == 0 else viewport.y)
+	var rules: Dictionary = Content.balance.view
+	var order := 0
+	for candidate: Dictionary in candidates:
+		var index := order
+		order += 1
+		if not candidate.get("eligible", true):
+			continue
+		var point: Vector3 = candidate.point
+		if position.distance_to(point) > reach:
+			continue
+		var local := inverse * point
+		if local.z > -float(rules.near):
+			continue
+		var clip := projection * Vector4(local.x, local.y, local.z, 1)
+		if clip.w == 0:
+			continue
+		var ndc := Vector2(clip.x, clip.y) / clip.w
+		var off := Vector2(ndc.x * canvas.x, ndc.y * canvas.y).length() * 0.5 / maxf(1, scope_radius) if scoped else maxf(absf(ndc.x), absf(ndc.y))
+		var limit: float = Content.constants.VIEW_LOCK.DROP if int(candidate.id) == keep_id else Content.constants.VIEW_LOCK.EDGE
+		if not off <= limit:
+			continue
+		var cut: float = obstruction.call(frame.origin, point) if obstruction.is_valid() else candidate.get("obstruction", INF)
+		if cut < frame.origin.distance_to(point) - float(Content.balance.targeting.obstructionTolerance):
+			continue
+		result.append({"id": int(candidate.id), "off": off, "x": ndc.x, "order": index})
+	# Source JS sorting is stable; equal horizontal positions preserve map order.
+	result.sort_custom(func(a, b): return a.order < b.order if a.x == b.x else a.x < b.x)
+	return result
+
+static func view_choice(roster: Array, keep_id: int) -> int:
+	var best := {}
+	for candidate: Dictionary in roster:
+		if int(candidate.id) == keep_id:
+			return keep_id
+		if best.is_empty() or float(candidate.off) < float(best.off) or candidate.off == best.off and int(candidate.order) < int(best.order):
+			best = candidate
+	return int(best.id) if not best.is_empty() else 0
+
 # Preserve source acquisition independently of physical hit-volume and lock lifecycle queries.
 static func cone_acquire(position: Vector3, eye: Vector3, forward: Vector3, reach: float,
 		candidates: Array, keep_id: int = 0) -> int:

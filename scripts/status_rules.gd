@@ -58,7 +58,7 @@ static func tier_value(value: Variant, level: float) -> float:
 	var step := last - float(value[-2]) if value.size() > 1 else 0.0
 	return maxf(0, last + step * (index - (value.size() - 1)))
 
-static func self_attack_boost(character: String, level: int, light_level: int, heavy_level: int) -> Dictionary:
+static func self_attack_boost(character: String, level: float, light_level: float, heavy_level: float) -> Dictionary:
 	var neutral := {"dmgMul": 0.0, "heal": 0.0, "alphaX": 1.0}
 	var raw: Dictionary = Content.heroes[character].atk
 	# The original compensation gate uses effect semantics, including direct team effects.

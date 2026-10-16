@@ -17,6 +17,7 @@ var terrain_rids: Array[RID] = []
 var missile_obstruction_rids: Array[RID] = []
 var layers := StructureLayers.new()
 var projectile_visuals: ProjectilePresentation
+var missile_view_collision := Callable()
 var skill_fields: SkillFieldPresentation
 var weather_visuals: WeatherPresentation
 var water_y: Variant = null
@@ -30,6 +31,9 @@ var active_columns: Array = []
 var weather_obstacles: Array = []
 var cleared_camps: Array[Dictionary] = []
 var cleared_camp_keys: Dictionary = {}
+var lane_surface := LaneSurfaceProfile.new()
+var visual_frozen := false
+var combat_effects: CombatEffects
 
 func clear_camp_columns(camps: Array) -> void:
 	if native_data == null:
@@ -147,6 +151,7 @@ func water_plane(x: float, z: float) -> Variant:
 func sync_weather(dynamics: Dictionary, _surface: Dictionary, hour: float, schedule: Dictionary, season: String, seed_value: int = 0) -> void:
 	if dynamics.is_empty():
 		return
+	visual_frozen = bool(dynamics.get("isFrozen", false))
 	if native_data != null and native_data.water_profile.get("baseY") != null:
 		var shift := EnvironmentRules.tide(hour, schedule.lunarDay, native_data.water_profile.isMarine)
 		water_y = float(native_data.water_profile.baseY) + shift
@@ -175,17 +180,31 @@ func ensure_projectile_visuals() -> ProjectilePresentation:
 	if projectile_visuals == null:
 		projectile_visuals = ProjectilePresentation.new()
 		add_child(projectile_visuals)
+	projectile_visuals.missile_collision = missile_view_collision
 	return projectile_visuals
 
-func sync_projectile_view(states: Array) -> void:
+func ensure_combat_effects() -> CombatEffects:
+	if combat_effects == null:
+		combat_effects = CombatEffects.new()
+		add_child(combat_effects)
+	return combat_effects
+
+func clip_shot(origin: Vector3, target: Vector3) -> Dictionary:
+	return NpcShotMotion.clip(origin, target, obstruction_hit)
+
+func sync_projectile_view(states: Array, clock: float = NAN) -> void:
 	if projectile_visuals == null and states.is_empty():
 		return
-	ensure_projectile_visuals().sync_rounds(states)
+	ensure_projectile_visuals().sync_rounds(states, clock)
 
 func step_projectile_visuals(delta: float) -> void:
-	if projectile_visuals == null:
-		return
-	projectile_visuals.advance(delta, visual_collision)
+	if projectile_visuals != null:
+		projectile_visuals.advance(delta, visual_collision, _visual_shell_impact)
+	if combat_effects != null:
+		combat_effects.advance(delta)
+
+func _visual_shell_impact(point: Vector3, radius: float, color: int) -> void:
+	ensure_combat_effects().spark(point, radius, color)
 
 func visual_collision(start: Vector3, end: Vector3) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(start, end, 1)
@@ -273,6 +292,10 @@ func build(map_data: Dictionary, _environment: Dictionary) -> void:
 		add_child(ambience)
 		ambience.play()
 
+func prepare_lane_surface() -> void:
+	if native_data != null:
+		lane_surface.configure(lane_points, source_height, visual_surface)
+
 func _exit_tree() -> void:
 	if ambience != null:
 		ambience.stop()
@@ -343,6 +366,31 @@ func ground_height(x: float, z: float) -> float:
 func flight_reference(x: float, z: float) -> float:
 	return _height_at(x, z, 8 | 16 | 32 | 64)
 
+func visual_surface(point: Vector3) -> float:
+	var ground := source_height(point.x, point.z)
+	if not is_finite(ground):
+		return NAN
+	var surface := layers.projectile_surface(point, ground)
+	var tunnel := layers.tunnel_at(Vector2(point.x, point.z))
+	if not tunnel.is_empty() and point.y < float(tunnel.ceil):
+		return surface
+	return EnvironmentRules.ice_surface(surface, point.y, water_plane(point.x, point.z), visual_frozen)
+
+func visual_flight_surface(x: float, z: float) -> float:
+	var surface := source_height(x, z)
+	if not is_finite(surface):
+		return NAN
+	var deck: Variant = visual_deck(x, z)
+	if deck != null and float(deck) > surface:
+		surface = float(deck)
+	var tunnel := layers.tunnel_at(Vector2(x, z))
+	if not tunnel.is_empty() and not tunnel.open:
+		surface = maxf(surface, float(tunnel.ceil) + float(Content.balance.structure.tunnelRoofThickness))
+	return surface
+
+func visual_deck(x: float, z: float) -> Variant:
+	return layers.deck_height(Vector2(x, z), float(Content.balance.structure.deckMargin))
+
 func _height_at(x: float, z: float, mask: int) -> float:
 	if native_data == null:
 		return 0.0
@@ -359,7 +407,7 @@ func tracer(start: Vector3, end: Vector3, side: String) -> void:
 	beam.mesh = cylinder
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(Content.constants.SIDES[side].color)
+	material.albedo_color = Color(Content.side_info(side).color)
 	beam.material_override = material
 	add_child(beam)
 	beam.global_position = (start + end) / 2
@@ -385,7 +433,7 @@ func aim_arc(control: Dictionary) -> void:
 	if control.is_empty():
 		return
 	var colors: Dictionary = Content.balance.projectilePreview.colors
-	var color := Color(Content.constants.SIDES[control.side].color)
+	var color := Color(Content.side_info(control.side).color)
 	for key in ["close", "blocked", "aa", "high"]:
 		if (not control.ok if key == "blocked" else control.get(key, false)):
 			color = Color.hex((int(colors[key]) << 8) | 0xff)

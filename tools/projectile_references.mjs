@@ -20,7 +20,7 @@ export async function projectileReferences(d, gameSource, source) {
   const update = method('_updateBullets');
   const guidedLaunch = method('_guidedLaunchVel');
   const spawnVisual = method('_spawnVisShell');
-  const updateVisual = method('_updateVisShells', {starburst:(_,effects,x,y,z)=>effects.push([x,y,z])});
+  const updateVisual = method('_updateVisShells', {starburst:(_,effects,x,y,z,radius,color)=>effects.push({position:[x,y,z],radius,color})});
   const visualShells = [];
   const fadeLine = text.split('\n').find(line=>line.startsWith('function _tracerFade('));
   const effectCap = Number(/const FX_MAX = (\d+)/.exec(text)?.[1]);
@@ -58,7 +58,8 @@ export async function projectileReferences(d, gameSource, source) {
       const steps=[],delta=scenario.delta || 1/60;
       while (ctx._visShells.length && frame<600) {
         updateVisual.call(ctx,delta);
-        steps.push({position:state.pos.toArray(),velocity:state.vel.toArray(),age:state.age,terminal:!ctx._visShells.length,hit:ctx.effects.length>0});frame++;
+        steps.push({position:state.pos.toArray(),velocity:state.vel.toArray(),age:state.age,terminal:!ctx._visShells.length,
+          hit:ctx.effects.length>0,impact:ctx.effects.at(-1)??null});frame++;
       }
       if (ctx._visShells.length) throw new Error(`Visual shell did not terminate: ${character}/${slot}/${scenario.name}`);
       visualShells.push({character,slot,level,name:scenario.name,origin:scenario.origin,target:scenario.target,speed:scenario.speed ?? null,
@@ -274,6 +275,7 @@ export async function projectileReferences(d, gameSource, source) {
             arm: 0, fnf: false, fuel: d.chaseCapS(def), age: 0, chase: false, homePtSet: false,
             hx: 0, hy: 0, hz: 0, hr: 0, dud: false, oy: origin.y,
             mesh: { position: new THREE.Vector3(), quaternion: { setFromUnitVectors() {} } } };
+          const presentation=[];
           const ctx = { bullets: [b], ents: new Map(), wdef: { [slot]: def }, side: 'STEEL', hud: { feed() {} },
             raycaster: new THREE.Raycaster(), _rayCandidates: (_from, _dir, _far, out) => out.push(...meshes),
             _terrainHitT: (from, dir, far) => {
@@ -286,7 +288,9 @@ export async function projectileReferences(d, gameSource, source) {
             },
             _obstHitT: () => null, _entByMesh: mesh => mesh.userData.entity,
             _inHitRange: hitRange, _effRange: () => def.range, _hitR: target => d.hitR(target),
-            _dropBullet() {}, _hitFeedback() {}, _lanceVisual() {}, _lanceFeedback() {},
+            _dropBullet() {}, _hitFeedback() {}, _lanceVisual(from,to,definition,side) {
+              presentation.push({origin:from.toArray(),point:to.toArray(),character:definition.ch,slot:definition.slot,level:definition.lvl,side});
+            }, _lanceFeedback() {},
             _sendLance: (from, to) => { reports.push({ t: 'lance', origin: from.toArray(), point: to.toArray() }); return []; },
             net: { send: report => reports.push(report) } };
           const delta = scenario.delta || 1 / 60;
@@ -294,7 +298,7 @@ export async function projectileReferences(d, gameSource, source) {
           while (ctx.bullets.length && frames < 4000) { update.call(ctx, delta); frames++; }
           if (ctx.bullets.length) throw new Error('Source kinetic flight did not terminate');
           kineticFlight.push({ character, slot, level, name: scenario.name, origin: origin.toArray(), velocity: direction.multiplyScalar(speed).toArray(),
-            delta, frames, ground: { base: 0, x: 0, z: 0 }, boxes, bodies, state: stateOf(b), report: reports[0] || null });
+            delta, frames, ground: { base: 0, x: 0, z: 0 }, boxes, bodies, state: stateOf(b), report: reports[0] || null,presentation });
           for (const mesh of meshes) { mesh.geometry.dispose(); mesh.material.dispose(); }
         }
       }

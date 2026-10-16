@@ -39,6 +39,8 @@ func _ready() -> void:
 	add_child(join_timer)
 
 func host(settings: Dictionary, port: int = 8620, transport: String = "offline") -> Error:
+	if OS.has_feature("solo_web") and transport != "offline":
+		return ERR_UNAVAILABLE
 	stop()
 	config = settings.duplicate(true)
 	var control_mode: String = settings.get("ctrl", Controls.pref)
@@ -81,6 +83,8 @@ func host(settings: Dictionary, port: int = 8620, transport: String = "offline")
 	return OK
 
 func join(address: String, port: int) -> Error:
+	if OS.has_feature("solo_web"):
+		return ERR_UNAVAILABLE
 	stop()
 	var peer: MultiplayerPeer
 	if address.begins_with("ws://") or address.begins_with("wss://"):

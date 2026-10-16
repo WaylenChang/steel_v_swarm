@@ -57,7 +57,7 @@ static func loot_plan(random: SourceRng, x: float, native_z: float, treasure_cla
 	if tier.get("ammo", false):
 		result.ammo = true
 	elif tier.get("affix", false):
-		var ids := Content.constants.AFFIXES.keys()
+		var ids: Array = Content.constants.AFFIXES.keys()
 		result.affix = ids[int(floorf(random.next() * ids.size()))]
 	else:
 		result.value = floorf(float(tier.min) + random.next() * (float(tier.max) - float(tier.min)) + 0.5)

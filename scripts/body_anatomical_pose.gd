@@ -85,7 +85,7 @@ static func arm_to_point(poses: BodyPose, arm: Dictionary, target: Vector3, pole
 	var lower: Vector3 = poses.read(hand).p
 	var upper_length := SourceQuaternion.vector_length(upper)
 	var lower_length := SourceQuaternion.vector_length(lower)
-	var delta := shoulder.get_parent().to_local(target) - (poses.read(shoulder).p as Vector3)
+	var delta: Vector3 = shoulder.get_parent().to_local(target) - (poses.read(shoulder).p as Vector3)
 	var distance := maxf(absf(upper_length - lower_length) + 0.00001, minf(upper_length + lower_length - 0.00001, SourceQuaternion.vector_length(delta)))
 	delta = SourceQuaternion.vector_normalized(delta)
 	var reach := (upper_length * upper_length - lower_length * lower_length + distance * distance) / (2 * distance)
@@ -93,7 +93,7 @@ static func arm_to_point(poses: BodyPose, arm: Dictionary, target: Vector3, pole
 	if SourceQuaternion.vector_dot(pole, pole) < 0.0000000001:
 		pole = Vector3.BACK + delta * -float(delta.z)
 	pole = SourceQuaternion.vector_normalized(pole)
-	var direction := delta * reach + pole * sqrt(maxf(0, upper_length * upper_length - reach * reach))
+	var direction: Vector3 = delta * reach + pole * sqrt(maxf(0, upper_length * upper_length - reach * reach))
 	var local := SourceQuaternion.from_unit_vectors(SourceQuaternion.vector_normalized(upper), SourceQuaternion.vector_normalized(direction))
 	poses.set_quaternion(shoulder, SourceQuaternion.slerp(poses.read(shoulder).q, local, weight))
 	direction = shoulder.to_local(target) - upper

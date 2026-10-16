@@ -44,7 +44,7 @@ static func step(poses: BodyPose, rig: Dictionary, entity: Dictionary, delta: fl
 	if not Joint.flag(rig, "shield"):
 		return
 	var shield: Dictionary = rig.shield
-	var target := not Joint.flag(entity, "dead") and (defending or (Joint.flag(rig, "combat") and slot == "def" and casting))
+	var target: bool = not Joint.flag(entity, "dead") and (defending or (Joint.flag(rig, "combat") and slot == "def" and casting))
 	var value := clampf(phase(shield) + (1.0 if target else -1.0) * delta / float(shield.duration), 0, 1)
 	if Joint.flag(entity, "dead") and Joint.flag(rig, "combat"):
 		value = 0

@@ -93,7 +93,7 @@ func move(id: int, point: Vector2) -> void:
 func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
 	if id == look_id:
 		look_id = NONE
-		var tap := not look_fire and now - down_at <= rules.TAP_MS and point.distance_to(down_position) <= rules.TAP_SLOP_PX
+		var tap: bool = not look_fire and now - down_at <= rules.TAP_MS and point.distance_to(down_position) <= rules.TAP_SLOP_PX
 		# The original look-pad cancellation uses its normal release handler.
 		tap_at = now if tap and not fire_arm else 0.0
 		tap_position = down_position

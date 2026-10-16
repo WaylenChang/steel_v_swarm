@@ -136,7 +136,7 @@ func _restore(id: int) -> void:
 	var mesh: GeometryInstance3D = state.mesh.get_ref()
 	if is_instance_valid(mesh):
 		var batch := mesh as MultiMeshInstance3D
-		var restore_instances := batch != null and state.has("instances") and batch.multimesh == state.instances and batch.multimesh.mesh == state.geometry
+		var restore_instances: bool = batch != null and state.has("instances") and batch.multimesh == state.instances and batch.multimesh.mesh == state.geometry
 		for item: Dictionary in state.items:
 			if int(item.surface) < 0:
 				if mesh.material_override == item.faded:

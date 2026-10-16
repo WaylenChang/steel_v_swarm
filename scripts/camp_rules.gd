@@ -62,9 +62,9 @@ static func seed(random: SourceRng, state: Dictionary, terrain_blocked: Callable
 			for maximum in [float(cfg.LANE_MAX), float(cfg.LANE_MAX) * 1.6]:
 				for attempt in range(320):
 					var point := SceneRules._point_normal(state, lane, total * (0.1 + random.next() * 0.8))
-					var offset := float(cfg.LANE_MIN) + random.next() * (maximum - float(cfg.LANE_MIN))
-					var x := float(point.x) + float(point.nx) * direction * offset
-					var z := float(point.z) + float(point.nz) * direction * offset
+					var offset: float = float(cfg.LANE_MIN) + random.next() * (maximum - float(cfg.LANE_MIN))
+					var x: float = float(point.x) + float(point.nx) * direction * offset
+					var z: float = float(point.z) + float(point.nz) * direction * offset
 					if not SceneRules.in_bounds(state.bounds, x, z, 16):
 						continue
 					var distance := SceneRules.lane_distance(state.lanes, x, z)

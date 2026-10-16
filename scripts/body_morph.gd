@@ -58,7 +58,7 @@ static func pose(rig: BodyRig) -> void:
 	if not changing and not state.act:
 		return
 	var progress: float = state.m if changing else 1.0 if state.m >= 0.5 else 0.0
-	var weight := ease(progress)
+	var weight := BodyMorph.ease(progress)
 	var settle := rest_weight(progress) if changing else 0.0
 	_side(rig.poses, state.plan.g, weight, settle, alpha(progress, false))
 	_side(rig.poses, state.plan.a, weight, settle, alpha(progress, true))

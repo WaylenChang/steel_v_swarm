@@ -166,9 +166,9 @@ func release() -> void:
 					node.set_surface_override_material(surface, binding.originals[surface])
 		elif node is MultiMeshInstance3D:
 			var mesh: Mesh = node.multimesh.mesh
-			var owned := mesh == binding.get("private_mesh")
+			var owned: bool = mesh == binding.get("private_mesh")
 			for surface in range(mini(binding.originals.size(), mesh.get_surface_count())):
-				var replaced := mesh.surface_get_material(surface) == binding.replacements[surface]
+				var replaced: bool = mesh.surface_get_material(surface) == binding.replacements[surface]
 				owned = owned and replaced
 				if replaced:
 					mesh.surface_set_material(surface, binding.originals[surface])

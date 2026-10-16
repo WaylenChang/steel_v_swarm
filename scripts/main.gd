@@ -199,9 +199,12 @@ func _build_ui() -> void:
 	ui.add_child(root)
 	var theme := Theme.new()
 	theme.default_font_size = 18
-	var font := SystemFont.new()
-	font.font_names = PackedStringArray(["Microsoft JhengHei", "Noto Sans CJK TC", "sans-serif"])
-	theme.default_font = font
+	if OS.has_feature("web"):
+		theme.default_font = preload("res://assets/fonts/NotoSansTC.ttf")
+	else:
+		var font := SystemFont.new()
+		font.font_names = PackedStringArray(["Microsoft JhengHei", "Noto Sans CJK TC", "sans-serif"])
+		theme.default_font = font
 	root.theme = theme
 	backdrop = ColorRect.new()
 	backdrop.color = Color("101b26")
@@ -272,15 +275,25 @@ func _build_ui() -> void:
 	_row(column, "weather", weather_select)
 	address = LineEdit.new()
 	address.text = "127.0.0.1"
-	_row(column, "address", address)
+	if not OS.has_feature("solo_web"):
+		_row(column, "address", address)
+	else:
+		column.add_child(address)
+		address.hide()
 	port = SpinBox.new()
 	port.min_value = 1
 	port.max_value = 65535
 	port.value = 8620
-	_row(column, "port", port)
+	if not OS.has_feature("solo_web"):
+		_row(column, "port", port)
+	else:
+		column.add_child(port)
+		port.hide()
 	var buttons := HBoxContainer.new()
 	for entry in [["solo", "offline"], ["host", "enet"], ["join", "join"]]:
 		var mode: String = entry[1]
+		if OS.has_feature("solo_web") and mode != "offline":
+			continue
 		buttons.add_child(_button(Content.label(entry[0]), func(): _start_mode(mode)))
 	column.add_child(buttons)
 	column.add_child(_button(Content.label("story_campaign"), _open_campaign))
@@ -1279,7 +1292,7 @@ func _receive_state(state: Dictionary) -> void:
 			button.text = "%s Lv%d · $%d · %s %d" % [def.name, level, int(step.price), Content.label("score"), int(step.score)]
 			button.disabled = pilot.money < step.price or pilot.score < step.score
 	var levels: Array = simulation.creep_upgrades.get(pilot.side, [])
-	var super_pilot := pilot.side == Content.constants.SUPER_SIDE
+	var super_pilot: bool = pilot.side == Content.constants.SUPER_SIDE
 	super_buy.visible = super_pilot
 	super_auto.visible = super_pilot
 	super_detail.visible = super_pilot
@@ -1341,7 +1354,7 @@ func _result(winner: String) -> void:
 	death_sequence.finish()
 	if Session.config.has("campaign"):
 		var selection: Dictionary = Session.config.campaign
-		var won := winner == selection.side
+		var won: bool = winner == selection.side
 		if won and not campaign_result_saved:
 			campaign_result_saved = true
 			if campaign_progress.mark_cleared(selection.side, selection.chapter) != OK:
@@ -1369,7 +1382,7 @@ func _supply_notice(event: Dictionary, pilot: BattleUnit) -> void:
 				feed.push_message(Content.label("civilian_freed") % int(event.count))
 		"civaid":
 			if own:
-				var name := CivilianRules.appearance(int(event.civilian), int(event.profession)).occupation
+				var name: String = CivilianRules.appearance(int(event.civilian), int(event.profession)).occupation
 				var reward := Content.label("civilian_medkit") % [int(event.hp), int(event.shield)] if event.reward == "medkit" else Content.label("civilian_battery") % [int(event.power), float(event.cooldown)] if event.reward == "battery" else Content.label("civilian_money") % int(event.value)
 				feed.push_message(Content.label("civilian_aid") % [name, reward])
 		"civkill":

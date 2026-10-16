@@ -502,7 +502,7 @@ func refresh_collision() -> void:
 		movement_shape.shape = obstacle
 		movement_shape.position.y = obstacle.height / 2
 		return
-	var active := alive() and not special.get("garrison", false)
+	var active: bool = alive() and not special.get("garrison", false)
 	collision_layer = 4 if active and (is_hero() or kind in Content.constants.COLLIDE_KINDS) else 0
 	hit_area.collision_layer = 2 if active else 0
 	var spec := {"r": radius, "bot": 0.0, "top": height}
@@ -622,7 +622,7 @@ func simulate_movement(delta: float) -> void:
 		velocity = velocity.lerp(target, 1 - exp(-4.0 * delta))
 	else:
 		air_sink = 0
-		var grounded := is_on_floor() or (is_finite(standing_surface) and velocity.y <= 0 and position.y <= standing_surface + Content.constants.AIR.OFF_GROUND)
+		var grounded: bool = is_on_floor() or (is_finite(standing_surface) and velocity.y <= 0 and position.y <= standing_surface + Content.constants.AIR.OFF_GROUND)
 		if movement_factor <= 0:
 			charge = 0
 		elif grounded and held and is_hero():
@@ -693,7 +693,7 @@ func simulate_movement(delta: float) -> void:
 
 func _step_lift(simulation: BattleSimulation, vertical: float, delta: float) -> float:
 	var stats: Dictionary = Content.constants.UNITS[kind]
-	var reference := float(simulation.world.water_y) if simulation.world != null and simulation.world.water_y != null else simulation.world.native_data.min_height if simulation.world != null and simulation.world.native_data != null else NAN
+	var reference: float = float(simulation.world.water_y) if simulation.world != null and simulation.world.water_y != null else simulation.world.native_data.min_height if simulation.world != null and simulation.world.native_data != null else NAN
 	var unbalanced := flying and (air_sink > 0 or lift_lock_until > simulation.clock or has_status("unbalanced_until", simulation.clock))
 	var state := MovementRules.step_lift(lift, vertical, position.y, reference, float(stats.get("vspeed", 0)),
 		float(stats.get("vdown", stats.get("vspeed", 0))), delta, unbalanced, StatusRules.fluid_factor(wet), WeatherRules.air_lift(simulation.weather_dynamics))

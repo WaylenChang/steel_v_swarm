@@ -152,7 +152,7 @@ func _input(event: InputEvent) -> void:
 		return
 	var now := float(Time.get_ticks_msec())
 	if event is InputEventScreenTouch:
-		var point := get_global_transform_with_canvas().affine_inverse() * event.position
+		var point: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
 		if event.pressed:
 			_down(event.index, point, now)
 		else:
@@ -160,7 +160,7 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag:
 		state.move(event.index, get_global_transform_with_canvas().affine_inverse() * event.position)
 	elif event is InputEventMouseButton and event.device != InputEvent.DEVICE_ID_EMULATION and event.button_index == MOUSE_BUTTON_LEFT:
-		var point := get_global_transform_with_canvas().affine_inverse() * event.position
+		var point: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
 		if event.pressed:
 			_down(MOUSE_POINTER, point, now)
 		else:

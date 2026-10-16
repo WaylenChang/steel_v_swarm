@@ -189,7 +189,7 @@ static func pose_aim(poses: BodyPose, rig: Dictionary, idle: float) -> float:
 	var slot: String = rig._aimSlot if Joint.flag(rig, "_aimSlot") else "light"
 	if Joint.flag(rig, "anatomical") and not Joint.flag(rig.anatomical.shots, slot):
 		return 0.0
-	var allow_idle := not (rig.get("aimWhileIdle") is bool and rig.aimWhileIdle == false)
+	var allow_idle: bool = not (rig.get("aimWhileIdle") is bool and rig.aimWhileIdle == false)
 	var aim := minf(1, (idle if allow_idle else 0.0) + Joint.or_number(rig, "_fireAim", 0))
 	if not Joint.flag(rig, "aimPose"):
 		return aim

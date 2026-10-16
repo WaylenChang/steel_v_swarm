@@ -3196,7 +3196,7 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 		var defense_factor := _shield_defense_factor(target, attacker, def, context)
 		amount *= defense_factor
 		_stamp_suppression(target, attacker)
-		var blast_hit := def.get("area") == "blast" or context.has("blast")
+		var blast_hit: bool = def.get("area") == "blast" or context.has("blast")
 		var unbalance: float = Content.constants.SHIELD_DEFENSE.FLIGHT_UNBAL_BLAST_F if blast_hit else Content.constants.SHIELD_DEFENSE.FLIGHT_UNBAL_DIRECT_F
 		_stamp_unbalance(target, unbalance if defense_factor < 1 else 1.0)
 		target.damaged_at = clock
@@ -3211,7 +3211,7 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 	var durability := 1.0
 	if not target.is_hero() and (attacker == null or not attacker.is_hero()):
 		durability = NpcRules.creep_damage_taken(target.creep_multiplier, target.armor, def.get("pen", 0))
-	var hp_damage := split.toHp * CombatMath.armor_multiplier(target.armor, def.get("pen", 0)) * durability
+	var hp_damage: float = split.toHp * CombatMath.armor_multiplier(target.armor, def.get("pen", 0)) * durability
 	if target.special.get("third", false) and target.kind != "bunker" and attacker != null and not attacker.side.is_empty() and attacker.side != target.side and not attacker.special.get("neutral", false):
 		target.special.aggro_id = attacker.entity_id
 		target.special.aggro_at = clock
@@ -3467,7 +3467,7 @@ func _stamp_unbalance(target: BattleUnit, factor: float) -> void:
 	var altitude := _missile_target_altitude(target)
 	if target.kind == "drone" and altitude < WeatherRules.unbalance_threshold(float(weather_dynamics.get("wind", 0))):
 		return
-	var flying := target.kind == "drone" or (target.kind == "morph" and altitude > Content.constants.MORPH.GROUND_Y) or altitude >= Content.constants.GAME.AA_MIN_ALT
+	var flying: bool = target.kind == "drone" or (target.kind == "morph" and altitude > Content.constants.MORPH.GROUND_Y) or altitude >= Content.constants.GAME.AA_MIN_ALT
 	if not flying and not _air_unit(target):
 		return
 	target.status.unbalanced_until = maxf(float(target.status.get("unbalanced_until", 0)), clock + Content.constants.FLIGHT.UNBAL_S * maxf(0.1, factor))
@@ -3504,7 +3504,7 @@ func _dodge_probability(target: BattleUnit, attacker: BattleUnit) -> float:
 		return 0.0
 	if StatusRules.maximum(target.buffs, "dodge", clock) > 0:
 		return 1.0
-	var flying := target.kind == "drone" or _missile_target_altitude(target) >= Content.constants.GAME.AA_MIN_ALT
+	var flying: bool = target.kind == "drone" or _missile_target_altitude(target) >= Content.constants.GAME.AA_MIN_ALT
 	var mobility: float = Content.heroes[target.character].flySpeed if flying else Content.heroes[target.character].speed
 	var movement_speed := target.bot_dodge_speed if target.is_bot else Vector2(target.velocity.x, target.velocity.z).length()
 	if mobility <= StatusRules.evasion_min_speed() or movement_speed < Content.constants.EVASION.MOVING_SPD:
@@ -3559,7 +3559,7 @@ func _apply_hit_elements(attacker: BattleUnit, definition: Dictionary, target: B
 		return
 	if target.is_hero() and (target.has_status("inv_until", clock) or StatusRules.maximum(target.buffs, "ccImm", clock) > 0):
 		return
-	var heavy := definition.get("id") == "heavy"
+	var heavy: bool = definition.get("id") == "heavy"
 	var fast: bool = definition.get("rate", 0) > 5
 	var effect := ""
 	if element in ["shock", "impact", "shockwave"]:
@@ -4234,7 +4234,7 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 		"strike":
 			for index in range(count_override if count_override >= 0 else maxi(0, ceili(float(definition.count)))):
 				var angle := rng.next() * TAU
-				var radius := 0.0 if index == 0 else rng.next() * (definition.scatter if definition.scatter else definition.r * 2)
+				var radius: float = 0.0 if index == 0 else rng.next() * (definition.scatter if definition.scatter else definition.r * 2)
 				var point := center + Vector3(cos(angle) * radius, 0, -sin(angle) * radius)
 				point.y = 0
 				var attack := {"dmg": definition.dmg * fraction, "r": definition.r, "vs": definition.vs, "pen": definition.pen,
@@ -5301,7 +5301,7 @@ func present_world_events(received: Array) -> void:
 func present_blast(event: Dictionary) -> void:
 	if Session.dedicated or world == null:
 		return
-	var local := event.type == "local_blast"
+	var local: bool = event.type == "local_blast"
 	if local and int(event.only_peer) != multiplayer.get_unique_id():
 		return
 	var stream := "local" if local else "global"
@@ -5521,7 +5521,7 @@ func _present_remote_shot(owner: BattleUnit, event: Dictionary) -> void:
 	var definition := Content.weapon(owner.character, event.slot, 1)
 	var now := presentation_time()
 	owner.remote_burst_driven = true
-	var prepared := not event.get("bot_report", false) and int(hero_pose_serials.get(int(event.actor), -1)) >= int(event.get("shot_serial", 0))
+	var prepared: bool = not event.get("bot_report", false) and int(hero_pose_serials.get(int(event.actor), -1)) >= int(event.get("shot_serial", 0))
 	var origin := _hero_effect_origin(owner, event.slot, event.start, int(event.get("shot_serial", -1)))
 	if event.get("area") == "fan" and not event.get("remote_only", false):
 		world.ensure_combat_effects().remote_plasma(origin, SourceQuaternion.vector_normalized(event.direction), definition,
@@ -5558,7 +5558,7 @@ func step_remote_shots(now: float) -> void:
 	for callback: Dictionary in remote_bursts.take_due(now):
 		var payload: Dictionary = callback.payload
 		var owner := _hero_representative(int(payload.actor))
-		var origin := _hero_effect_origin(owner, payload.slot, payload.aim) if owner != null else payload.aim
+		var origin: Vector3 = _hero_effect_origin(owner, payload.slot, payload.aim) if owner != null else payload.aim
 		var plan := RemoteShotState.echo(payload.definition, origin, payload.aim, world.clip_shot)
 		world.ensure_combat_effects().shot(origin, plan.target, payload.slot == "heavy", payload.side, plan.impact)
 		if owner != null:

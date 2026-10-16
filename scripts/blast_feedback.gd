@@ -48,7 +48,7 @@ static func sam(event: Dictionary) -> bool:
 	return bool(event.get("sam", false)) or str(event.type) in ["missile_blast", "missile_intercept"]
 
 static func local_point(position: Vector3, ground: float, tunnel: Dictionary) -> Vector3:
-	var covered := not tunnel.is_empty() and not tunnel.open and position.y < float(tunnel.ceil)
+	var covered: bool = not tunnel.is_empty() and not tunnel.open and position.y < float(tunnel.ceil)
 	var floor_y := float(tunnel.floor) if covered else ground
 	return Vector3(position.x, maxf(position.y, floor_y + 1), position.z)
 

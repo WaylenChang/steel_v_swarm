@@ -143,7 +143,7 @@ func resolve_role() -> void:
 func update_aiming() -> void:
 	var alert: Dictionary = unit.bot_alert
 	var reactive: bool = difficulty.tactic and not alert.is_empty() and simulation.clock - float(alert.at) <= float(Content.constants.BOT_VIEW.ALERT_S) and target_id == 0 and acquire() == null
-	var want := stationary() and (float(difficulty.scopeSearchDeg) > 0 or difficulty.tactic) or heavy_ready() or reactive
+	var want: bool = stationary() and (float(difficulty.scopeSearchDeg) > 0 or difficulty.tactic) or heavy_ready() or reactive
 	if want != bool(unit.input_state.get("aim", false)) and op("weapon"):
 		simulation._bot_aim(unit, want)
 

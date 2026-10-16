@@ -37,7 +37,7 @@ static func spawn_plan(points: Array, distances: Array, side: String, lead: floa
 static func step(state: Dictionary, points: Array, distances: Array, speed: float, delta: float,
 		controls: Dictionary, anchor: float = NAN, structures: Array = [], blockers: Array = [], allies: Array = [], weather: float = 1.0) -> void:
 	var rules: Dictionary = Content.balance.wave_rules
-	var hold := is_finite(anchor) and state.progress > anchor + Content.constants.GAME.WAVE_COHESION_M
+	var hold: bool = is_finite(anchor) and state.progress > anchor + Content.constants.GAME.WAVE_COHESION_M
 	var factor := 0.0 if controls.get("stun", false) else 1.0
 	if factor:
 		if controls.get("slow", false):

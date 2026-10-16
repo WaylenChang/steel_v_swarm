@@ -14,7 +14,7 @@ static func step(poses: BodyPose, state: Dictionary, rig: Dictionary, delta: flo
 	var amplitude: float = state.amp
 	var phase: float = state.ph
 	var gait: String = rig.gait if Joint.flag(rig, "gait") else "trot"
-	var rotary := rig.get("gallopType") == "rotary"
+	var rotary: bool = rig.get("gallopType") == "rotary"
 	var gallop := 0.0
 	var phases: Dictionary
 	match gait:

@@ -4,6 +4,50 @@ Native GDScript migration project for `steel_vs_swarm`. Requires standard
 Godot 4.7.2. Import `project.godot` in Godot and press **F5** to run the project.
 The game runs without Node.js, a browser, npm or add-ons.
 
+## Browser single-player and GitHub Pages
+
+The `Play on GitHub Pages` workflow validates pull requests and builds/deploys
+`main` on push or manual dispatch. In repository **Settings → Pages → Build and
+deployment**, select **GitHub Actions** as the source. After a successful run,
+open `https://changweilin.github.io/steel_v_swarm/` and choose single-player;
+remaining seats use the existing authority-controlled bots. The workflow also
+uploads the exported site as the `web-game` artifact.
+
+The Web preset uses Godot's official single-threaded WebAssembly export and
+Compatibility renderer, so Pages does not need custom COOP/COEP headers. It
+bundles the OFL-licensed Noto Sans TC font for Chinese text. Network lobby
+controls are unavailable in this export; native LAN/server exports remain
+available. Browser play requires WebGL 2 and an active tab. Click the game to
+focus keyboard/mouse input; browser audio may require a user gesture.
+
+On Windows, install matching Godot **4.7.2** export templates, then build locally:
+
+```powershell
+./tools/export_web.ps1 -Godot C:/path/to/Godot_v4.7.2-stable_win64_console.exe
+python -m pip install playwright==1.58.0
+python -m playwright install chromium
+python tools/test_web.py build/web
+python -m http.server 8000 --directory build/web
+```
+
+Open `http://localhost:8000/`; exported HTML must be served over HTTP(S).
+`export_web.ps1` requires Windows and checks script import, `tests/run.tscn`,
+the solo runtime smoke test and both ENet/WebSocket transports before export.
+Chromium then runs the exported solo smoke path under a nested URL, matching
+repository Pages hosting. Diagnostic logs are uploaded even when CI fails.
+Python and Playwright are development/test dependencies only.
+
+**Current delivery blocker:** checked-in migration data/assets are behind the
+runtime scripts. Local validation reports missing mobile/control metadata and
+original combat effect scenes/textures. Regeneration with the sibling source
+checkout currently fails because its `grabConst` helper cannot extract the
+`Object.freeze(...)` declaration of `UNIT_SHOT_STYLE` requested by
+`tools/model_references.mjs`. A compatible source extraction path,
+successful source import, native asset packing and passing fixtures are
+required before this workflow can publish a playable build. It deliberately
+fails on these errors instead of deploying a broken game. See the content
+regeneration instructions below and [MIGRATION.md](MIGRATION.md).
+
 **Full feature parity is the staged acceptance target; the port is incomplete.**
 The playable native project includes all 32 characters' source definitions and
 90 terrain/road resources for the 18 qualified maps and five team sizes.

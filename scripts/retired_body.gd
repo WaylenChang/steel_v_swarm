@@ -28,7 +28,7 @@ static func capture(unit: BattleUnit, parent: Node3D) -> RetiredBody:
 	# Source civilian views use civ, independently of gameplay neutrality.
 	view.neutral = bool(unit.special.get("neutral", false)) and unit.special.get("role") != "civilian"
 	view.collapsed = bool(unit.special.get("collapsed", false))
-	var shown := unit.presentation_visible and view.model.visible and not unit.special.get("garrison", false)
+	var shown: bool = unit.presentation_visible and view.model.visible and not unit.special.get("garrison", false)
 	view.model.reparent(parent, true)
 	view.model.visible = shown
 	view.model.set_meta("source_detached_view", true)

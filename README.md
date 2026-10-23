@@ -37,21 +37,25 @@ Chromium then runs the exported solo smoke path under a nested URL, matching
 repository Pages hosting. Diagnostic logs are uploaded even when CI fails.
 Python and Playwright are development/test dependencies only.
 
-**Current delivery blocker:** checked-in migration data/assets are behind the
-runtime scripts. Local validation reports missing mobile/control metadata and
-original combat effect scenes/textures. Regeneration with the sibling source
-checkout currently fails because its `grabConst` helper cannot extract the
-`Object.freeze(...)` declaration of `UNIT_SHOT_STYLE` requested by
-`tools/model_references.mjs`. A compatible source extraction path,
-successful source import, native asset packing and passing fixtures are
-required before this workflow can publish a playable build. It deliberately
-fails on these errors instead of deploying a broken game. See the content
-regeneration instructions below and [MIGRATION.md](MIGRATION.md).
+**Current delivery blocker:** the complete seasonal world set and remaining
+gameplay/render/transport/export acceptance are unfinished. Use the stable
+[migration router](MIGRATION.md) to select the independent Flash, Sol, Opus or
+Models backlog and its instructions. Component checks do not establish full
+feature parity; completed checkpoints are not retained in the backlogs.
 
 **Full feature parity is the staged acceptance target; the port is incomplete.**
 The playable native project includes all 32 characters' source definitions and
 90 terrain/road resources for the 18 qualified maps and five team sizes.
-Buildings, live map services and the remaining gameplay systems are pending.
+The complete original scenery producer, native support/clearance and platform
+anchor paths are prepared but remain ungenerated and unverified. Source scenery
+albedo capture/binding, native train paths, articulated/edge-facility/waterfall
+motion, native wildlife/petal/leaf batches, aquatic bubbles/fish/jellies/detritus and
+vessel/wake pivots are also prepared but unverified;
+shader-specific textures, shaders, remaining
+scenery animation, live map services and remaining gameplay are pending.
+Season-specific world generation/loading is also prepared: ordinary maps require
+all four source seasons; campaign maps retain their authored season. Existing
+90 road-only resources cannot satisfy the new seasonal resource manifest.
 See [MIGRATION.md](MIGRATION.md) for the exact implementation boundaries.
 
 Three oversized source world captures use Git LFS. Install Git LFS before
@@ -64,6 +68,146 @@ Choose a battlefield, team size (1–5), faction and pilot. Offline matches fill
 remaining seats with bots. For LAN, create a room and let the other player join
 your IP on UDP port 8620, then start the match. All peers need this Godot project;
 the browser game's websocket protocol is different.
+
+Network players mark themselves ready before the room host starts. The native
+loading barrier waits for all sided players and the server's collision geometry;
+authority units and match time begin after that barrier. Ready cancellation,
+loading/reconnect ordering and the new waiting UI are implemented but unverified.
+
+Room hosts can now add/remove bots and choose a valid faction/mercenary pilot or
+the source random option before starting. Bot IDs/names persist while the room
+is open. Random roles are assigned by the authority after map preparation;
+explicit duplicates remain legal. Source role/AI construction references and
+the native editor/transport path are written but ungenerated and unverified.
+
+Players can change to a faction with free capacity and choose a faction-valid,
+mercenary or random character inside the room. Changing side clears ready and
+character; changing character retains ready. Host difficulty changes are shared
+with the room and used by the next authority initialization, without retuning
+already-active brains. These paths and prepared -Members transport fixtures are
+unverified. Ordinary players can change seat/faction from the native pause menu
+after launch, subject to shared seat capacity. Live changes update room metadata
+and recipient vision while retaining the original authority hero. Unseating
+provides global vision and stops new combat commands; character selection stays
+room-only. The minimap follows the published vision slice, and the existing
+observer camera handles a pilot outside that slice. SUPER keeps its source
+locked seat UI and campaign selection remains in its authored briefing flow.
+Original all-phase handler/publication references, native owner/privacy cases
+and extended -Members transport cases are written and unexecuted.
+
+The spectator camera state and HUD projection now have native implementations
+and prepared original-method traces for all characters, flight forms and views.
+They reuse CameraPose collision pulling and existing weapon/ability definitions;
+remote magazines and maneuver resources remain unknown. Native Camera3D, F/Q/E,
+wheel/free-flight/touch controls and shared stats/weapon/upgrade rendering are
+connected. A prepared -Spectators transport case uses two native clients and
+checks unseated roster exclusion, camera/body restoration and private HUD values.
+Recipient-specific publication now keeps magazines, private recharge queues,
+lift/jump and view state owner-only; spectators consume original public ability
+summaries. Source-based CC/modifier/cast countdown projection and copied private
+fire feedback are also prepared, including stale replica clearing. Special roles
+now publish scene/model tags and original public flags rather than combat plans,
+targets or timers; public player identity drives clone/muzzle lookup, and fresh
+replicas no longer need private construction stats. Original role serialization
+and real replica-building cases are written. The observer join button and
+`--connect <address> --spectator` now register spectator mode, including into an
+active match; spectators bypass game-seat capacity and share world preparation,
+without authority respawn/reinitialization. Source admission/label references,
+campaign-observer progress guards and -LateSpectators transport cases are written.
+Complete snapshot/event privacy and transport/render/lifecycle certification
+remain pending. Generation and execution are deferred.
+
+Host return-to-room and relaunch now retain room seats/credentials, reset
+ready/loading state and discard the previous battle. Native RPC channels carry
+match IDs so delayed input, actions, snapshots and body events cannot cross
+matches. Ordinary base assignments are re-rolled at creation/rematch; the
+offline source importer and world baker now prepare both original assignments.
+The swapped resources remain ungenerated. Architecture seed rollover is carried
+in room settings; rebuilding building appearance from the new seed and
+room-phase prebuilding remain pending. Source rematch cases and the two-launch
+`-Rematch` transport fixture are written, with generation/execution deferred.
+
+Recovery now includes a saved endpoint/seat credential in native ConfigFile.
+Ordinary startup or `--resume` attempts to reclaim it; `--session-store <path>`
+selects an isolated store. Explicit new-session selection/leave, expired-seat
+rejection and revoked routes clear it. A write revision protects a newer
+process's credential from an older process's revocation cleanup. Native test
+scenes keep the player's default credential file untouched.
+
+Native lobby player/room names use the original imported allowlist, cap and
+fallback. Player names remain attached to logical seats through reclaim and
+rematch; `--name <name>` sets a CLI player name. Room-name edits and synchronized
+public/private metadata require the current host route, including after host
+transfer. Public directory/PIN/discovery behavior remains pending. The source sanitizer/config/host-policy cases and
+extended `-Rooms` cases are written, ungenerated and unexecuted.
+
+Core lobby/deployment preferences now use native ConfigFile at user://lobby.cfg,
+separate from recovery credentials. Player name and ordinary/SUPER team size,
+room name, map ID, environment and difficulty restore through mode-specific keys;
+faction/role choices retain the original shared and SUPER-specific fallback keys.
+The environment menus include original random choices; room creation resolves
+season, lunar day, time and seasonal weighted weather once using independent
+room RNG. Room fields display those authority values after creation. Source
+preference/environment programs and native storage/sampling cases are written;
+generation and execution remain deferred. Complete favorites/deployment UI and
+platform storage certification remain pending.
+
+Native quick start now saves the complete qualified-map match recipe, including
+resolved human/bot roles, controls and environment. The lobby button or
+`--quick-restart` recreates a private offline room through normal readiness and
+world preparation; `--quick-restart --listen enet` or `--listen websocket` hosts
+that replay on the existing native transport. Saved map IDs/template signatures
+reject missing or changed imported geometry. Base assignment is re-rolled relative
+to the saved layout, with a fresh architecture seed; concrete environment and
+lunar day remain fixed. Story-arena replays retain siege rules without personal
+chapter dialogue/progress. Original source-session/launch oracles, native recipe
+cases and `-QuickRestart` transport cases are written and unexecuted. Remote
+multiroom creation, unsupported custom/favorite map recipes and full lifecycle/
+render/platform certification remain pending.
+
+Native fatal recovery now uses Godot Timer and AcceptDialog with the original
+loading, snapshot and disconnect thresholds. Waiting for other players has its
+own deadline; minimized/suspended time is excluded. Preparation errors preserve
+their reason and failed rounds cannot launch or settle combat commands. Reliable
+match-ID errors reach connected/rejoining clients without terminating a dedicated
+listener. Close clears the current room/presentation; solo restart recreates the
+saved match through quick start, or returns to the lobby without a supported
+recipe. Remote sessions only close. Original watchdog/restart oracles, native
+state/error cases, offline recovery/dialog scenes and -Fatal transport cases are
+written; generation, compilation and all execution remain deferred.
+
+Companion/decoy PiP now uses native SubViewport/Camera3D views of the shared
+battle world. Source ownership/death/lost-link gates, stable ordering, low-power
+limits, geometry and camera offsets have prepared original-method references.
+Temporary camera exclusion layers hide each source body and the main cockpit
+only while rendering, then restore original masks before any body/effect copies.
+Inactive views stop rendering. Current one-body squads remain unchanged. Source
+traces, native layer cases and offline/transport/render scenes are written and
+unexecuted; full subview pixels/frame-order/performance certification is pending.
+
+Faction head markers now use original captured arrow/ring images with native
+billboard materials and the existing body/LOD callback. Original scale/top
+anchors, fade/bob rules and relative priorities have source-method captures.
+Civilian faction/following marks use public fields and never reveal spy identity.
+Pose/material cases and offline/ENet/WebSocket/render scenes are prepared;
+generation, compilation and all execution remain deferred.
+
+Disconnected input/actions retain the source latest-120-message FIFO in memory.
+Reclaim precedes flush, inputs/actions share one native reliable channel, and
+match IDs prevent old commands from crossing into a rematch. Failed sends retain
+the unsent suffix; successful native handoff removes messages without adding an
+application acknowledgement/retry protocol. The source queue oracle, native
+storage/replay cases, queued-order checks in `-Rooms`, and fresh-process
+`-Recovery` ENet/WebSocket cases are written and unexecuted.
+
+Same-session reconnect also retains the native scene with stable player IDs,
+held human seats and the original retry/expiry schedules. Explicit remote leave
+waits for authority acknowledgement; empty/abandoned room cleanup preserves the
+dedicated listener. Room-host start/control requests retain their logical seat
+permissions across reattach. This stage is ungenerated and unverified. Restart recovery,
+full observer/reconnect certification and room administration remain pending. The
+prepared transport fixture is selected with `tools/test_network.ps1 -Rooms`;
+execution remains deferred until migration implementation is complete.
 
 WASD/arrows move, mouse looks, left mouse fires, wheel/keypad +/- toggles scope
 and light/heavy mode, and RMB/keypad / casts the current shield-stance ability.
@@ -290,21 +434,31 @@ godot --headless --path . -- --server --websocket --port 8620 --team-size 1
 ENet uses UDP. WebSocket uses TCP and accepts `ws://host:8620` in the join field.
 For Internet hosting, run the same headless server on the hosting machine and
 expose the selected transport. A TLS reverse proxy can terminate WSS upstream.
-The dedicated lobby starts two seconds after the first player registers; empty
-seats become bots. Late joins are rejected; a disconnected pilot becomes a bot.
+The first registered member holds room-host start/control permissions. All
+sided players must ready before the host starts; remaining team slots are filled with
+bots. The battle waits for loaded acknowledgements and native server geometry.
+Disconnected human seats remain human and can reattach with their token. Fresh
+spectators can prepare and observe an active match without a hero allocation.
+This lifecycle stage is ungenerated/unverified.
+Headless transport fixtures pass `--ready-start` to submit explicit ready/start
+requests through the normal native protocol.
 
 ## Validation
 
-Status/ability/movement implementation and its new source-oracle suites are
-currently unverified. Fixture regeneration, compilation and test execution are
-deferred until the migration implementation is complete, as requested. Earlier
-validation results do not certify these changes; see `MIGRATION.md` for scope.
+Complete gameplay and integrated acceptance remain unfinished. The selected
+workstream in [MIGRATION.md](MIGRATION.md) defines its outstanding source,
+resource, render and transport checks. Earlier component results do not certify
+the current build; runtime changes require the relevant checks below.
 
 ```powershell
 godot --headless --path . res://tests/run.tscn
 godot --headless --path . res://tests/worlds.tscn
 godot --headless --path . -- --smoke
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Rooms
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Loading
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Roster
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Members
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -LobControl
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -KineticShots
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -MissileShots
@@ -327,7 +481,66 @@ godot --headless --path . res://tests/projectile_visuals.tscn
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -MissileDefenses
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Bodies
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Tps
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Spectators
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -LateSpectators
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Rematch
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Recovery
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -QuickRestart
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Fatal
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Pips
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -HeadMarks
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -VitalBars
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Minimap
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -Balance
 ```
+
+Prepared fatal recovery, native dialog, PiP, overhead marker/bar and native audio cases (also deferred):
+
+```powershell
+godot --headless --path . res://tests/fatal_restart.tscn -- --quick-restart
+godot --headless --path . res://tests/fatal_restart.tscn -- --quick-restart --without-recipe
+godot --path . res://tests/fatal_restart.tscn -- --quick-restart --capture-fatal
+godot --headless --path . res://tests/pip_network.tscn -- --pip-test
+godot --path . res://tests/pip_network.tscn -- --capture-pip
+godot --headless --path . res://tests/head_mark_network.tscn -- --head-mark-test
+godot --path . res://tests/head_mark_network.tscn -- --capture-head-marks
+godot --headless --path . res://tests/vital_bar_network.tscn -- --vital-bar-test
+godot --path . res://tests/vital_bar_network.tscn -- --capture-vital-bars
+godot --headless --path . res://tests/minimap_network.tscn -- --minimap-test
+godot --path . res://tests/minimap_network.tscn -- --capture-minimap
+godot --path . res://tests/minimap_fog_render.tscn
+godot --headless --path . res://tests/audio_pan_render.tscn
+godot --headless --path . res://tests/audio_move_render.tscn
+```
+
+The prepared minimap suite executes original full/vicinity projection, shared
+toggle, marker drawing and discovered-bunker recording seams. Native keyboard M
+and touch map commands change world coverage at a fixed panel size. Marker
+templates use Godot canvas primitives and retain original faction/outline styles;
+discovered bunker positions survive fog until the room changes. Live satellite
+services and full fog/pixel/runtime certification remain pending. These cases
+have not been generated or executed.
+Source warmup/steady draw gates now retain native canvas commands between draws;
+the mode/metre legend uses native font measurement and captured source styling.
+Prepared traces cover cadence transitions, toggle invalidation and label rounding.
+World baking also prepares the original terrain minimap image, including its
+hillshade, water and dark veil, as a native texture. Source HTML supplies canvas
+dimensions; full/vicinity modes crop that same texture with linear sampling.
+Prepared world checks compare every source/native raster byte. The current
+offline bake still uses the original missing-satellite fallback.
+Ground/bridge/tunnel lane styling now reuses the existing lane-surface samples
+and native Line2D nodes with tiled dash textures. Original grade thresholds,
+span boundaries, lane colors and unequal dash/gap intervals have prepared
+source/native cases; sharp-turn and rendered dash-edge acceptance remain pending.
+Prepared fog cases execute original sight/shadow/grid, relay/scout pulse and
+actual canvas composition seams. Public cast reports retain the ability level
+accepted before an upgrade or interruption. Native cropped mask atlases and
+nested SubViewports now retain exploration and compose source-local shadowed
+reveals below lanes and public markers. Full/near views, pulses, observers and
+room cleanup share that lifecycle. The real-renderer scene prepares comparison
+images under `tests/minimap-fog/` and checks interior color/exploration probes;
+complete raster review and populated runtime/transport/performance certification
+remain pending. None of these new cases has been generated or executed.
 
 The test scene compares GDScript against fixtures evaluated by the original
 JavaScript seams, and exercises authority, purchases, ammo, reload deadlines,
@@ -398,17 +611,21 @@ animated visual-mesh collision remain pending.
 ## Update imported content
 
 ```powershell
-node tools/import_source.mjs ../steel_vs_swarm
-godot --headless --path . res://tools/import_cockpits.tscn
-godot --headless --path . res://tools/import_cockpits.tscn -- --projectiles
-godot --headless --path . res://tools/import_cockpits.tscn -- --bodies
-godot --headless --path . res://tools/import_cockpits.tscn -- --civilian-parts
-godot --headless --path . res://tools/import_cockpits.tscn -- --npc-effects
-godot --headless --path . res://tools/import_cockpits.tscn -- --weapon-effects
-godot --headless --path . res://tools/import_cockpits.tscn -- --first-person-shields
+node --max-old-space-size=8192 tools/import_source.mjs ../steel_vs_swarm
+godot --headless --path . res://tools/import_audio.tscn
+godot --path . res://tools/import_cockpits.tscn
+godot --path . res://tools/import_cockpits.tscn -- --projectiles
+godot --path . res://tools/import_cockpits.tscn -- --bodies
+godot --path . res://tools/import_cockpits.tscn -- --companions
+godot --path . res://tools/import_cockpits.tscn -- --hazards
+godot --path . res://tools/import_cockpits.tscn -- --loot
+godot --path . res://tools/import_cockpits.tscn -- --civilian-parts
+godot --path . res://tools/import_cockpits.tscn -- --npc-effects
+godot --path . res://tools/import_cockpits.tscn -- --weapon-effects
+godot --path . res://tools/import_cockpits.tscn -- --first-person-shields
 node tools/bake_worlds.mjs --reuse
 node tools/world_references.mjs
-godot --headless --path . res://tools/import_worlds.tscn
+godot --path . res://tools/import_worlds.tscn
 ```
 
 This optional developer command evaluates the original balance/venue seams,
@@ -418,20 +635,72 @@ Playwright/Chromium runtime for offline model measurement; ordinary play does
 not. `PW_CHROME` can select an installed Chromium executable. Imported maps
 include only presets admitted by the source's qualification
 checks, with the source's active lane subsets and solved tower positions.
+Model/world packing requires a real rendering driver to retain native MultiMesh
+buffers. Headless mode installs Godot's dummy renderer and is rejected for
+nonempty instanced model graphs; audio generation can remain headless. A hidden
+build process can use the native Compatibility driver with `--disable-render-loop`.
+
 The source importer also exports the original cockpit builders' geometry,
 textures and pose/visibility fixtures. The native cockpit importer packs those
 graphs into `assets/cockpits/*.scn`; `data/cockpits/` is development-only and is
 excluded from exports. Runtime cockpit presentation loads only native scenes
 and imported scalar metadata.
+Export presets also exclude source-oracle fixtures, audio capture JSON, model
+graph JSON, source geography captures and validation artifacts. Native packed
+scenes, audio resources and runtime content JSON remain the delivery inputs.
+
+`node tools/import_source.mjs ../steel_vs_swarm --audit-references` checks the
+non-model source reference captures without publishing generated content.
+Full capture streams fixture arrays to avoid V8's single-string size limit;
+the larger Node heap above is still needed for the captured model graphs.
+For audio capture tooling changes with unchanged original source inputs,
+`node tools/import_audio_source.mjs ../steel_vs_swarm` refreshes the five audio
+capture bundles before running `tools/import_audio.tscn`. It verifies every
+recorded source hash first; changed source inputs require the complete importer.
+
+Install the offline streaming reader with `npm ci --prefix tools --ignore-scripts`.
+World source version 2 stores ordered gzip JSON mesh chunks and content-addressed
+IEEE-754 numeric buffers, verified by SHA-256 and decoded with Godot's native APIs.
+New numeric buffers use standard GZIP when it reduces storage; both compressed
+and existing raw float64 buffers retain the same numeric bits and remain readable.
+New numeric buffers use standard GZIP when it reduces storage; both compressed
+and existing raw float64 buffers retain the same numeric bits and remain readable.
+These are development inputs; delivery still uses packed native world resources.
+`node tools/pack_world_source.mjs data/worlds/<world>.json` converts a large legacy
+capture and preserves an original backup under `artifacts/source-world-backups/`.
 
 World baking additionally uses the original development Playwright runtime,
 cached Three.js modules and validated OSM/elevation captures. `SVS_SOURCE` can
 select a different source checkout. Optional map IDs limit both world tools
 (for example `berlin madrid`); pass them after `--` to Godot's importer/tests.
-The baker runs the original terrain and road-generation seams offline, resamples
+`node tools/bake_worlds.mjs --list-bundles` lists the complete source manifest
+without launching a browser; `--bundle=berlin_1_autumn --reuse` captures one
+exact original variant. For serial capture, deck references and native packing:
+
+```powershell
+./tools/migrate_worlds.ps1 -Godot C:/path/to/Godot_v4.7.2-stable_win64.exe -Bundle berlin_1_autumn
+```
+
+Omit `-Bundle` to process the full source manifest. Each tool owns its timeout
+and timestamped logs; a failed step stops before publishing the next phase.
+Individual completed captures can also be processed with
+`node tools/world_references.mjs berlin_1_spring` and then
+`godot --path . res://tools/import_worlds.tscn -- --bundle=berlin_1_spring`.
+Run the reference step before native packing; it supplies the original deck query
+endpoint tolerance and probe results. Bundle selection validates against the
+same required manifest; the normal full import still rejects missing worlds.
+The baker runs the original terrain and complete biome constructor offline, resamples
 verified raw elevation tiles into the current battlefield frame, and rejects
 incomplete coverage. Missing elevation coverage is captured into this project's
 `data/source_elevation/`. Geographic imagery requests are omitted.
+
+Generated world files use `map_team_season.json` / `.res`. Ordinary maps are baked
+for all four original seasons; campaign maps use their authored chapter season.
+Every resource embeds its source-accepted structure layers and map/team/season
+identity. Native loading and the importer require the matching seasonal files;
+legacy road-only files are excluded from the required manifest. Berlin 1 spring
+and summer native resources have been generated; the remaining seasonal set
+and complete updated world checks are unfinished.
 
 Source modules, generator, map configuration, captures and tile hashes control
 cache reuse. The native importer packs geometry and collision into compressed
@@ -665,7 +934,7 @@ Missing parts reject preparation; `--civilian-parts` packs the prepared graphs.
 Original complete-model geometry, normals, colours and motion references cover
 every occupation and all appearance categories, with native comparison suites
 written. Assets remain ungenerated and all verification remains deferred;
-head marks, final surface shaders and complete frame/transport integration remain.
+head-marker visual certification, final surface shaders and complete frame/transport integration remain.
 Prepared `-Bodies` transport cases also include clone, kamikaze, hypersonic and
 per-ID civilian binding, event replay and unchanged authority resources/RNG.
 

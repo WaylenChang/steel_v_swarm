@@ -17,5 +17,43 @@
   content belong in `data/`.
 - Unsupported mechanics must remain explicitly unavailable until their source
   semantics are implemented. Do not substitute a generic attack or fabricated map.
-- Read `MIGRATION.md` before claiming feature parity. Run `tests/run.tscn`, the
-  runtime smoke test and transport tests after relevant changes.
+- Read the routing table in `MIGRATION.md`, then load only the selected workstream.
+  A passing component fixture never establishes full match or delivery parity.
+- Runtime changes require `tests/run.tscn`, the runtime smoke test and relevant
+  ENet/WebSocket tests. Documentation-only changes require link/scope checks.
+
+## Progressive context loading
+
+1. Keep this file and the root `MIGRATION.md` as stable shared instructions.
+2. Select one workstream and explicitly read its `AGENTS.md`, then its
+   `MIGRATION.md`. The selected instructions govern that workstream's assigned
+   files even when those files live outside its documentation directory.
+3. Read only the source, fixtures and acceptance commands needed for the task.
+   Sibling workstream instructions, backlogs and research are opt-in context.
+
+| Workstream | Instructions | Default model |
+| --- | --- | --- |
+| Bounded UI and settings | [Flash](migration/flash/AGENTS.md) | Gemini Flash |
+| Native presentation and resource pipelines | [Sol](migration/sol/AGENTS.md) | ChatGPT Sol |
+| Authority, integration and difficult source semantics | [Opus](migration/opus/AGENTS.md) | Claude Opus |
+| Mechs, gameplay NPCs and combat-building models | [Models](migration/models/AGENTS.md) | Task-dependent; outside the three difficulty tiers |
+
+## Independent edits and stable prefixes
+
+- Apply the exclusive file ownership rules in the root `MIGRATION.md` before
+  editing. Read other owners' code as needed; leave their files untouched.
+- Put progress, blockers and cross-owner requests only in the selected
+  workstream's `MIGRATION.md`. A request names the target file, required contract
+  and acceptance case; its owner implements it in a separate turn/change.
+- Routine task completion must not edit root routers, any `AGENTS.md`, research,
+  another workstream's backlog or shared test/import registries. Remove finished
+  tasks directly; retain only constraints still needed by unfinished work.
+- Load context in this order: stable root rules, stable selected rules, selected
+  backlog, task-specific evidence. Append changing task material after stable
+  instructions; do not inject sibling progress, timestamps or whole-tree dumps.
+- Keep each model/workstream in its own conversation. Preserve tool definitions
+  and model settings during a run. File layout reduces unrelated prefix changes;
+  cache eligibility and hits still depend on the provider and harness.
+- The nested instruction files are explicitly selected documents, not a claim
+  that every client automatically discovers them. From the repository root,
+  load the selected file manually; configure another client to do the same.

@@ -50,7 +50,16 @@ export function companionReferences(d, BattleSim, config, makeRng) {
     const s=context([h,...targets]);
     companionTargeting.push({focus,distance,dead,sight,target:s._autoTarget(unit,h)?.id||0});
   }
-  const companionSummons=[];
+  const companionSummons=[],companionSpawnHeights=[];
+  for(const kind of kinds) {
+    const h=hero(),s=context([h]);
+    seeded(()=>s._spawnAutonomousSummon(h,{id:'atk',unit:kind,count:1},0,0));
+    const entity=s.autonomousSummons[0];
+    const published=JSON.parse(JSON.stringify(s._serializeEnt(entity)));
+    companionSpawnHeights.push({kind,raw:entity.y===undefined?{$undefined:true}:entity.y,
+      effective:entity.y||0,published:{has_y:Object.hasOwn(published,'y'),value:published.y??0},
+      span:s._bodySpan(entity),sight:s._sightY(entity),eye:s._eyeY(entity),target:s._tgtY(entity)});
+  }
   for(const kind of kinds)for(const level of [1,2,3,4])for(const fraction of [0,.25,1])for(const countOverride of [null,0,3]) {
     const h=hero(),s=context([h]),A={id:'atk',fx:'summon',unit:kind,count:2};h.abil.atk=level;
     const result=seeded(()=>s._spawnAutonomousSummon(h,A,20,-30,fraction,countOverride));
@@ -112,5 +121,5 @@ export function companionReferences(d, BattleSim, config, makeRng) {
     const e={kind,side:'STEEL',x:0,z:0,y:altitude,hp:100},s=context([e]);
     companionFrames.push({kind,altitude,span:s._bodySpan(e),sight:s._sightY(e),eye:s._eyeY(e),target:s._tgtY(e)});
   }
-  return {companionClones,companionTargeting,companionSummons,companionCombat,companionDeaths,companionFrames};
+  return {companionClones,companionTargeting,companionSummons,companionSpawnHeights,companionCombat,companionDeaths,companionFrames};
 }

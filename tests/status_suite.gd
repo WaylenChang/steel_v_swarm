@@ -16,6 +16,12 @@ class ReferenceSimulation extends BattleSimulation:
 	var capture_interrupt := false
 	var interrupted_fraction := -1.0
 
+	func _ready() -> void:
+		# Original status contexts disable the weather surface. A flat test world
+		# supplies the same zero terrain anchor for event/audio publication.
+		world = BattleWorld.new()
+		add_child(world)
+
 	func acquire_target(_unit: BattleUnit, _reach: float, _fov: bool = false) -> BattleUnit:
 		return units.get(2)
 

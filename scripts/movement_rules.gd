@@ -92,6 +92,12 @@ static func jump_cost(charge: float, morph: bool) -> float:
 	var fraction: float = Content.constants.FLIGHT.MORPH_COST_F if morph else Content.constants.FLIGHT.CJUMP_F
 	return ceilf(Content.constants.FLIGHT.LIFT_MAX * fraction * clampf(charge, 0, 1))
 
+static func charged_launch_speed(charge: float, morph: bool, modifier: float, jump_factor: float) -> float:
+	# Keep the original scalar arithmetic before CharacterBody3D's Vector3 storage.
+	if morph:
+		return float(Content.constants.MORPH.JUMP_V) * charge * jump_factor
+	return float(Content.constants.CJUMP.V) * charge * modifier * jump_factor
+
 static func lift_altitude_factor(altitude: float, reference: float) -> float:
 	if not is_finite(reference) or not is_finite(altitude):
 		return 1.0

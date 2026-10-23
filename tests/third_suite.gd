@@ -112,6 +112,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		if not item.cleared:
 			var member := simulation._spawn_camp_unit(0, "soldier", 1)
 			member.special.garrison = true
+			member.position = Vector3.ZERO
 			member.hp = 50
 			member.max_hp = 100
 		simulation._on_third_death(dead, null)

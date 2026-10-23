@@ -1,0 +1,1 @@
+[{"sample":0,"result":{"key":"S","w":15,"mul":1}},{"sample":0.5,"result":{"key":"S","w":15,"mul":1}},{"sample":0.75,"result":{"key":"S","w":15,"mul":1}},{"sample":0.75000001,"result":{"key":"M","w":4,"mul":2}},{"sample":0.95,"result":{"key":"M","w":4,"mul":2}},{"sample":0.95000001,"result":{"key":"L","w":1,"mul":3.5}},{"sample":1,"result":{"key":"L","w":1,"mul":3.5}}]

@@ -31,7 +31,7 @@ class CompanionSimulation extends BattleSimulation:
 			super._apply_cc(owner, added, center, radius)
 
 static func run(h: Node, fixtures: Dictionary) -> void:
-	for key: String in ["companionClones", "companionTargeting", "companionSummons", "companionCombat", "companionDeaths", "companionGeometry", "companionFrames"]:
+	for key: String in ["companionClones", "companionTargeting", "companionSummons", "companionSpawnHeights", "companionCombat", "companionDeaths", "companionGeometry", "companionFrames"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original companion oracle: " + key)
 			return
@@ -85,6 +85,28 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		StatusHelper.check_draws(h, simulation, int(item.draws))
 		for id: int in simulation.autonomous_summons:
 			h._check(simulation.units[id].path_follower == null and not simulation.units[id].has_lane, "Autonomous summons do not consume a creep lane slot")
+		simulation.free()
+	for item: Dictionary in fixtures.companionSpawnHeights:
+		var simulation := context(h)
+		var owner := pilot(simulation, 1, "t05")
+		simulation._spawn_autonomous_summons(owner, {"id": "atk", "unit": item.kind, "count": 1}, Vector3.ZERO)
+		h._check(simulation.autonomous_summons.size() == 1, "Original summon producer admits a missing legacy altitude")
+		if not simulation.autonomous_summons.is_empty():
+			var unit: BattleUnit = simulation.units[simulation.autonomous_summons[0]]
+			if item.raw is Dictionary:
+				h._check(item.raw.get("$undefined", false) and not Content.constants.GAME.has("DRONE_ALT"), "Undefined original altitude remains absent from generated constants")
+			else:
+				h._near(unit.position.y, item.raw, "Defined original summon altitude remains authored")
+			h._near(unit.position.y, item.effective, "Original summon altitude conversion uses the actual producer and its readers")
+			h._near(simulation._body_altitude(unit), item.span[0], "Produced summon damage-body baseline")
+			h._near(simulation._body_altitude(unit) + unit.height, item.span[1], "Produced summon damage-body top")
+			h._near(simulation._relative_sight_height(unit), item.sight, "Produced summon relative sight height")
+			h._near(simulation._relative_origin(unit).y, item.eye, "Produced summon observer eye")
+			h._near(simulation._relative_target(unit).y, item.target, "Produced summon LOS target band")
+			h._check(not item.published.has_y, "Original custom summon publication omits its private flight height")
+			var packet := simulation.snapshot()
+			var published: Dictionary = packet.units.filter(func(state): return int(state.id) == unit.entity_id)[0]
+			h._near(published.hero_y, item.published.value, "Public summon rendering height follows original serialization rather than private flight state")
 		simulation.free()
 	for item: Dictionary in fixtures.companionCombat:
 		combat(h, item)
@@ -273,7 +295,10 @@ static func pilot(simulation: BattleSimulation, id: int, character: String, side
 	return unit
 
 static func npc(simulation: BattleSimulation, id: int, kind: String, side: String, point: Vector3) -> BattleUnit:
-	return StatusHelper.actor(simulation, {"id": id, "character": "", "kind": kind, "side": side, "position": [point.x, point.y, point.z], "hp": 100, "max_hp": 100})
+	var unit := StatusHelper.actor(simulation, {"id": id, "character": "", "kind": kind, "side": side, "position": [point.x, point.y, point.z], "hp": 100, "max_hp": 100})
+	unit.hit_area = Area3D.new()
+	unit.add_child(unit.hit_area)
+	return unit
 
 static func compare_timers(h: Node, owner: BattleUnit, expected: Dictionary) -> void:
 	for key: String in expected:

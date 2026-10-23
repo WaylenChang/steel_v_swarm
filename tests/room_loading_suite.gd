@@ -2,6 +2,7 @@ extends RefCounted
 
 const SessionScript = preload("res://scripts/session.gd")
 const Helper = preload("res://tests/status_suite.gd")
+const PreparationTests = preload("res://tests/match_preparation_suite.gd")
 
 class GateSimulation extends BattleSimulation:
 	var launches := 0
@@ -12,6 +13,7 @@ class GateSimulation extends BattleSimulation:
 		return true
 
 static func run(h: Node, fixtures: Dictionary) -> void:
+	await PreparationTests.run(h, fixtures)
 	if not fixtures.has("roomLoadingPrograms"):
 		h._check(false, "Regenerate original room ready/load barrier references")
 		return
@@ -110,6 +112,10 @@ static func _native_preparation(h: Node) -> void:
 		"Native geometry preparation produces no authority units, waves or elapsed match time")
 	h._check(not battle.is_physics_processing() and battle.rng.state == combat_seed,
 		"Waiting for loaded players preserves authority physics and the combat RNG stream")
+	h._check(battle.setup_complete, "Populated loading acceptance requires a complete authored native world: " + battle.setup_error)
+	if not battle.setup_complete:
+		battle.free()
+		return
 	h._check(battle.begin_match(map_data, roster) and battle.match_initialized and battle.pilots.size() == roster.size(),
 		"One final loading barrier initializes the original authority population")
 	battle.set_physics_process(false)

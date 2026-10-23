@@ -1,0 +1,1 @@
+[{"deadline":0,"now":10,"result":0},{"deadline":9.999,"now":10,"result":0},{"deadline":10,"now":10,"result":0},{"deadline":10.01,"now":10,"result":0},{"deadline":10.049999,"now":10,"result":0},{"deadline":10.05,"now":10,"result":0.1},{"deadline":10.050001,"now":10,"result":0.1},{"deadline":11,"now":10,"result":1}]

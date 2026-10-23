@@ -10,6 +10,7 @@ var campaign: Dictionary = {}
 var art_cache: Dictionary = {}
 var balance_preferences: BalancePreferences
 var local_balance: BalanceDefinitions
+var fixture_registry: Dictionary = {}
 
 func _ready() -> void:
 	balance = read_json("res://data/balance.json")
@@ -22,7 +23,7 @@ func _ready() -> void:
 		campaign = read_json("res://data/campaign.json")
 	_install_input()
 
-func read_json(path: String) -> Variant:
+func read_json(path: String, fixture_sections: Variant = null) -> Variant:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		push_error("Required content missing: " + path)
@@ -33,7 +34,29 @@ func read_json(path: String) -> Variant:
 		push_error("Invalid content: " + path + ": " + parser.get_error_message())
 		get_tree().quit(1)
 		return {}
+	if parser.data is Dictionary and parser.data.get("fixtureFormat") == "source-sections-v1":
+		fixture_registry = parser.data
+		return SourceFixtureSections.load_sections(parser.data, path, fixture_sections)
 	return parser.data
+
+func fixture_sections_for(script: Script, recursive := true) -> Array:
+	if fixture_registry.is_empty():
+		var parser := JSON.new()
+		if parser.parse(FileAccess.get_file_as_string("res://data/fixtures.json")) != OK:
+			push_error("Invalid source fixture registry")
+			get_tree().quit(1)
+			return []
+		fixture_registry = parser.data
+	var path := script.resource_path.trim_prefix("res://")
+	var consumer: Dictionary = fixture_registry.get("consumers", {}).get(path, {})
+	if consumer.is_empty() or FileAccess.get_sha256(script.resource_path) != consumer.sha256:
+		push_error("Regenerate source fixture consumer dependencies: " + path)
+		get_tree().quit(1)
+		return []
+	return consumer.get("all" if recursive else "direct", [])
+
+func read_fixture_part(key: String, index: int) -> Variant:
+	return SourceFixtureSections.load_part(fixture_registry, "res://data/fixtures.json", key, index)
 
 func weapon(character: String, slot: String, level: float = 1) -> Dictionary:
 	if level > 4 or level != floorf(level):

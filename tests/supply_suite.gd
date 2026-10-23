@@ -130,7 +130,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			unit.kind = "soldier"
 		h._near(simulation._heal_body(unit, item.amount, item.source), item.result.healed, "Original boss skill/item/source healing eligibility and amplifier")
 		h._near(unit.hp, item.result.hp, "Original segmented healing cap does not restore broken segments")
-		h._check(bool(unit.status.get("lightning_scorch", false)) == item.result.scorch, "Only real healing clears lightning scorch")
+		h._check(ControlPreferences.truthy(unit.status.get("lightning_scorch")) == item.result.scorch, "Only real healing clears lightning scorch")
 		simulation.free()
 	for item: Dictionary in fixtures.supplyPower:
 		var simulation := SupplySimulation.new()
@@ -204,7 +204,9 @@ static func actor(simulation: BattleSimulation, input: Dictionary = {}) -> Battl
 		"buffs": [{"until": 20, "key": "healAmp", "value": 1.4, "break_on_hit": false}]})
 	unit.money = 10
 	unit.cooldowns = {"def": 11.0, "atk": 35.0}
-	unit.status.lightning_scorch = true
+	# The supply oracle uses a truthy scorch marker; the active lightning
+	# producer stores the original HP/status record consumed by public snapshots.
+	unit.status.lightning_scorch = {"hp": unit.hp, "states": simulation._lightning_states(unit, simulation.clock)}
 	if input.get("charged", true):
 		unit.ability_charges = {"def": {"max": 2, "recharge_at": [8.0, 11.0, 40.0]}, "atk": {"max": 3, "recharge_at": []}}
 	if input.get("boss", false):
@@ -216,7 +218,7 @@ static func compare_actor(h: Node, unit: BattleUnit, expected: Dictionary) -> vo
 		h._near(float(unit.get(property)), expected[property], "Original shared supply state: " + property)
 	StatusHelper.compare(h, unit.cooldowns, expected.cooldowns, "Battery shortens absolute cooldown deadlines with a zero floor")
 	StatusHelper.compare(h, unit.ability_charges, expected.charges, "Battery preserves charge rosters and clamps deadlines at current time")
-	h._check(bool(unit.status.get("lightning_scorch", false)) == expected.scorch, "Supply healing clears scorch only when HP increases")
+	h._check(ControlPreferences.truthy(unit.status.get("lightning_scorch")) == expected.scorch, "Supply healing clears scorch only when HP increases")
 
 static func check_draws(h: Node, random: SourceRng, seed_value: int, count: int) -> void:
 	var expected := SourceRng.new(seed_value)

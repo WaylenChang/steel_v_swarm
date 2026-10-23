@@ -13,6 +13,11 @@ class ReferenceSimulation extends BattleSimulation:
 	var buy_allowed := false
 	var decisions := true
 
+	func present_shot(_event: Dictionary) -> void:
+		# The original server oracle records broadcasts without a Game renderer.
+		# Keep report settlement observable without running unrelated local FX.
+		pass
+
 	func _missile_target_altitude(unit: BattleUnit) -> float:
 		return unit.position.y
 

@@ -124,7 +124,10 @@ static func native_ramps(h: Node) -> void:
 			unit.simulate_movement(1.0 / 60)
 			await h.get_tree().physics_frame
 		if uphill:
-			h._check(absf(unit.position.x) < .01, "Native CharacterBody3D cannot ascend a source-blocked bare slope")
+			# Native penetration recovery may displace the initially touching cylinder
+			# downhill. It cannot grant an uphill command or a source airborne bypass.
+			h._check(unit.position.x < .01 and absf(unit.velocity.x) < .01 and unit.slope_blocked,
+				"Native floor contact preserves the original uphill block: position=" + str(unit.position))
 		else:
 			h._check(unit.position.x < -.1 and unit.charge > .1 and unit.is_on_floor(), "Native downhill snap preserves contact and held jump charge")
 		Helper.compare(h, [unit.hp, unit.shield, unit.money, unit.ammo, simulation.rng.state], before,

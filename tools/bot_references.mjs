@@ -116,8 +116,14 @@ export async function botReferences(d, BattleSim, config, makeRng, source) {
       if (scenario.boss) { sim.squads.set('b1', h.sq); sim.bossHold.set('b1', { x: 8, z: 45, r: 50 }); }
       sim._losBlocked = () => !!scenario.blocked;
       sim.botFire = (_, target, slot) => { actions.push({ type: 'fire', target, slot, mode: 'direct' }); return true; };
-      sim.heroBurst = (_, x, z) => { actions.push({ type: 'fire', target: 2, slot: 'heavy', mode: 'burst' }); };
-      sim.heroPlasma = () => { actions.push({ type: 'fire', target: 2, slot: 'heavy', mode: 'fan' }); };
+      const targetAt=(x,z,direction=false)=>{
+        const candidates=[...sim.ents.values()].filter(entity=>entity.id!==h.id&&
+          (direction?entity.x-h.x===x&&entity.z-h.z===z:entity.x===x&&entity.z===z));
+        if(candidates.length!==1)throw new Error('Original bot shot coordinates do not identify a unique fixture target');
+        return candidates[0].id;
+      };
+      sim.heroBurst = (_, x, z) => { actions.push({ type: 'fire', target: targetAt(x,z), slot: 'heavy', mode: 'burst' }); };
+      sim.heroPlasma = (_, dx, dz) => { actions.push({ type: 'fire', target: targetAt(dx,dz,true), slot: 'heavy', mode: 'fan' }); };
       sim.heroAim = (_, on) => { actions.push({ type: 'aim', on }); h.aiming = on; };
       sim.heroDefend = (_, on) => { actions.push({ type: 'defend', on }); h.defending = on; };
       sim.heroCast = (_, slot, x, z) => { actions.push({ type: 'cast', slot, aimed: x != null, point: x != null ? [x, -z] : null }); };

@@ -591,6 +591,10 @@ func simulate_movement(delta: float) -> void:
 		simulation.message.emit(peer_id, "unavailable_surface")
 		return
 	var slope_queries: Dictionary = {} if flying else simulation.movement_slope_queries()
+	# Native cylinders rest above the centre-line terrain sample on a slope.
+	# Floor contact is still grounded in the source foot-height coordinate frame;
+	# that collider clearance must not activate the source airborne exemption.
+	var slope_airborne := bool(fluid_environment.get("air", false)) and not is_on_floor()
 	var held: bool = input_state.get("jump_held", false)
 	var previous_position := position
 	var slow: float = status.get("slow_factor", 0.6)
@@ -650,7 +654,7 @@ func simulate_movement(delta: float) -> void:
 	else:
 		air_sink = 0
 		var slope_speed := MovementRules.slope_speed(position.x, position.z, position.y, direction.x, direction.z,
-			false, bool(fluid_environment.get("air", false)), velocity.y, slope_queries)
+			false, slope_airborne, velocity.y, slope_queries)
 		if not is_finite(slope_speed):
 			simulation.message.emit(peer_id, "unavailable_surface")
 			return
@@ -683,9 +687,13 @@ func simulate_movement(delta: float) -> void:
 		movement_roll = MovementRules.camera_roll(movement_roll, velocity.dot(right), bank_speed, flying, delta)
 	floor_snap_length = 0.0
 	if not flying and not climbing:
+		if is_on_floor() and velocity.y <= 0 and not low_gravity:
+			# At rest the source still accepts its ground tolerance. Keep native
+			# contact across solver separation even when the planar step is zero.
+			floor_snap_length = float(Content.balance.movement.slope.groundTolerance)
 		var along := func(dx: float, dz: float) -> float:
 			return MovementRules.slope_along(previous_position.x, previous_position.z, previous_position.y, dx, dz,
-				false, bool(fluid_environment.get("air", false)), velocity.y, slope_queries)
+				false, slope_airborne, velocity.y, slope_queries)
 		var step := MovementRules.slope_step(float(velocity.x) * delta, float(velocity.z) * delta, along)
 		if not step.valid:
 			simulation.message.emit(peer_id, "unavailable_surface")
@@ -698,9 +706,10 @@ func simulate_movement(delta: float) -> void:
 		var next_surface := simulation._movement_surface(previous_position + Vector3(step.x, 0, step.z))
 		if is_finite(next_surface):
 			var run := sqrt(float(step.x) * float(step.x) + float(step.z) * float(step.z))
-			var support := MovementRules.slope_ground(position.y, standing_surface, next_surface, run, velocity.y, low_gravity)
+			var foot := standing_surface if is_on_floor() else float(position.y)
+			var support := MovementRules.slope_ground(foot, standing_surface, next_surface, run, velocity.y, low_gravity)
 			if support.snap:
-				floor_snap_length = MovementRules.slope_snap_distance(run)
+				floor_snap_length = maxf(floor_snap_length, MovementRules.slope_snap_distance(run))
 		floor_max_angle = deg_to_rad(float(Content.constants.SLOPE.SNAP_DEG))
 	move_and_slide()
 	if floor_snap_length > 0 and not is_on_floor():
@@ -794,13 +803,15 @@ func _launch_charged_jump(simulation: BattleSimulation) -> void:
 	var jump_factor := simulation._terrain_jump_velocity(self) * WeatherRules.jump_velocity(simulation.weather_surface)
 	if charge >= minimum and lift >= cost:
 		lift = maxf(0, lift - cost)
+		var launch_speed := MovementRules.charged_launch_speed(charge, morph,
+			StatusRules.movement_modifier(buffs, "jump", simulation.clock), jump_factor)
 		if morph:
 			flying = true
-			velocity = Vector3(impulse_velocity.x, Content.constants.MORPH.JUMP_V * charge * jump_factor, impulse_velocity.y)
+			velocity = Vector3(impulse_velocity.x, launch_speed, impulse_velocity.y)
 			move_and_collide(Vector3.UP)
 			refresh_collision()
 		else:
-			velocity.y = Content.constants.CJUMP.V * charge * StatusRules.movement_modifier(buffs, "jump", simulation.clock) * jump_factor
+			velocity.y = launch_speed
 			low_gravity = true
 			var forward := Vector2(-sin(yaw), -cos(yaw))
 			var momentum: float = simulation.hero_speed(character) * StatusRules.movement_modifier(buffs, "speed", simulation.clock) * Content.constants.CJUMP.FWD_F * Content.constants.CJUMP.AIR_SPD_F * charge

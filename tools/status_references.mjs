@@ -36,7 +36,7 @@ export function statusReferences(d, BattleSim, config, makeRng) {
     ammo:clone(h.ammo||{}),reload_at:Object.fromEntries(Object.entries(h.reloadUntil||{}).filter(([,v])=>v>0))});
   const actorInput = h => ({character:h.ch||'',kind:h.kind,id:h.id,side:h.side,position:[h.x,h.y||0,-h.z],
     hp:h.hp,max_hp:h.maxHp,shield:h.sp,max_shield:h.maxSp,power:h.mp,max_power:h.maxMp,
-    armor:h.armor,dead:h.dead,respawn_at:h.respawnAt,velocity:[h._spd,0,0],
+    armor:h.armor,dead:h.dead,respawn_at:h.respawnAt,...(h._spd==null?{}:{velocity:[h._spd,0,0]}),
     absolute_eye:h.ay,relative_altitude:h.y,upgrades:clone(h.upg),
     ...state(h)});
   const context = actors => {

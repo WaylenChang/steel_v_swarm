@@ -15,6 +15,8 @@ signal failure_reported(reason: String)
 
 var setup_complete := false
 var setup_error := ""
+var prepared_map: Dictionary = {}
+var prepared_environment: Dictionary = {}
 
 var world: BattleWorld
 var units: Dictionary = {}
@@ -149,8 +151,20 @@ func respawn_delay(kind: String, deaths: int) -> float:
 func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool, wait_for_launch: bool = false, prepared_world: BattleWorld = null) -> void:
 	setup_complete = false
 	setup_error = ""
+	prepared_map = {}
+	prepared_environment = {}
 	set_physics_process(false)
 	authoritative = authority
+	if not map_data.get("native_world") is String or WorldVariant.identity(map_data.native_world, env).is_empty():
+		_setup_failed("Missing authored native world identity; road-only worlds cannot initialize a match")
+		return
+	for key: String in ["weather", "hazard_visuals", "hazard_volumes", "playerView"]:
+		if not Content.balance.has(key):
+			_setup_failed("Missing original match metadata: " + key)
+			return
+	if not map_data.get("lane_turns") is Array:
+		_setup_failed("Missing original lane turns for match hazard generation")
+		return
 	if not Session.dedicated and not Content.balance.has("geometryLod"):
 		_setup_failed("Missing original geometry LOD rules; regenerate source content")
 		return
@@ -211,6 +225,10 @@ func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool
 	if not world.build_complete:
 		_setup_failed(world.build_error)
 		return
+	var world_error := _match_world_error(map_data, env)
+	if not world_error.is_empty():
+		_setup_failed(world_error)
+		return
 	_setup_weather(map_data, env)
 	world.prepare_lane_surface()
 	bot_tower_sites = map_data.get("tower_sites", []).duplicate(true)
@@ -221,13 +239,16 @@ func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool
 		super_random.randomize()
 		match_stats[Content.constants.SUPER_SIDE] = {"kills": 0, "deaths": 0, "creepKills": 0, "assists": 0}
 		vision_until[Content.constants.SUPER_SIDE] = 0.0
-	defending_side = String(map_data.config.get("defSide", ""))
+	var source_defender: Variant = map_data.config.get("defSide")
+	defending_side = source_defender if source_defender is String else ""
 	if not defending_side.is_empty() and (defending_side not in ["SWARM", "STEEL"] or bot_tower_sites.is_empty() or world.lane_points.is_empty()):
 		_setup_failed("Missing original campaign defender/tower-site configuration")
 		return
 	for side: String in creep_upgrades:
 		creep_upgrades[side].resize(world.paths.size())
 		creep_upgrades[side].fill(0)
+	prepared_map = map_data.duplicate(true)
+	prepared_environment = env.duplicate(true)
 	setup_complete = true
 	if not authoritative:
 		set_physics_process(not wait_for_launch)
@@ -244,8 +265,20 @@ func _setup_failed(reason: String) -> void:
 	failure_reported.emit(reason)
 
 func begin_match(map_data: Dictionary, roster: Array) -> bool:
-	if not authoritative or match_initialized or world == null:
+	if not authoritative or match_initialized:
 		return false
+	if not setup_complete or not setup_error.is_empty():
+		_setup_failed("Cannot initialize a match before successful native world preparation")
+		return false
+	if map_data != prepared_map:
+		_setup_failed("Match map changed after native world preparation")
+		return false
+	var world_error := _match_world_error(map_data, prepared_environment)
+	if not world_error.is_empty():
+		_setup_failed(world_error)
+		return false
+	# Resolve every structure anchor before spawning any unit or spending combat RNG.
+	var structures: Array[Dictionary] = []
 	for info in map_data.structures:
 		var data: Dictionary = info.duplicate()
 		data.position = Vector3(info.position[0], info.position[1], info.position[2])
@@ -253,6 +286,8 @@ func begin_match(map_data: Dictionary, roster: Array) -> bool:
 		if not is_finite(data.position.y):
 			_setup_failed("Structure has no verified standing surface")
 			return false
+		structures.append(data)
+	for data: Dictionary in structures:
 		spawn(data)
 	_setup_siege_counts()
 	next_wave = Content.constants.GAME.FIRST_WAVE_DELAY_S
@@ -264,6 +299,33 @@ func begin_match(map_data: Dictionary, roster: Array) -> bool:
 	match_initialized = true
 	set_physics_process(true)
 	return true
+
+func _match_world_error(map_data: Dictionary, env: Dictionary) -> String:
+	if not is_instance_valid(world) or world.is_queued_for_deletion() or world.get_parent() != self or not world.build_complete or not world.build_error.is_empty():
+		return "Native world preparation is incomplete"
+	if not world.native_data is NativeWorldData or world.native_data.scene == null:
+		return "Missing original native world data; road-only worlds cannot initialize a match"
+	var native: NativeWorldData = world.native_data
+	var base: Variant = map_data.get("native_world")
+	if not base is String or not WorldVariant.matches_identity(native.source.get("identity", {}), WorldVariant.identity(base, env)):
+		return "Native world identity does not match the prepared match"
+	if not native.slabs_captured or not native.supports_captured or not native.climbs_captured:
+		return "Missing original structure, support or traversal capture for match initialization"
+	if not native.structure_pads.get("tower") is Array or not native.structure_pads.get("base") is Array:
+		return "Missing original tower/base platform anchors for match initialization"
+	if native.bounds != map_data.get("bounds") or world.bounds != native.bounds:
+		return "Native world bounds do not match the prepared match"
+	if native.terrain_grid < 2 or native.terrain_heights.size() != native.terrain_grid * native.terrain_grid or native.water_profile.is_empty() or world.authority_height_grid.is_empty():
+		return "Missing original terrain/water/weather profile for match initialization"
+	if not native.water_profile.has("obstacles"):
+		return "Missing original environment obstacles for match initialization"
+	var lanes: Array = map_data.get("lanes", [])
+	if lanes.is_empty() or world.paths.size() != lanes.size() or world.lane_points != lanes or native.lane_heights.size() != lanes.size():
+		return "Incomplete original lane geometry for match initialization"
+	for index in lanes.size():
+		if not native.lane_heights[index] is Array or native.lane_heights[index].size() != lanes[index].size():
+			return "Incomplete original lane heights for match initialization"
+	return ""
 
 func _populate_heroes(map_data: Dictionary, roster: Array) -> bool:
 	if not authoritative or world == null:
@@ -4431,11 +4493,12 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 				if target.is_hero() and StatusRules.maximum(target.buffs, "ccImm", clock) > 0:
 					continue
 				target.status.emp_until = maxf(float(target.status.get("emp_until", 0)), clock + definition.dur * fraction)
-				if definition.dmg > 0:
+				if definition.dmg * fraction > 0:
 					damage(unit, target, definition, definition.dmg * fraction, false, {"origin": center}, false)
 			if not added.is_empty():
 				_apply_cc(unit, added, center, definition.r)
-			vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
+			if definition.vision:
+				vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
 		"vision", "intercept":
 			if definition.fx == "intercept":
 				var radius: float = definition.r * sqrt(maxf(0.01, fraction))
@@ -4446,7 +4509,8 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 					_remove_missile(int(missile.id))
 					_publish_blast_event({"type": "missile_intercept", "actor": unit.entity_id, "missile": missile.id,
 						"position": _missile_world_position(missile.position), "radius": 8.0, "side": unit.side})
-			vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
+			if definition.fx == "vision" or definition.vision:
+				vision_until[unit.side] = maxf(float(vision_until.get(unit.side, 0)), clock + definition.vision * fraction)
 		"stealth":
 			if once:
 				unit.status.stealth_until = clock + definition.dur * fraction
@@ -4680,7 +4744,9 @@ func _companion_position(center: Vector3, offset: Vector2, altitude: float) -> V
 func _summon_plan(_unit: BattleUnit, definition: Dictionary, center: Vector3, fraction: float, random: SourceRng, count_override: int = -1) -> Array:
 	var profile: Dictionary = Content.constants.UNITS[definition.unit]
 	var count := count_override if count_override >= 0 else maxi(1, int(floorf(float(definition.count if definition.count else 2) * fraction + 0.5)))
-	var altitude: float = (Content.constants.GAME.HELI_ALT if "heli" in definition.unit else Content.constants.GAME.DRONE_ALT) if profile.get("fly", false) else 0.0
+	# The original non-heli drone value is undefined; eye/shot/movement readers
+	# consume it with y || 0. Preserve that conversion without inventing a constant.
+	var altitude: float = (Content.constants.GAME.HELI_ALT if "heli" in definition.unit else Content.constants.GAME.get("DRONE_ALT", 0.0)) if profile.get("fly", false) else 0.0
 	var plan: Array = []
 	for index in range(count):
 		var angle := float(index) / count * TAU + (random.next() - 0.5) * 0.5
@@ -5277,6 +5343,10 @@ func snapshot(peer: int = 0, recipient_side: Variant = null) -> Dictionary:
 		var state := ActorSnapshot.project(unit, viewer, clock)
 		if unit.body_presentation != null:
 			unit.presented_altitude = _missile_target_altitude(unit) if unit.is_hero() or unit.flying else 0.0
+			# Original custom summon/hologram serialization omits y. Their private
+			# flight/eye height is independent of the renderer's published lift.
+			if not unit.is_hero() and unit.special.get("role") in ["summon", "hologram"] and unit.kind not in ["heli", "decoy", "kami", "hyper"]:
+				unit.presented_altitude = 0.0
 			state.hero_y = unit.presented_altitude
 		visible_units.append(state)
 	var visible_ids := {}

@@ -1,8 +1,11 @@
-import { readFile, mkdir, cp } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { readFile, mkdir } from 'node:fs/promises';
+import { resolve, join, relative } from 'node:path';
+import {copySourceTree as cp} from './source_copy.mjs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import {writeFixtureJson,writeSourceFile} from './fixture_json.mjs';
+import {partitionFixtures,refreshFixtureConsumers} from './fixture_sections.mjs';
+import {captureGenerator,verifyGenerator,captureSourceFiles,verifySourceFiles,captureWorkspaceInputs,verifyWorkspaceInputs} from './source_provenance.mjs';
 import { combatReferences } from './combat_references.mjs';
 import { outlineReferences } from './outline_references.mjs';
 import { geometryLodReferences } from './geometry_lod_references.mjs';
@@ -70,7 +73,79 @@ import { locomotionReferences } from './locomotion_references.mjs';
 // Offline migration only: evaluate the source's settlement seams instead of copying derived numbers.
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = resolve(process.argv[2] || join(root, '..', 'steel_vs_swarm'));
+const outputIndex=process.argv.indexOf('--output-root');
+if(outputIndex>=0&&(!process.argv[outputIndex+1]||process.argv[outputIndex+1].startsWith('--')))
+  throw new Error('Expected a destination directory after --output-root');
+const publicationRoot=outputIndex<0?root:resolve(process.argv[outputIndex+1]);
 const auditReferencesOnly=process.argv.includes('--audit-references');
+const stageIndex=process.argv.indexOf('--publish-stage');
+const partitionIndex=process.argv.indexOf('--partition-fixtures');
+const statusReferencesOnly=process.argv.includes('--status-references');
+const botReferencesOnly=process.argv.includes('--bot-references');
+const companionReferencesOnly=process.argv.includes('--companion-references');
+const missileDefenseReferencesOnly=process.argv.includes('--missile-defense-references');
+if(process.argv.includes('--refresh-fixture-consumers')) {
+  if(stageIndex>=0||partitionIndex>=0||outputIndex>=0||auditReferencesOnly||statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefenseReferencesOnly||process.argv.includes('--audio-music-gain'))
+    throw new Error('Choose one source publication operation');
+  await refreshFixtureConsumers(join(root,'data/fixtures.json'),root);
+  process.exit(0);
+}
+if(statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefenseReferencesOnly) {
+  if([statusReferencesOnly,botReferencesOnly,companionReferencesOnly,missileDefenseReferencesOnly].filter(Boolean).length!==1||stageIndex>=0||partitionIndex>=0||outputIndex>=0||auditReferencesOnly||process.argv.includes('--audio-music-gain'))
+    throw new Error('Choose one source publication operation');
+  const {publishReferenceSections}=await import('./source_stage.mjs');
+  await publishReferenceSections(root,source,async()=>{
+    const d=await import(pathToFileURL(join(source,'public/js/data.js')).href);
+    const {BattleSim}=await import(pathToFileURL(join(source,'server/sim.js')).href);
+    const {mulberry32}=await import(pathToFileURL(join(source,'public/js/rng.js')).href);
+    const maps=JSON.parse(await readFile(join(root,'data/maps.json')));
+    const config=maps[0].variants['1'].config;
+    if(statusReferencesOnly)return statusReferences(d,BattleSim,config,mulberry32);
+    if(companionReferencesOnly)return companionReferences(d,BattleSim,config,mulberry32);
+    if(missileDefenseReferencesOnly){const {missileDefenseReferences}=await import('./missile_defense_references.mjs');return missileDefenseReferences(d,BattleSim,config,mulberry32);}
+    const {botReferences}=await import('./bot_references.mjs');
+    return (await botReferences(d,BattleSim,config,mulberry32,source)).fixtures;
+  });
+  process.exit(0);
+}
+if(partitionIndex>=0) {
+  if(stageIndex>=0||outputIndex>=0||auditReferencesOnly||process.argv.includes('--audio-music-gain'))
+    throw new Error('Choose one source publication operation');
+  if(!process.argv[partitionIndex+1]||process.argv[partitionIndex+1].startsWith('--'))
+    throw new Error('Expected a published complete capture after --partition-fixtures');
+  const stage=resolve(process.argv[partitionIndex+1]);
+  const previous=await readFile(join(root,'data/provenance.json'));
+  if(!previous.equals(await readFile(join(stage,'data/provenance.json'))))
+    throw new Error('Partition only the source capture already published in this project');
+  const producer=JSON.parse(previous).producer;
+  await verifyGenerator(root,producer);
+  await verifyWorkspaceInputs(root,JSON.parse(previous).workspaceInputs);
+  await partitionFixtures(join(stage,'data/fixtures.json'),join(root,'data/fixtures.json'),{projectRoot:root,producer});
+  process.exit(0);
+}
+if(stageIndex>=0) {
+  if(outputIndex>=0||auditReferencesOnly||process.argv.includes('--audio-music-gain'))
+    throw new Error('Choose either source capture, read-only audit or completed-stage publication');
+  if(!process.argv[stageIndex+1]||process.argv[stageIndex+1].startsWith('--'))
+    throw new Error('Expected a completed capture directory after --publish-stage');
+  const {publishSourceStage}=await import('./source_stage.mjs');
+  await publishSourceStage(root,source,resolve(process.argv[stageIndex+1]));
+  process.exit(0);
+}
+if(outputIndex>=0&&(auditReferencesOnly||process.argv.includes('--audio-music-gain')))
+  throw new Error('--output-root applies only to a complete source capture');
+if(process.argv.includes('--audio-music-gain')) {
+  if(auditReferencesOnly)throw new Error('Choose either read-only reference audit or procedural gain publication');
+  const option=name=>{const index=process.argv.indexOf(name);return index<0?undefined:resolve(process.argv[index+1]);};
+  const {publishAudioMusicGain}=await import('./audio_music_gain_capture.mjs');
+  await publishAudioMusicGain(root,source,{playwrightModule:option('--playwright-module'),chrome:option('--chrome')});
+  process.exit(0);
+}
+const producer=auditReferencesOnly?null:await captureGenerator(root);
+const sourceBefore=auditReferencesOnly?null:await captureSourceFiles(source);
+const workspaceBefore=auditReferencesOnly?null:await captureWorkspaceInputs(root);
+const assetInputs=new Set();
+const recordAssetInput=path=>assetInputs.add(relative(source,path).replaceAll('\\','/'));
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const v = await load('public/js/venues.js');
@@ -319,7 +394,7 @@ if (auditReferencesOnly) {
   console.log('SOURCE_REFERENCE_AUDIT_PASS '+JSON.stringify({fixtureSections:Object.keys(fixtures).length}));
   process.exit(0);
 }
-await mkdir(join(root, 'data'), { recursive: true });
+await mkdir(join(publicationRoot, 'data'), { recursive: true });
 for (const [name, value] of Object.entries({ balance: { constants, heroes, unitVolumes,
   structure: structureReference.rules,
   modelGeometry: modelReference.geometry,
@@ -379,64 +454,75 @@ for (const [name, value] of Object.entries({ balance: { constants, heroes, unitV
   movement: { sprint: Number(sprintMatch[1]), slope: traversalReference.rules, climb: climbReference.rules }, charge: Array.from({ length: 4 }, (_, i) => d.chargeF(i)),
   waves: Array.from({ length: 16 }, (_, i) => d.waveComp(i)) }, maps, fixtures,
   narrative: serialize(narrative), campaign: campaignReference.content, structures: structureReference.worlds })) {
-  const target=join(root,'data',`${name}.json`);
-  if(name==='fixtures')await writeFixtureJson(target,value);
+  const target=join(publicationRoot,'data',`${name}.json`);
+  if(name==='fixtures') {
+    if(outputIndex>=0)await writeFixtureJson(target,value);
+    else {
+      const captured=target+'.capture.tmp';
+      await writeFixtureJson(captured,value);
+      await partitionFixtures(captured,target,{projectRoot:root,producer});
+      const {unlink}=await import('node:fs/promises');await unlink(captured);
+    }
+  }
   else await writeSourceFile(target,JSON.stringify(value));
 }
 for (const folder of ['models/reference', 'models/combat', 'models/factions', 'characters', 'avatars', 'mechs', 'mech_avatars', 'story']) {
-  await cp(join(source, 'public/assets', folder), join(root, 'assets', folder), { recursive: true });
+  await cp(join(source, 'public/assets', folder), join(publicationRoot, 'assets', folder), { recursive: true,onFile:recordAssetInput });
 }
-await mkdir(join(root, 'assets/ui'), { recursive: true });
+await mkdir(join(publicationRoot, 'assets/ui'), { recursive: true });
 for (const [id,definition] of Object.entries(controlsReference.rules.statusIcons.definitions)) {
-  await writeSourceFile(join(root,'assets/ui',`status-${id}.svg`),`<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 28 28">${definition.svg}</svg>`);
+  await writeSourceFile(join(publicationRoot,'assets/ui',`status-${id}.svg`),`<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 28 28">${definition.svg}</svg>`);
 }
-await writeSourceFile(join(root, 'assets/ui/footprint-glow.png'), Buffer.from(modelReference.glowPng, 'base64'));
-await writeSourceFile(join(root,'assets/ui/shot-spark.png'),Buffer.from(modelReference.sparkPng,'base64'));
+await writeSourceFile(join(publicationRoot, 'assets/ui/footprint-glow.png'), Buffer.from(modelReference.glowPng, 'base64'));
+await writeSourceFile(join(publicationRoot,'assets/ui/shot-spark.png'),Buffer.from(modelReference.sparkPng,'base64'));
 for(const [key,png]of Object.entries(modelReference.spriteTextures))
-  await writeSourceFile(join(root,'assets/ui',`combat-${key}.png`),Buffer.from(png,'base64'));
-await mkdir(join(root, 'data/cockpits'), { recursive: true });
-await mkdir(join(root, 'data/bodies'), { recursive: true });
+  await writeSourceFile(join(publicationRoot,'assets/ui',`combat-${key}.png`),Buffer.from(png,'base64'));
+await mkdir(join(publicationRoot, 'data/cockpits'), { recursive: true });
+await mkdir(join(publicationRoot, 'data/bodies'), { recursive: true });
 for (const [key, graph] of Object.entries(modelReference.bodyGraphs))
-  await writeFixtureJson(join(root, 'data/bodies', `${key}.json`), graph);
+  await writeFixtureJson(join(publicationRoot, 'data/bodies', `${key}.json`), graph);
 for (const [character, graph] of Object.entries(modelReference.cockpitGraphs))
-  await writeFixtureJson(join(root, 'data/cockpits', `${character}.json`), graph);
-await mkdir(join(root, 'data/projectiles'), { recursive: true });
+  await writeFixtureJson(join(publicationRoot, 'data/cockpits', `${character}.json`), graph);
+await mkdir(join(publicationRoot, 'data/projectiles'), { recursive: true });
 for (const [key, graph] of Object.entries(modelReference.projectileGraphs))
-  await writeFixtureJson(join(root, 'data/projectiles', `${key}.json`), graph);
-await mkdir(join(root, 'data/companions'), { recursive: true });
+  await writeFixtureJson(join(publicationRoot, 'data/projectiles', `${key}.json`), graph);
+await mkdir(join(publicationRoot, 'data/companions'), { recursive: true });
 for (const [key, graph] of Object.entries(modelReference.companionGraphs))
-  await writeFixtureJson(join(root, 'data/companions', `${key}.json`), graph);
-await mkdir(join(root,'data/civilian_parts'),{recursive:true});
+  await writeFixtureJson(join(publicationRoot, 'data/companions', `${key}.json`), graph);
+await mkdir(join(publicationRoot,'data/civilian_parts'),{recursive:true});
 for(const [key,graph]of Object.entries(modelReference.civilianGraphs))
-  await writeFixtureJson(join(root,'data/civilian_parts',`${key}.json`),graph);
-await mkdir(join(root,'data/npc_effects'),{recursive:true});
+  await writeFixtureJson(join(publicationRoot,'data/civilian_parts',`${key}.json`),graph);
+await mkdir(join(publicationRoot,'data/npc_effects'),{recursive:true});
 for(const [key,graph]of Object.entries(modelReference.npcEffectGraphs))
-  await writeFixtureJson(join(root,'data/npc_effects',`${key}.json`),graph);
-await mkdir(join(root,'data/weapon_effects'),{recursive:true});
+  await writeFixtureJson(join(publicationRoot,'data/npc_effects',`${key}.json`),graph);
+await mkdir(join(publicationRoot,'data/weapon_effects'),{recursive:true});
 for(const [key,graph]of Object.entries(modelReference.weaponEffectGraphs))
-  await writeFixtureJson(join(root,'data/weapon_effects',`${key}.json`),graph);
-await mkdir(join(root,'data/first_person_shields'),{recursive:true});
+  await writeFixtureJson(join(publicationRoot,'data/weapon_effects',`${key}.json`),graph);
+await mkdir(join(publicationRoot,'data/first_person_shields'),{recursive:true});
 for(const [key,graph]of Object.entries(modelReference.firstPersonShieldGraphs))
-  await writeFixtureJson(join(root,'data/first_person_shields',`${key}.json`),graph);
-await mkdir(join(root, 'data/hazards'), { recursive: true });
+  await writeFixtureJson(join(publicationRoot,'data/first_person_shields',`${key}.json`),graph);
+await mkdir(join(publicationRoot, 'data/hazards'), { recursive: true });
 for(const [key,graph] of Object.entries(modelReference.hazardGraphs))
-  await writeFixtureJson(join(root, 'data/hazards', `${key}.json`), graph);
-await mkdir(join(root, 'data/loot'), { recursive: true });
+  await writeFixtureJson(join(publicationRoot, 'data/hazards', `${key}.json`), graph);
+await mkdir(join(publicationRoot, 'data/loot'), { recursive: true });
 for(const [key,graph] of Object.entries(modelReference.lootGraphs))
-  await writeFixtureJson(join(root, 'data/loot', `${key}.json`), graph);
-await cp(join(source, 'public/audio'), join(root, 'assets/audio'), { recursive: true });
-await writeSourceFile(join(root,'data/audio_clips.json'),JSON.stringify(modelReference.audioClips));
-await writeSourceFile(join(root,'data/audio_synth.json'),JSON.stringify(modelReference.audioSynth));
-await writeSourceFile(join(root,'data/audio_music.json'),JSON.stringify(modelReference.audioMusic));
-await writeSourceFile(join(root,'data/audio_move.json'),JSON.stringify(modelReference.audioMove));
-await writeSourceFile(join(root,'data/audio_probes.json'),JSON.stringify(modelReference.audioProbes));
-await cp(join(source, 'LICENSE'), join(root, 'LICENSE'));
+  await writeFixtureJson(join(publicationRoot, 'data/loot', `${key}.json`), graph);
+await cp(join(source, 'public/audio'), join(publicationRoot, 'assets/audio'), { recursive: true,onFile:recordAssetInput });
+await writeSourceFile(join(publicationRoot,'data/audio_clips.json'),JSON.stringify(modelReference.audioClips));
+await writeSourceFile(join(publicationRoot,'data/audio_synth.json'),JSON.stringify(modelReference.audioSynth));
+await writeSourceFile(join(publicationRoot,'data/audio_music.json'),JSON.stringify(modelReference.audioMusic));
+await writeSourceFile(join(publicationRoot,'data/audio_move.json'),JSON.stringify(modelReference.audioMove));
+await writeSourceFile(join(publicationRoot,'data/audio_probes.json'),JSON.stringify(modelReference.audioProbes));
+await cp(join(source, 'LICENSE'), join(publicationRoot, 'LICENSE'),{onFile:recordAssetInput});
 const inputs = ['public/index.html', 'public/js/data.js', 'public/js/balancePrefs.js', 'public/js/audio.js', 'public/js/venues.js', 'public/js/venueLanes.js', 'public/js/rng.js', 'public/js/game.js', 'public/js/main.js', 'public/js/biomes.js', 'public/js/ground.js', 'public/js/vfx.js', 'public/js/toon.js', 'public/js/mapBuilding.js', 'server/sim.js', 'out/forest_review/three.module.js'];
 const hashes = {};
 inputs.push('public/css/style.css');
 inputs.push('public/js/lod.js');
 inputs.push('public/js/geo3d.js');
-for (const file of new Set([...inputs, ...modelReference.inputs, ...botReference.inputs, ...campaignReference.inputs, ...mobileReference.inputs, ...climbReference.inputs, ...viewReference.inputs, ...playerViewReference.inputs, ...locomotionReference.inputs, ...visualReference.inputs, ...roomReference.inputs])) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
-await writeSourceFile(join(root, 'data/provenance.json'), JSON.stringify({ inputs: hashes, heroes: Object.keys(heroes).length,
+for (const file of new Set([...inputs,...assetInputs, ...modelReference.inputs, ...botReference.inputs, ...campaignReference.inputs, ...mobileReference.inputs, ...climbReference.inputs, ...viewReference.inputs, ...playerViewReference.inputs, ...locomotionReference.inputs, ...visualReference.inputs, ...roomReference.inputs])) hashes[file] = createHash('sha256').update(await readFile(join(source, file))).digest('hex');
+await verifySourceFiles(source,hashes,sourceBefore);
+await verifyGenerator(root,producer);
+await verifyWorkspaceInputs(root,workspaceBefore);
+await writeSourceFile(join(publicationRoot, 'data/provenance.json'), JSON.stringify({ inputs: hashes,producer,workspaceInputs:workspaceBefore, heroes: Object.keys(heroes).length,
   qualifiedMaps: maps.length, runtime: 'GDScript', sourceLicense: 'Apache-2.0' }, null, 2));
 console.log(`Imported ${Object.keys(heroes).length} heroes, ${maps.length} qualified maps and native glTF assets.`);

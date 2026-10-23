@@ -17,7 +17,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._check(effect.active == item.active, "Flood zones exempt flight and off-ground traversal")
 		h._near(effect.slow, item.speed, "Original flood zone takes the first matching water speed cap")
 		h._near(effect.jump, item.jump, "Flood overrides terrain jump with source water square-root factor")
-	for key: String in ["environmentHeights", "environmentDryBands", "environmentTriggers", "environmentStates", "environmentTides", "environmentFire", "environmentBurn", "environmentIce", "environmentWetGrid"]:
+	for key: String in ["environmentHeights", "environmentDryBands", "environmentBorderMasks", "environmentTriggers", "environmentStates", "environmentTides", "environmentFire", "environmentBurn", "environmentIce", "environmentWetGrid"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original environment oracle: " + key)
 			return
@@ -25,10 +25,14 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._near(EnvironmentRules.height_at(PackedFloat32Array(item.heights), int(item.grid), item.bounds, item.x, item.z), item.result, "Original clamped triangular terrain sampling")
 	for item: Dictionary in fixtures.environmentDryBands:
 		h._check(EnvironmentRules.in_dry_band(item.x, item.z, item.profile) == item.result, "Original dry corridor capsule endpoints and degenerate segments")
+	for item: Dictionary in fixtures.environmentBorderMasks:
+		h._check(EnvironmentRules.valid_border_mask(item.profile), "Accept captured original divider-mask indices")
+		h._check(EnvironmentRules.in_border_band(item.x, item.z, item.profile) == item.result,
+			"Original divider mask scans source buckets, negative cells, variable widths and degenerate segments")
 	for item: Dictionary in fixtures.environmentTriggers:
 		h._check(EnvironmentRules.trigger(int(item.ground), item.waterY, item.foot, item.body, item.frozen) == int(item.result), "Original full immersion and frozen partial immersion")
 	for item: Dictionary in fixtures.environmentStates:
-		var ground := EnvironmentRules.ground_code(item.height, item.waterY, item.color, item.dry)
+		var ground := EnvironmentRules.ground_code(item.height, item.waterY, item.color, item.dry, item.border)
 		h._check(ground == int(item.ground), "Original height/color/dry-band water-marsh classifier")
 		var state := EnvironmentRules.environment(ground, item.waterY, item.foot, item.body, item.frozen, item.flying, item.surface, item.height)
 		StatusHelper.compare(h, state, item.state, "Original native fluid/air environment")

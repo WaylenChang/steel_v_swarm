@@ -17,10 +17,11 @@ export function captureDeathOverlay({css}) {
     pulseDuration:Number(pulseDuration[1]),flashDuration:Number(flashDuration[1]),flashPeak:Number(peak[1])/100,flashAlpha:Number(peak[2]),
     low:Number(low[1]),high:Number(high[1])};
   rules.layers={};
+  const sheet=new CSSStyleSheet();sheet.replaceSync(css);
   for(const [key,name]of Object.entries({rim:'death-alert',flash:'death-flash',hud:'hud-top',menu:'overlay',shop:'shop-overlay',dialogue:'dlg-layer',touch:'touch-layer'})) {
-    const layer=/z-index:\s*(\d+)/.exec(selector(name)??'');
-    if(!layer)throw new Error('Missing original death overlay stacking layer: '+name);
-    rules.layers[key]=Number(layer[1]);
+    const layer=Array.from(sheet.cssRules).find(rule=>rule.selectorText==='.'+name)?.style.zIndex;
+    if(!/^\d+$/.test(layer??''))throw new Error('Missing original death overlay stacking layer: '+name);
+    rules.layers[key]=Number(layer);
   }
   const style=document.createElement('style');style.textContent=[rim,flash,rimOn,flashOn,pulse,white].join('\n');document.head.append(style);
   const opacity=[];

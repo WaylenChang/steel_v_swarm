@@ -89,8 +89,9 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			var material: StandardMaterial3D = node.mesh.surface_get_material(0)
 			h._near(material.albedo_color.a, expected.opacity, "Original flame/smoke opacity")
 		# Each kind has its own original node roster; retain sequential hidden poses within a kind.
-		var last := fixtures.fireVisuals.find(item)
+		var last: int = fixtures.fireVisuals.find(item)
 		if last + 1 == fixtures.fireVisuals.size() or fixtures.fireVisuals[last + 1].key != item.key:
+			preload("res://tests/outline_suite.gd").check_deferred(h, presentation.entries[1].root)
 			presentation.sync([], item.now, item.weather)
 	presentation.free()
 	print("SCENERY_REFERENCE_PASS heights=", fixtures.sceneryHeights.size(), " strike=", fixtures.sceneryStrikes.size(), " fires=", fixtures.sceneryFires.size())

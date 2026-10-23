@@ -130,7 +130,7 @@ func _material(original: Material) -> Material:
 	material.set_shader_parameter("emission", source.emission if source.emission_enabled else Color.BLACK)
 	material.set_shader_parameter("emission_energy", source.emission_energy_multiplier if source.emission_enabled else 0.0)
 	material.set_shader_parameter("alpha_test", float(source.get_meta("source_alpha_test", 0)))
-	var curve: Dictionary = Content.balance.bodyRules.curve
+	var curve: Dictionary = Content.local_view_curve()
 	material.set_shader_parameter("curve_knee", curve.knee)
 	material.set_shader_parameter("curve_inverse", curve.inverse)
 	materials[original] = material
@@ -144,12 +144,13 @@ static func _shader(source: BaseMaterial3D) -> Shader:
 		modes.append("depth_test_disabled")
 	if source.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
 		modes.append("unshaded")
-	var key := ",".join(modes) + ("/alpha" if source.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED else "")
+	var sampler := SourceTextureImages.sampler_hint(source)
+	var key := ",".join(modes) + ("/alpha" if source.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED else "") + "/" + sampler
 	if not shaders.has(key):
 		var shader := Shader.new()
 		shader.code = "shader_type spatial;\nrender_mode " + ",".join(modes) + ";\n" \
 			+ ("#define SOURCE_ALPHA\n" if source.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED else "") \
-			+ str(Content.balance.destruction.dissolve.shaderFunctions) + "\n" + SURFACE
+			+ str(Content.balance.destruction.dissolve.shaderFunctions) + "\n" + SURFACE.replace("filter_linear_mipmap, repeat_enable", sampler)
 		shaders[key] = shader
 	return shaders[key]
 

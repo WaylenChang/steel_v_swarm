@@ -1,4 +1,5 @@
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import {writeSourceFile} from './fixture_json.mjs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -11,7 +12,7 @@ const tolerance=/const LONG_TOL = ([\d.]+)/.exec(grabFn(sourceText,'makeDeckInde
 if(!tolerance)throw new Error('Original deck endpoint tolerance missing');
 const selected=process.argv.slice(2);
 for(const file of await readdir(join(root,'data/worlds'))){
-  if(!file.endsWith('.json') || (selected.length&&!selected.some(id=>file.startsWith(id+'_'))))continue;
+  if(!file.endsWith('.json') || (selected.length&&!selected.some(id=>file===id+'.json'||file.startsWith(id+'_'))))continue;
   const path=join(root,'data/worlds',file);
   const data=JSON.parse(await readFile(path,'utf8'));
   const query=makeIndex(data.decks);
@@ -24,6 +25,6 @@ for(const file of await readdir(join(root,'data/worlds'))){
     return{x,z,y,upper:query(x,z,0,y-.03,y+.03),
       lower:query(x,z,0,y-.03,y+.03,true)-data.collision.deckThickness};
   });
-  await writeFile(path,JSON.stringify(data));
+  await writeSourceFile(path,JSON.stringify(data));
 }
 console.log('Source layered-deck query references generated');

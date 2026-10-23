@@ -26,11 +26,11 @@ func _physics_process(delta: float) -> void:
 		_server_step()
 		return
 	super._physics_process(delta)
-	if simulation == null or not simulation.pilots.has(multiplayer.get_unique_id()):
+	if simulation == null or not simulation.pilots.has(Session.player_id()):
 		return
 	if not requested and Controls.room == "pad" and touch_controls.visible:
 		requested = true
-		forced_seen = not Controls.set_scheme("kbm") and not Session.set_control_mode("kbm")
+		forced_seen = not Controls.set_scheme("kbm") and Session.is_room_host() and not Session.set_control_mode("invalid")
 		Controls.set_value("levelMove", true)
 		Controls.set_value("invertX", true)
 		Controls.set_value("invertY", true)
@@ -68,7 +68,7 @@ func _physics_process(delta: float) -> void:
 			return
 		phase = 5
 	elif phase == 5 and released_seen and Controls.room == "any":
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_MOBILE_PASS touch=true mode=true host=true release=true level_move=true private=true aim=true")
 		Session.stop()
 		get_tree().quit()
@@ -87,20 +87,20 @@ func _server_step() -> void:
 	if phase == 0 and input.get("level_move", false) and input.get("jump_held", false) and input.get("move", Vector2.ZERO).y < -0.99:
 		input_at = elapsed
 		phase = 1
-		Session.set_control_mode("kbm")
+		Session._settle_control_mode("kbm")
 	elif phase == 1 and elapsed - input_at > 0.4 and input.get("move", Vector2.ONE) == Vector2.ZERO and not input.get("jump_held", true):
 		phase = 2
-		Session.set_control_mode("any")
+		Session._settle_control_mode("any")
 	elif phase == 2 and fixture_pilot.aim_request > 0 and input.get("aim", false):
 		phase = 3
 		input_at = elapsed
-		Session.set_control_mode("pad")
+		Session._settle_control_mode("pad")
 	elif phase == 3 and input.get("fire", false):
 		phase = 4
 		_mark_input_received.rpc_id(fixture_pilot.peer_id)
 	elif phase == 4 and not input.get("fire", true) and not input.get("jump_held", true):
 		phase = 5
-		Session.set_control_mode("any")
+		Session._settle_control_mode("any")
 
 @rpc("authority", "call_remote", "reliable")
 func _mark_input_received() -> void:

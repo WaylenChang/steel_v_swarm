@@ -8,6 +8,7 @@ func _ready() -> void:
 	if error != OK:
 		get_tree().quit(1)
 		return
+	Session.set_ready(true)
 	Session.start_battle()
 	for frame in range(600):
 		await get_tree().physics_frame

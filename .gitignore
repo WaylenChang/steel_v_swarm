@@ -1,6 +1,15 @@
 .godot/
+tools/node_modules/
 build/
 *.tmp
+*.bak
 tests/*.log
 tests/*.png
+artifacts/
+*.partial
+*.original-*
+data/worlds/buffers/
+assets/worlds/*_autumn.res
+assets/worlds/*_spring.res
+assets/worlds/*_summer.res
 

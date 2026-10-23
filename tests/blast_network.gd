@@ -41,7 +41,7 @@ func _physics_process(delta: float) -> void:
 					simulation.set_physics_process(false)
 		return
 	super._physics_process(delta)
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null or not view_ready:
 		return
 	if not requested:
@@ -119,7 +119,7 @@ func _verify_fixture() -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _finish_fixture() -> void:
-	print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+	print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 	print("NETWORK_BLAST_PASS source=true ground=true air=true immediate=true publication=true recoil=true replay=true resources=true")
 	Session.stop()
 	get_tree().quit()

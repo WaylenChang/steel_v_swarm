@@ -1,5 +1,7 @@
 extends Node3D
 
+const WorldMeshes = preload("res://tools/source_world_meshes.gd")
+
 var checks := 0
 var failures: Array[String] = []
 var worlds := 0
@@ -33,13 +35,53 @@ func _run() -> void:
 		push_error("Native world resources are missing")
 		get_tree().quit(1)
 		return
-	var selected: Array = Array(OS.get_cmdline_user_args())
+	var selection := WorldVariant.select_required(Array(OS.get_cmdline_user_args()))
+	if not selection.error.is_empty():
+		push_error(selection.error)
+		get_tree().quit(1)
+		return
+	var required: Dictionary = selection.worlds
+	var verified := {}
+	_check(not required.is_empty(), "Original seasonal world manifest is nonempty")
 	for file in directory.get_files():
-		if not file.ends_with(".res") or (not selected.is_empty() and not selected.any(func(id): return file.begins_with(id + "_"))):
+		var path := "res://assets/worlds/" + file
+		if not file.ends_with(".res") or not required.has(path):
 			continue
-		var data: Resource = load("res://assets/worlds/" + file)
+		var data: Resource = load(path)
 		var source: Dictionary = Content.read_json("res://data/worlds/" + file.get_basename() + ".json")
+		_check(WorldVariant.matches_identity(data.source.get("identity", {}), required[path]), file + ": original map/team/season identity matches the selected resource")
 		_check(data.source == source.source, file + ": native provenance matches the verified source bundle")
+		_check(data.minimap_base != null and source.get("minimapBase") is Dictionary, file + ": original minimap terrain raster is present")
+		if data.minimap_base != null and source.get("minimapBase") is Dictionary:
+			var minimap_images := SourceTextureImages.new()
+			if minimap_images.configure([source.textureImages[int(source.minimapBase.image)]]):
+				var minimap_image: Image = data.minimap_base.get_image()
+				if minimap_image != null:
+					minimap_image.convert(Image.FORMAT_RGBA8)
+				_check(minimap_image != null and minimap_image.get_size() == minimap_images.images[0].get_size()
+					and minimap_image.get_data() == minimap_images.images[0].get_data(), file + ": native minimap retains every original hillshade/water/veil pixel")
+			else:
+				_check(false, file + ": original minimap raster can be decoded")
+		_check(data.slabs_captured and data.authority_slabs == source.acceptedSlabs, file + ": original accepted structure layers belong to this seasonal resource")
+		_check(data.climbs_captured and data.climb_routes == source.climbs, file + ": original seasonal climb routes preserved")
+		_check(data.supports_captured and data.roof_platforms == source.roofPlatforms and data.source_buildings == source.sourceBuildings,
+			file + ": original seasonal roof/building support preserved")
+		_check(data.trains_captured and data.source_trains == source.trains, file + ": original seasonal train paths preserved")
+		_check(data.motions_captured and data.source_motions == source.motions, file + ": original seasonal scenery pivot declarations preserved")
+		_check(data.wildlife_captured and data.source_wildlife == source.wildlife, file + ": original seasonal wildlife rosters preserved")
+		_check(data.source_wildlife.get("catalogCaptured", false), file + ": original density-independent per-route wildlife capacity is captured")
+		_check(data.petals_captured and data.source_petals == source.petals, file + ": original seasonal petal rosters preserved")
+		_check(data.aquatics_captured and data.source_aquatics == source.aquatics, file + ": original seasonal aquatic fauna/bubble rosters preserved")
+		_check(data.marine_captured and data.source_marine == source.marine, file + ": original marine constants, depth sampler, rectangle and vessel wave packets preserved")
+		_check(data.marine_depth_field != null, file + ": original marine depth field has a native texture")
+		_check(data.marine_programs.size() == source.marinePrograms.size(), file + ": original shared marine shader program count preserved")
+		for index in range(mini(data.marine_programs.size(), source.marinePrograms.size())):
+			_check(data.marine_programs[index].code == source.marinePrograms[index], file + ": original source-derived native shader functions preserved")
+		if data.marine_depth_field != null:
+			var pixels := Marshalls.base64_to_raw(source.textureImages[int(source.marine.field.image)].rgba)
+			_check(data.marine_depth_field.get_image().get_data() == pixels, file + ": original bathymetry/foam/slope RGBA bytes preserved without colour conversion")
+		for petals: Dictionary in data.source_petals.variants:
+			_check(petals.season == required[path].season, file + ": source vegetation and petal season agree")
 		_check(data.terrain_grid == int(source.grid) and data.terrain_heights == PackedFloat32Array(source.heightField), file + ": original triangular terrain field preserved")
 		_check(data.water_profile == source.waterProfile, file + ": original marine/dry-band/wet-grid water profile preserved")
 		_check(data.corridors == source.corridors, file + ": original authority corridor pruning profile preserved")
@@ -47,13 +89,20 @@ func _run() -> void:
 			var height := EnvironmentRules.height_at(data.terrain_heights, data.terrain_grid, data.bounds, probe.x, probe.z)
 			_check(absf(height - float(probe.ground)) < 0.0001, file + ": original terrain water height probe")
 			var dry := EnvironmentRules.in_dry_band(probe.x, probe.z, data.water_profile.dryBands)
-			_check(EnvironmentRules.ground_code(height, data.water_profile.baseY, [], dry) == int(probe.waterCode), file + ": original water classification probe")
+			var border := EnvironmentRules.in_border_band(probe.x, probe.z, data.water_profile.get("borderMask", {}))
+			_check(EnvironmentRules.ground_code(height, data.water_profile.baseY, [], dry, border) == int(probe.waterCode), file + ": original water classification probe")
 		var scene: Node3D = data.scene.instantiate()
+		_check(source.has("celPrograms") and source.has("celSamplers"), file + ": regenerate original world cel program/sampler tables")
+		var cel_data := scene.get_meta("source_cel_data") as SourceCelData
+		_check(cel_data != null, file + ": world shader data uses a shared native Resource")
+		if cel_data != null:
+			_check(cel_data.programs == source.get("celPrograms", []), file + ": original world cel shader text and include dependencies preserved")
+			_check(cel_data.samplers == source.get("celSamplers", []), file + ": original world cel sampler fields preserved")
 		add_child(scene)
 		await get_tree().physics_frame
 		await get_tree().physics_frame
-		var map_id := file.get_basename().rsplit("_", true, 1)[0]
-		var team_size := file.get_basename().rsplit("_", true, 1)[1]
+		var map_id: String = required[path].map
+		var team_size := str(int(required[path].teamSize))
 		var map_entry: Dictionary = (Content.maps + Content.campaign.get("maps", [])).filter(func(entry): return entry.id == map_id)[0]
 		var variant: Dictionary = map_entry.variants[team_size]
 		for structure in variant.structures:
@@ -61,29 +110,25 @@ func _run() -> void:
 		for side in variant.hero_spawns:
 			for spawn_point in variant.hero_spawns[side]:
 				_check(_height(spawn_point.position[0], spawn_point.position[1], data.ceiling + 100, data.min_height - 100, 8) != null, file + ": source hero spawn has a verified standing surface")
-		for mesh_index in range(source.meshes.size()):
-			var source_mesh: Dictionary = source.meshes[mesh_index]
-			var native_mesh: MeshInstance3D = scene.get_node("SourceMesh_%d" % mesh_index)
-			_check(native_mesh.get_meta("source_water", false) == source_mesh.get("water", false), file + ": original water/swamp mesh tide binding")
-			var mesh_arrays: Array = native_mesh.mesh.surface_get_arrays(0)
-			var vertices := PackedVector3Array()
-			for i in range(0, source_mesh.positions.size(), 3):
-				vertices.append(Vector3(source_mesh.positions[i], source_mesh.positions[i + 1], source_mesh.positions[i + 2]))
-			_check(mesh_arrays[Mesh.ARRAY_VERTEX] == vertices, file + ": source road/world vertices preserved")
-			var indices := PackedInt32Array()
-			for i in range(0, source_mesh.index.size(), 3):
-				indices.append_array(PackedInt32Array([source_mesh.index[i], source_mesh.index[i + 2], source_mesh.index[i + 1]]))
-			_check(mesh_arrays[Mesh.ARRAY_INDEX] == indices, file + ": source road/world winding converted")
-			if not source_mesh.colors.is_empty():
-				var colors: PackedColorArray = mesh_arrays[Mesh.ARRAY_COLOR]
-				var color_error := 0.0
-				for i in range(0, source_mesh.colors.size(), 3):
-					var color: Color = colors[i / 3]
-					color_error = maxf(color_error, absf(color.r - source_mesh.colors[i]))
-					color_error = maxf(color_error, absf(color.g - source_mesh.colors[i + 1]))
-					color_error = maxf(color_error, absf(color.b - source_mesh.colors[i + 2]))
-				# ArrayMesh stores vertex colors as RGBA8; geometry retains exact float32 positions.
-				_check(color_error <= 1.0 / 255.0 + 0.000001, file + ": source colors within native RGBA8 precision, error=" + str(color_error))
+		var native_meshes := {}
+		for node: GeometryInstance3D in scene.find_children("SourceMesh_*", "GeometryInstance3D", true, false):
+			native_meshes[str(node.name)] = node
+		var source_meshes := WorldMeshes.new(source)
+		for source_mesh: Dictionary in source_meshes:
+			_verify_mesh(file, native_meshes.get("SourceMesh_%d" % source_meshes.index), source_mesh, source.marinePrograms)
+		_check(source_meshes.valid, file + ": complete original mesh chunks and numeric buffers")
+		for system: Dictionary in data.source_aquatics.systems:
+			if system.kind != "detritus":
+				continue
+			var node: MeshInstance3D = scene.get_node("AquaticPoints_%d" % int(system.batches[0].id))
+			var mesh := node.mesh as ArrayMesh
+			_check(mesh != null and mesh.surface_get_primitive_type(0) == Mesh.PRIMITIVE_POINTS, file + ": original suspended detritus point primitive")
+			var point_arrays := mesh.surface_get_arrays(0)
+			var points: PackedVector3Array = point_arrays[Mesh.ARRAY_VERTEX]
+			_check(points.size() * 3 == system.positions.size(), file + ": original suspended detritus point count")
+			for index in range(points.size()):
+				_check(points[index] == Vector3(system.positions[index * 3], system.positions[index * 3 + 1], system.positions[index * 3 + 2]),
+					file + ": original suspended detritus initial Float32 coordinates")
 		var terrain: MeshInstance3D = scene.get_node("SourceMesh_0")
 		var arrays: Array = terrain.mesh.surface_get_arrays(0)
 		var expected := PackedVector3Array()
@@ -163,10 +208,13 @@ func _run() -> void:
 				parameters.from.origin += parameters.motion
 			_check(supported, file + ": player floor support segment=%d width=%f rise=%f length=%f" % [tunnel_index, tunnel.hw, tunnel.fy2 - tunnel.fy1, Vector2(tunnel.x2 - tunnel.x1, tunnel.z2 - tunnel.z1).length()])
 		worlds += 1
+		verified[path] = true
 		scene.queue_free()
 		await get_tree().process_frame
 		print("WORLD_CHECKED ", file.get_basename())
 	_check(worlds > 0, "At least one native world was verified")
+	for path: String in required:
+		_check(verified.has(path), "Required original seasonal world was verified: " + path)
 	if failures.is_empty():
 		print("WORLD_TEST_PASS worlds=", worlds, " checks=", checks, " max_ground_error_m=", maximum_error)
 	else:
@@ -178,4 +226,90 @@ func _interior_point(segment: Dictionary) -> Vector2:
 	var b := Vector2(segment.x2, segment.z2)
 	var direction := (b - a).normalized()
 	return a.lerp(b, 0.371) + Vector2(direction.y, -direction.x) * segment.hw * 0.173
+
+func _verify_mesh(file: String, node: GeometryInstance3D, source: Dictionary, marine_sources: Array) -> void:
+	_check(node != null, file + ": captured mesh exists in its static or moving hierarchy")
+	if node == null:
+		return
+	_check(node.get_meta("source_water", false) == source.get("water", false), file + ": original water/swamp mesh identity")
+	_check(node.get_meta("source_tide_water", false) == source.get("tideWater", false), file + ": only original main and ring water meshes follow tide")
+	if source.get("water", false):
+		_check(node.get_meta("source_marine_frame", []) == source.marineFrame, file + ": original water/reflection geometry frame preserved")
+		_check(node.get_meta("source_marine_receive_shadow", false) == source.receiveShadow, file + ": original water shadow-receiver flag preserved")
+	_check(node.visible == bool(source.visible), file + ": original captured mesh visibility")
+	if source.has("outlineUniforms"):
+		var frame := preload("res://tests/quaternion_suite.gd").frame(source.outlineFrame)
+		_check(node.transform.is_equal_approx(frame), file + ": outline retains its original local-to-world or motion-parent frame")
+		_check(node.get_meta("isOutline", false) and node.get_meta("source_outline_uniforms", {}) == source.outlineUniforms,
+			file + ": original world shell uniforms survive packing without world-space rebaking")
+		_check(node.get_meta("source_outline_frustum_culled", true) == source.frustumCulled,
+			file + ": original world shell culling policy survives packing")
+	_check((node is MultiMeshInstance3D) == source.has("instances"), file + ": original ordinary/instanced mesh kind")
+	var mesh: Mesh
+	if node is MultiMeshInstance3D:
+		var batch: MultiMesh = node.multimesh
+		mesh = batch.mesh
+		_check(batch.instance_count == source.instances.size(), file + ": original instance count")
+		for index in range(batch.instance_count):
+			var expected := preload("res://tests/quaternion_suite.gd").frame(source.instances[index])
+			_check(batch.get_instance_transform(index).is_equal_approx(expected), file + ": original instance frame in its captured parent")
+			if source.has("instanceColors"):
+				var color := batch.get_instance_color(index)
+				var rgb: Array = source.instanceColors[index]
+				_check(maxf(absf(color.r - float(rgb[0])), maxf(absf(color.g - float(rgb[1])), absf(color.b - float(rgb[2])))) < 0.004,
+					file + ": original instance color")
+	elif node is MeshInstance3D:
+		mesh = node.mesh
+	else:
+		_check(false, file + ": unsupported captured geometry node")
+		return
+	var vertices := PackedVector3Array()
+	_check(mesh.get_meta("source_custom_attributes", {}) == source.get("attributes", {}), file + ": original surface/card/land/wind attributes preserved")
+	if source.has("celGeometry"):
+		_check(mesh.get_meta("source_cel_geometry", {}) == source.celGeometry, file + ": original cel local vertices/normals and model frame survive world baking")
+	for offset in range(0, source.positions.size(), 3):
+		vertices.append(Vector3(source.positions[offset], source.positions[offset + 1], source.positions[offset + 2]))
+	var surfaces: Array = source.get("surfaces", [source])
+	_check(mesh.get_surface_count() == surfaces.size(), file + ": original material groups/draw ranges")
+	for surface in range(mesh.get_surface_count()):
+		var arrays := mesh.surface_get_arrays(surface)
+		if not surfaces[surface].get("vertexColors", false):
+			_check(arrays[Mesh.ARRAY_COLOR] == null or arrays[Mesh.ARRAY_COLOR].is_empty(), file + ": source-disabled vertex colours cannot multiply native instance colours")
+		var material: Material = node.get_active_material(surface) if node is MeshInstance3D else mesh.surface_get_material(surface)
+		if surfaces[surface].has("cel"):
+			_check(material != null and SourceCelData.material_source(material) == surfaces[surface].cel,
+				file + ": original material cel definitions and typed uniforms preserved")
+		if surfaces[surface].has("marine"):
+			_check(material != null and material.get_meta("source_marine", {}) == surfaces[surface].marine,
+				file + ": original resolved per-material marine/reflection uniforms preserved")
+			var program: ShaderInclude = material.get_meta("source_marine_program") if material != null else null
+			_check(program != null and program.code == marine_sources[int(surfaces[surface].marine.program)],
+				file + ": original marine material retains its shared native shader include")
+			_check(material is ShaderMaterial and material.render_priority == int(source.get("renderOrder", 0)),
+				file + ": original water/reflection material uses native shader and source render order")
+		_check(arrays[Mesh.ARRAY_VERTEX] == vertices, file + ": original surface vertices preserved")
+		if source.has("seaFade"):
+			var expected := PackedFloat32Array()
+			var origins: Array = source.get("reflectionOrigins", [])
+			for vertex in range(vertices.size()):
+				for axis in range(3):
+					expected.append(origins[vertex * 3 + axis] if not origins.is_empty() else 0.0)
+				expected.append(source.seaFade[vertex])
+			_check(arrays[Mesh.ARRAY_CUSTOM0] == expected, file + ": original full-precision reflection origins and per-vertex wave fade preserved")
+			_check(arrays[Mesh.ARRAY_CUSTOM1] == PackedFloat32Array(source.marinePositions),
+				file + ": original local water vertices retained before world baking for shader placement and normals")
+		var indices := PackedInt32Array()
+		var triangles: Array = surfaces[surface].index
+		for offset in range(0, triangles.size(), 3):
+			indices.append_array(PackedInt32Array([int(triangles[offset]), int(triangles[offset + 2]), int(triangles[offset + 1])]))
+		_check(arrays[Mesh.ARRAY_INDEX] == indices, file + ": original reflected/source winding converted")
+		if not source.colors.is_empty() and surfaces[surface].get("vertexColors", false):
+			var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+			var components := int(source.get("colorSize", 3))
+			var error := 0.0
+			for offset in range(0, source.colors.size(), components):
+				var color := colors[offset / components]
+				for channel in range(components):
+					error = maxf(error, absf(color[channel] - float(source.colors[offset + channel])))
+			_check(error <= 1.0 / 255.0 + 0.000001, file + ": original RGB/RGBA surface colors within native precision")
 

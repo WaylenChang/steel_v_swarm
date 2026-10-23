@@ -212,7 +212,7 @@ static func deaths(h: Node, item: Dictionary) -> void:
 			owner.hp = 50
 			owner.shield = 0
 			first.shield = 0
-			owner.cast_state = {"start": 9.0, "duration": 2.0, "definition": Content.ability("t05", "def"), "point": Vector3.ZERO}
+			owner.cast_state = {"start": 9.0, "duration": 2.0, "definition": Content.ability("t05", "def"), "point": Vector3.ZERO, "level": 1}
 			simulation.damage(enemy, first, {"type": "gun"}, 1, false, {}, false)
 	compare_roster(h, simulation, owner.clone_ids, item.clones, "Original clone kill and donor removal")
 	h._check(owner.position.distance_to(vector(item.owner.position)) < 0.0001, "Original lethal clone transfer bypasses horizontal collision")

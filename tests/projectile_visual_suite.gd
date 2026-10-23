@@ -11,7 +11,8 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		model.configure(fixture.key)
 		models[fixture.key] = model
 		var graph: Dictionary = Content.read_json("res://data/projectiles/%s.json" % fixture.key)
-		h._check(model.nodes.size() == fixture.nodes.size(), "Original projectile graph excludes only unsupported outline shells")
+		h._check(model.nodes.size() == fixture.nodes.size(), "Deferred outline shells preserve original projectile animation IDs")
+		preload("res://tests/outline_suite.gd").check_deferred(h, model.source_root)
 		for spec: Dictionary in fixture.nodes:
 			var node: Node3D = model.nodes[int(spec.id)]
 			var expected := CockpitSuite.matrix(spec.matrix)

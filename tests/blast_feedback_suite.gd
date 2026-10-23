@@ -173,7 +173,7 @@ static func _authority(h: Node) -> void:
 
 static func _replica(h: Node) -> void:
 	var simulation := _context(h, false)
-	var pilot := _actor(simulation, h.multiplayer.get_unique_id())
+	var pilot := _actor(simulation, Session.player_id())
 	var initial := _resources(simulation)
 	var recoil := pilot.recoil.snapshot()
 	recoil.pitch = .1

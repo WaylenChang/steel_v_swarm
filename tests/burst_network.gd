@@ -50,13 +50,13 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	if simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null or pilot.cockpit == null:
 		return
 	var count := int(Content.weapon(pilot.character, "light").burst.count)
 	client_echo_seen = client_echo_seen or (pilot.cockpit.accepted_serial == 2 and pilot.cockpit.weapons.last_serial == count * 2)
 	if first_seen and second_seen and authority_echo_seen and client_echo_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_BURST_PASS accepted=true echoes=true slot_capture=true duplicate_rejection=true next_shot=true single_spending=true private_pose=true")
 		Session.stop()
 		get_tree().quit()
@@ -65,7 +65,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null or pilot.cockpit == null:
 		return
 	for event: Dictionary in state.events:

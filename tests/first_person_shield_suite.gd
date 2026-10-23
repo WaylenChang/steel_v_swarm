@@ -52,6 +52,17 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 				step.get("cast"), float(step.get("duration", 0)))
 			_state(h, shield, step.result)
 		shield.free()
+		if item.character == fixtures.firstPersonShieldGeometry[0].character and not item.steps.is_empty():
+			var owned := _create(h, item.character)
+			if owned != null:
+				var step: Dictionary = item.steps[0]
+				var now := float(step.get("now", 10))
+				var expanded := float(item.expanded) > now
+				owned.hit(1.8)
+				owned.advance(float(step.delta), now, item.mode, item.defending, item.shield, item.dead,
+					-INF if expanded else INF, step.get("cast"), float(step.get("duration", 0)), expanded)
+				_state(h, owned, step.result)
+				owned.free()
 	var retarget := _create(h, fixtures.firstPersonShieldGeometry[0].character)
 	if retarget != null:
 		retarget.hit(2.5)
@@ -96,7 +107,7 @@ static func _state(h: Node, shield: FirstPersonShield, reference: Dictionary) ->
 	h._check(shield.source_root.visible == reference.visible and shield.character == reference.character,
 		"Original FPV/TPS, defending, dead and defense-cast visibility")
 	for key: String in ["time", "flash", "hasPattern"]:
-		var parameter := {"time": "uTime", "flash": "uFlash", "hasPattern": "uHasPattern"}[key]
+		var parameter: String = {"time": "uTime", "flash": "uFlash", "hasPattern": "uHasPattern"}[key]
 		h._near(float(shield.material.get_shader_parameter(parameter)), float(reference[key]), "Original camera shield independent clock/flash: " + key)
 	Points._point(h, shield.material.get_shader_parameter("uColor"), reference.color, "Original character shield linear colour")
 	Points._point(h, shield.material.get_shader_parameter("uAccent"), reference.accent, "Original character shield linear accent")
@@ -128,4 +139,22 @@ static func _production(h: Node, character: String) -> void:
 	h._check(int(hurt.count) == 1, "A new private view resets the observed vital baseline")
 	h._check(resources == [owner.hp, owner.shield, owner.power, owner.ammo, simulation.rng.state, simulation.projectile_rng.state],
 		"Camera shield/hurt presentation cannot settle damage or consume authority resources/RNG")
+	if owner.first_person_shield != null:
+		owner.first_person_shield.update_view(owner, .016, 5000, "fpv", {"defending": true, "expanded": true})
+		h._check(owner.first_person_shield.source_root.visible and not owner.defending,
+			"Immediate owned stance can show the camera shield without rewriting authority defense")
+		h._near(owner.first_person_shield.source_root.scale.x, Content.balance.bodyRules.shield.expand,
+			"Owned expansion uses the caller's wall-clock decision independently of authority/presentation clock offsets")
+		h._check(resources == [owner.hp, owner.shield, owner.power, owner.ammo, simulation.rng.state, simulation.projectile_rng.state],
+			"Owned shield display cannot spend or restore authority resources")
+		simulation.owned_defense = true
+		simulation.present_victim_snapshot(owner, {"hp": 700, "shield": 120, "defending": false, "view_reset": 2})
+		owner.first_person_shield.material.set_shader_parameter("uFlash", 0)
+		simulation.present_victim_snapshot(owner, {"hp": 700, "shield": 110, "defending": false, "view_reset": 2})
+		h._check(int(hurt.count) == 1 and float(owner.first_person_shield.material.get_shader_parameter("uFlash")) > 0,
+			"Private shield-contact feedback uses the original local stance while published authority defense differs")
+		simulation.owned_defense = false
+		simulation.present_victim_snapshot(owner, {"hp": 700, "shield": 100, "defending": false, "view_reset": 2})
+		h._check(int(hurt.count) == 2 and not owner.defending,
+			"Clearing the owned stance restores private hurt feedback without changing authority defense")
 	simulation.free()

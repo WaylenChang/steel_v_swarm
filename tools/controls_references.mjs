@@ -1,8 +1,22 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { localCastReferences } from './local_cast_references.mjs';
+import { abilityTargetReferences } from './ability_target_references.mjs';
+import { localFeedbackReferences } from './local_feedback_references.mjs';
+import { localDefenseReferences } from './local_defense_references.mjs';
+import { localStatusReferences } from './local_status_references.mjs';
+import { controlEffectReferences } from './control_effect_references.mjs';
+import { statusIconReferences } from './status_icon_references.mjs';
 
 // Capture executed input methods and unmodified fire/recoil blocks from the source client.
 export async function controlsReferences(d, gameSource, source) {
+	const localCast=await localCastReferences(source,d);
+	const abilityTarget=await abilityTargetReferences(source);
+	const localFeedback=await localFeedbackReferences(source);
+	const localDefense=await localDefenseReferences(source);
+	const localStatus=await localStatusReferences(source);
+	const controlEffects=await controlEffectReferences(source,d);
+	const statusIcons=await statusIconReferences(source);
   const {grabMethod}=await import(pathToFileURL(join(source,'tools/audit_src.mjs')).href);
   const text=gameSource.replace(/\r\n/g,'\n');
   let clock=10, preferences={};
@@ -25,6 +39,7 @@ export async function controlsReferences(d, gameSource, source) {
     wheelCooldown:number(/_lastWheelAimAt < ([\d.]+)/,'wheel aim throttle'),
     numpadLookSpeed:number(/const LOOK_SPEED = ([\d.]+)/,'numpad look speed'),
     holdSlots:[d.abilHoldSlot(false),d.abilHoldSlot(true)],
+    weaponHud:{minimumSeconds:number(/reloadMax: Math.max\(([\d.]+)/,'weapon HUD reload denominator')},
     recoil:{traumaDecay:number(/trauma - dt \* ([\d.]+)/,'trauma decay',decayBody),
       shakeAngle:number(/const shP = .*?\* n \* ([\d.]+)/,'pitch shake',decayBody),
       shakeRoll:number(/const shR = .*?\* n \* ([\d.]+)/,'roll shake',decayBody),
@@ -68,7 +83,7 @@ export async function controlsReferences(d, gameSource, source) {
   };
   const primary=recoilBlock(fireSource),echoBody=recoilBlock(grabMethod(text,'_burstEchoSelf'));
   const burstBody=segment(fireSource,'    if (prof.burst && !def.fan)', '    if (st.ammo <= 0)');
-  const makeBlock=body=>new Function(...Object.keys(scope),`return function(def,id,dir,now,dt){const prof=def?.recoil||{};${body}}`)(...Object.values(scope));
+  const makeBlock=body=>new Function(...Object.keys(scope),`return function(def,id,dir,now,dt){const prof=def?.recoil||{};\n${body}\n}`)(...Object.values(scope));
   const kick=makeBlock(burstBody+primary),echoKick=makeBlock(echoBody);
   const decay=makeBlock(decayBody+'\nthis.view=[this.recoil.p+shP,this.recoil.y+shY,shR];');
   const gateBody=segment(fireSource,'    if ((this._settleUntil[id] || 0) > now)', '    this.lastFireAt[id] = now;');
@@ -123,5 +138,9 @@ export async function controlsReferences(d, gameSource, source) {
     }
     recoilGates.push({definition,steps});
   }
-  return {rules,fixtures:{controlsLook,controlsMoving,controlsNumpad,controlsStance,recoilSequences,recoilGates}};
+  rules.casting=localCast.timing;
+  rules.localFeedback=localFeedback.rules;
+  rules.controlEffects=controlEffects.rules;
+  rules.statusIcons=statusIcons.rules;
+  return {rules,fixtures:{controlsLook,controlsMoving,controlsNumpad,controlsStance,recoilSequences,recoilGates,localCast:localCast.fixtures,abilityTarget:abilityTarget.points,abilityAim:abilityTarget.rays,localFeedback:localFeedback.mixed,localDefense:localDefense.programs,localDefenseDeadlines:localDefense.deadlines,localStatus,controlEffectSteps:controlEffects.steps,controlEffectCurves:controlEffects.curves,statusIcons:statusIcons.fixtures,statusIconRender:statusIcons.rendered}};
 }

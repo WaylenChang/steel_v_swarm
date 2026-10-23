@@ -24,6 +24,7 @@ var flash_rng := RandomNumberGenerator.new()
 var muzzle_cache: Dictionary = {}
 var current_cache := 0
 var authority_pose: Dictionary = {}
+var client_weapons: ClientWeaponDefinitions
 
 func configure(pilot: String) -> void:
 	character = pilot
@@ -44,8 +45,12 @@ func configure(pilot: String) -> void:
 	cock_ground = nodes.get(int(profile.nodes.cockGround))
 	cock_air = nodes.get(int(profile.nodes.cockAir))
 	flash.visible = false
+	if not SourceOutlineBinding.install(source_root):
+		source_root.hide()
 
 func _collect(node: Node3D) -> void:
+	if node.get_meta("source_outline_helper", false):
+		return
 	nodes[int(String(node.name).trim_prefix("n_"))] = node
 	for child: Node3D in node.get_children():
 		_collect(child)
@@ -97,7 +102,7 @@ func update_view(unit: BattleUnit, slot: String, aiming: bool, delta: float, sim
 	if not authority_pose.is_empty() and authority_pose.get("visual_serial", authority_pose.serial) == weapons.last_serial and authority_pose.slot == slot and authority_pose.clock <= simulation_clock:
 		kick = maxf(0, authority_pose.kick - (simulation_clock - authority_pose.clock) * Content.balance.cockpitRules.kickDecay)
 	var level := unit.combat_level(slot)
-	var definition := Content.weapon(unit.character, slot, level)
+	var definition := client_weapons.own_weapon(unit.character, slot, unit.combat_level("light"), unit.combat_level("heavy")) if client_weapons != null else Content.local_weapon(unit.character, slot, level)
 	var reload := Vector3.ZERO
 	if unit.reload_at.has(slot):
 		var progress := 1 - maxf(0, float(unit.reload_at[slot]) - simulation_clock) / maxf(0.001, definition.reload)
@@ -123,7 +128,7 @@ func fire_feedback(event: Dictionary) -> void:
 	if _mark_fire(maxi(int(event.serial), weapons.last_serial + 1), event.slot, event.clock):
 		accepted_serial = int(event.serial)
 		if event.has("level"):
-			var definition := Content.weapon(character, event.slot, float(event.level))
+			var definition: Dictionary = client_weapons.own[event.slot] if client_weapons != null and client_weapons.own.has(event.slot) else Content.local_weapon(character, event.slot, float(event.level))
 			bursts.schedule(definition, event.clock, {"slot": event.slot, "definition": definition})
 
 func _mark_fire(serial: int, slot: String, at: float) -> bool:

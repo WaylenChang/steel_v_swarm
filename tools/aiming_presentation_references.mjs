@@ -8,9 +8,38 @@ export async function aimingPresentationReferences(d, gameSource, source) {
   const method = name => {
     const start = text.indexOf(`\n  ${name}(`), end = text.indexOf('\n  }\n', start);
     if (start < 0 || end < 0) throw new Error(`Missing aiming presentation seam: ${name}`);
-    return new Function(`return function ${text.slice(start + 1, end + 4).trimStart().slice(name.length)}`)();
+    return new Function('THREE','reachRule',`return function ${text.slice(start + 1, end + 4).trimStart().slice(name.length)}`)(THREE,d.reachRule);
   };
   const skillVictims = method('_skillVictims');
+  const updateGlows = method('_updateRangeGlows');
+  const entries=[1,2,3].map(id=>({id,mesh:new THREE.Group(),dimH:4,dimR:1,dimTop:6,lk:false}));
+  const material=new THREE.SpriteMaterial();
+  const glowContext={side:'STEEL',dead:false,shopOpen:false,ents:new Map(entries.map(entry=>[entry.id,entry])),
+    _curWeapon:()=>({def:d.heroWeapon('t01','light',1)}),_rgMaterial:()=>material,
+    _shotVictims:()=>glowContext.shot,_skillVictims:()=>glowContext.skills,_isCasting:()=>glowContext.casting};
+  const footprintGlowStates=[];
+  const glowFrames=[
+    {hits:[1,2,3],locked:[1],anchor:3,skills:[1,2,3],casting:true},
+    {hits:[1,2,3],locked:[2],anchor:0,skills:[1,2,3],casting:true},
+    {hits:[1,2,3],locked:[1,2,3],anchor:0,skills:[1,3],casting:true},
+    {hits:[1,2,3],locked:[],anchor:1,skills:[1,3],casting:true},
+    {hits:null,locked:[],anchor:0,skills:[1,2],casting:true},
+    {hits:[1,2,3],locked:[3],anchor:2,skills:[],casting:false},
+    {hits:null,locked:[],anchor:0,skills:[],casting:false},
+  ];
+  for(const frame of glowFrames) {
+    for(const entry of entries) entry.lk=frame.locked.includes(entry.id);
+    glowContext._lockId=frame.anchor;
+    glowContext.shot=frame.hits?{hits:frame.hits.map(id=>entries[id-1]),warn:false}:null;
+    glowContext.skills=frame.skills.map(id=>entries[id-1]);
+    glowContext.casting=frame.casting;
+    glowContext._lastCastA=frame.casting?{A:{},x:0,z:0}:null;
+    updateGlows.call(glowContext);
+    footprintGlowStates.push({...frame,weapon:entries.filter(entry=>entry._rgGlow).map(entry=>entry.id),
+      skill:entries.filter(entry=>entry._rgGlowS).map(entry=>entry.id)});
+  }
+  for(const entry of entries) for(const child of [...entry.mesh.children]) entry.mesh.remove(child);
+  material.dispose();
   const tolerance = /const r = A.range \+ ([\d.]+)/.exec(skillVictims.toString());
   const skillStyle = /if \(skill\)[\s\S]*?color: (0x[\da-f]+),[\s\S]*?opacity: ([\d.]+)/.exec(text.slice(text.indexOf('\n  _rgMaterial(')));
   const skillSize = /Math.max\(([\d.]+), Math.max\(h, r \* 2\) \* ([\d.]+)\)/.exec(text.slice(text.indexOf('const skillHits =')));
@@ -85,10 +114,8 @@ export async function aimingPresentationReferences(d, gameSource, source) {
           radius } });
     }
   }
-  const warningStart = text.indexOf("    } else if (ev.e === 'lock') {");
-  const warningEnd = text.indexOf('    } else if', warningStart + 1);
-  if (warningStart < 0 || warningEnd < 0) throw new Error('Missing source incoming-lock HUD seam');
-  const warningBody = text.slice(warningStart + "    } else if (ev.e === 'lock') {".length, warningEnd);
+  const {grabBlock}=await import(pathToFileURL(join(source,'tools/audit_src.mjs')).href);
+  const warningBody=grabBlock(text,"} else if (ev.e === 'lock')").slice(1,-1);
   const warnEvent = new Function('ev', 'performance', 'LOCK', warningBody);
   const visibleExpression = /this\.hud\.locked\?\.\(([^;]+)\);/.exec(text)?.[1];
   if (!visibleExpression) throw new Error('Missing source lock warning deadline seam');
@@ -107,5 +134,5 @@ export async function aimingPresentationReferences(d, gameSource, source) {
   }
   return { rules: { skillRangeTolerance: Number(tolerance[1]), lockRing,
     skillGlow: { color: Number(skillStyle[1]), opacity: Number(skillStyle[2]), minimumSize: Number(skillSize[1]), sizeFactor: Number(skillSize[2]) } },
-    fixtures: { skillFootprints, lockGlowPoses, lockWarnings } };
+    fixtures: { skillFootprints, lockGlowPoses, lockWarnings, footprintGlowStates } };
 }

@@ -178,6 +178,12 @@ export async function botReferences(d, BattleSim, config, makeRng, source) {
     }
   }
   const botHeavy = [];
+  // FNF report settlement now requires the player's squad even when unlocked.
+  // Capture its initial lock state through the source initializer, outside the
+  // counted combat RNG stream used by each fixture.
+  const lockSeed = new BattleSim(config);
+  lockSeed.addHero('STEEL','lock-fixture','t01');
+  const initialLock = lockSeed.squads.get('lock-fixture');
   for (const ch of Object.keys(d.CHARACTERS)) for (let level = 1; level <= 4; level++) {
     const definition = d.heroWeapon(ch, 'heavy', level);
     const mode = ['launcher', 'missile'].includes(definition.type) ? 'burst' : definition.type === 'plasma' ? 'fan' : null;
@@ -192,6 +198,7 @@ export async function botReferences(d, BattleSim, config, makeRng, source) {
       if (gate === 'empty') h.ammo.heavy = 0;
       if (gate === 'duplicate') h.fireAt.heavy = 10;
       const sim = context([h, t]); sim.t = 10; sim.curWeatherDyn = null;
+      sim.squads.set(h.pid,{side:h.side,lock:initialLock.lock,lockAt:initialLock.lockAt});
       sim._weatherAccuracyPenalty = () => 0; sim._ridgeBlocked = () => false; sim._slabSep = () => false;
       const hits = []; sim._damage = (victim, amount) => hits.push({ target: victim.id, amount });
       const before = input(h), target = input(t);

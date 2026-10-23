@@ -30,8 +30,8 @@ func capture_snapshot(state: Dictionary, now: float) -> void:
 		return
 	var status: Dictionary = state.get("status", {})
 	report = {"position": point, "yaw": float(state.yaw), "altitude": float(state.get("hero_y", NAN)),
-		"shield": float(state.shield), "dead": float(state.hp) <= 0, "defending": bool(state.get("defending", false)),
-		"expanded": float(status.get("shield_expand_until", 0)) > now}
+		"shield": float(state.shield), "dead": bool(state.get("dead", float(state.hp) <= 0)), "defending": bool(state.get("defending", false)),
+		"expanded": bool(state.get("shield_expanded", float(status.get("shield_expand_until", 0)) > now))}
 
 func accept(event: Dictionary, received_at: float, caster: Vector3, is_self: bool, authoritative_echo: bool = false) -> bool:
 	if event.get("hero_report", false):

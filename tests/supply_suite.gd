@@ -180,6 +180,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		if not view.entries.has(1):
 			h._check(false, "Pack original airdrop scenes before final visual verification")
 			continue
+		preload("res://tests/outline_suite.gd").check_deferred(h, view.entries[1].root)
 		for step: Dictionary in item.steps:
 			view.clock = float(step.now) - float(step.delta)
 			view._process(step.delta)

@@ -1,0 +1,85 @@
+shader_type spatial;
+render_mode blend_mix, ambient_light_disabled, specular_disabled, __MARINE_RENDER_MODES__;
+__MARINE_DEFINES__
+#include "__MARINE_PROGRAM__"
+
+uniform vec3 uNativeBaseColor;
+uniform float uNativeOpacity;
+uniform vec3 uNativeEmission;
+uniform bool uNativeVertexColors;
+uniform bool uNativeUseTexture;
+uniform bool uNativeReceiveShadow;
+uniform sampler2D uNativeTexture : __MARINE_SAMPLER__;
+uniform mat4 uNativeSourceFrame;
+uniform mat3 uNativeSourceNormal;
+uniform vec3 uNativeHemiSky;
+uniform vec3 uNativeHemiGround;
+uniform vec3 uNativeKeyDirection;
+
+varying vec3 nativeWorldPosition;
+varying float nativeWaveFade;
+varying vec4 nativeDiffuse;
+varying vec3 nativeIndirect;
+varying vec3 nativeViewPosition;
+varying vec3 nativeKeyDirection;
+varying vec3 nativeAmbientFinish;
+
+void vertex() {
+  vec3 sourcePosition = CUSTOM1.xyz;
+  mat4 sourceModel = MODEL_MATRIX * uNativeSourceFrame;
+  NORMAL = normalize(uNativeSourceNormal * celMarineNormal(sourcePosition, sourceModel, CUSTOM0.w));
+  #ifdef CEL_REFL
+  celMarineReflection(sourcePosition, CUSTOM0.xyz, CAMERA_POSITION_WORLD, CUSTOM0.w);
+  #endif
+  celMarineDisplace(sourcePosition, sourceModel, CUSTOM0.w);
+  VERTEX = (uNativeSourceFrame * vec4(sourcePosition, 1.0)).xyz;
+  nativeWorldPosition = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+  nativeWaveFade = CUSTOM0.w;
+}
+
+vec4 nativeFinish(vec4 surface, vec3 directDiffuse, vec3 indirectDiffuse, vec3 viewPosition,
+  vec3 normal, mat4 viewMatrix, vec3 keyDirection, vec3 keyColor) {
+  vec3 outgoing = celMarineLightFinish(directDiffuse + indirectDiffuse + uNativeEmission,
+    surface, uNativeBaseColor, directDiffuse, indirectDiffuse, uNativeEmission,
+    nativeWorldPosition, viewPosition, normal, viewMatrix, keyDirection, keyColor);
+  vec4 result = vec4(outgoing, surface.a);
+  celMarineFinish(result, nativeWorldPosition, nativeWaveFade, viewPosition, normal, keyDirection);
+  return result;
+}
+
+void fragment() {
+  NORMAL = normalize(NORMAL);
+  #ifdef NATIVE_MARINE_DOUBLE_SIDE
+  NORMAL *= FRONT_FACING ? 1.0 : -1.0;
+  #endif
+  #ifdef NATIVE_MARINE_BACK_SIDE
+  NORMAL = -NORMAL;
+  #endif
+  nativeDiffuse = vec4(uNativeBaseColor, uNativeOpacity);
+  if (uNativeUseTexture) nativeDiffuse *= texture(uNativeTexture, UV);
+  if (uNativeVertexColors) nativeDiffuse *= COLOR;
+  celMarineWash(nativeDiffuse, nativeWorldPosition);
+  vec3 worldNormal = normalize((vec4(NORMAL, 0.0) * VIEW_MATRIX).xyz);
+  nativeIndirect = nativeDiffuse.rgb * mix(uNativeHemiGround, uNativeHemiSky, worldNormal.y * 0.5 + 0.5) / PI;
+  nativeViewPosition = -VERTEX;
+  nativeKeyDirection = normalize((VIEW_MATRIX * vec4(uNativeKeyDirection, 0.0)).xyz);
+  vec4 ambient = nativeFinish(nativeDiffuse, vec3(0.0), nativeIndirect, nativeViewPosition, NORMAL, VIEW_MATRIX, nativeKeyDirection, uNativeKeyColor);
+  nativeAmbientFinish = ambient.rgb;
+  ALBEDO = vec3(1.0);
+  SPECULAR = 0.0;
+  ROUGHNESS = 1.0;
+  EMISSION = ambient.rgb;
+  ALPHA = ambient.a;
+}
+
+void light() {
+  if (LIGHT_IS_DIRECTIONAL) {
+    float visibility = uNativeReceiveShadow ? ATTENUATION : 1.0;
+    vec3 directDiffuse = nativeDiffuse.rgb * getGradientIrradiance(NORMAL, LIGHT)
+      * (LIGHT_COLOR / PI) * visibility / PI;
+    vec4 lit = nativeFinish(nativeDiffuse, directDiffuse, nativeIndirect, nativeViewPosition, NORMAL, VIEW_MATRIX, nativeKeyDirection, LIGHT_COLOR / PI);
+    // Applying the nonlinear source finish after combined light retains white foam in shadow.
+    // The source environment owns one directional light; hemisphere light lives in EMISSION.
+    DIFFUSE_LIGHT += lit.rgb - nativeAmbientFinish;
+  }
+}

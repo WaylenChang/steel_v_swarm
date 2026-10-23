@@ -9,6 +9,7 @@ var scheme_select: OptionButton
 var view_select: OptionButton
 var gyro_status: Label
 var mode_status: Label
+var power_switch: CheckButton
 
 func configure(settings: ControlPreferences, sensor: NativeGyro) -> void:
 	preferences = settings
@@ -58,7 +59,13 @@ func configure(settings: ControlPreferences, sensor: NativeGyro) -> void:
 	gyro_status = NativeUi.label("")
 	gyro_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(gyro_status)
+	if preferences.rules.has("lowPower"):
+		power_switch = CheckButton.new()
+		power_switch.text = preferences.rules.lowPower.label
+		power_switch.toggled.connect(preferences.set_low_power)
+		add_child(power_switch)
 	preferences.changed.connect(_sync)
+	preferences.power_changed.connect(_sync)
 	preferences.view_changed.connect(func(_value): _sync())
 	gyro.status_changed.connect(func(_key): _sync())
 	Session.lobby_changed.connect(_sync)
@@ -105,10 +112,12 @@ func _select(control: OptionButton, value: String) -> void:
 			return
 
 func _sync() -> void:
+	if power_switch != null:
+		power_switch.set_pressed_no_signal(preferences.low_power())
 	if view_select != null:
 		_select(view_select, preferences.view_pref)
 	_select(mode_select, preferences.mode())
-	mode_select.disabled = Session.active and not Session.multiplayer.is_server()
+	mode_select.disabled = Session.active and (not Session.is_room_host() or Session.reconnecting or Session.leaving)
 	var mode := preferences.mode()
 	mode_status.text = Content.label("control_room" if not preferences.room.is_empty() else "control_default")
 	if mode != preferences.rules.defaultMode and mode != preferences.detected_scheme():

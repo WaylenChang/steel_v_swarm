@@ -29,7 +29,7 @@ func _physics_process(delta: float) -> void:
 					simulation.set_physics_process(false)
 		return
 	super._physics_process(delta)
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	if fixture_stage in [0, 2] and pilot.alive():
@@ -79,7 +79,7 @@ func _physics_process(delta: float) -> void:
 		if pilot.presentation_camera_owned or pilot.camera.top_level or not death_sequence.state.is_empty():
 			_fail("Completed cinematic did not release its camera on transported respawn")
 			return
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_DEATH_PASS snapshots=true ground=true earlyRespawn=true air=true climax=true ownership=true ownerVelocity=true countdown=true resources=true")
 		Session.stop()
 		get_tree().quit()

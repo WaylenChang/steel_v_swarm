@@ -91,7 +91,7 @@ static func _gates(h: Node, fixtures: Array, constructor_draws: int) -> void:
 			for key: String in step.values:
 				values[key] = _number(step.values[key])
 			unit.character = "t01" if values.get("isSelf", false) else ""
-			unit.peer_id = h.multiplayer.get_unique_id() if values.get("isSelf", false) else 0
+			unit.peer_id = Session.player_id() if values.get("isSelf", false) else 0
 			unit.special = {"neutral": values.get("neutral", false), "collapsed": values.get("collapsed", false),
 				"role": "civilian" if values.get("civ", false) else ""}
 			unit.present_damage_fx({"hp": values.hp, "max_hp": values.max, "dead": values.dead}, effects)

@@ -51,7 +51,7 @@ func _physics_process(delta: float) -> void:
 		return
 	super._physics_process(delta)
 	if levels_seen.has(19) and levels_seen.has(20) and death_seen and respawn_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_SUPER_PASS source=true roster=true scales=true buy=true penalty=true respawn=true")
 		Session.stop()
 		get_tree().quit()
@@ -61,7 +61,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null or not Session.config.get("super", false):
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	if Session.roster.size() != 3 or Session.roster.filter(func(player): return not player.bot).size() != 1 or pilot.side != "SUPER" or not state.stats.has("SUPER"):

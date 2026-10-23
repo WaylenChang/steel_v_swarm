@@ -9,6 +9,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 Content="*res://scripts/content.gd"
 Controls="*res://scripts/control_preferences.gd"
+Visuals="*res://scripts/visual_preferences.gd"
 Session="*res://scripts/session.gd"
 
 [display]

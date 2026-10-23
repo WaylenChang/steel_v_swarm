@@ -1,6 +1,49 @@
 class_name CampRules
 extends RefCounted
 
+static func clears_building_instance(frame: Transform3D, camps: Array) -> bool:
+	var x := frame.basis.x
+	var z := frame.basis.z
+	var sx := sqrt(float(x.x) * float(x.x) + float(x.y) * float(x.y) + float(x.z) * float(x.z))
+	if sx == 0:
+		return false
+	var sz := sqrt(float(z.x) * float(z.x) + float(z.y) * float(z.y) + float(z.z) * float(z.z))
+	var footprint := sqrt(sx * sx + sz * sz) / 2 * float(Content.balance.structure.instanceClearanceFactor)
+	for camp: Dictionary in camps:
+		var dx := float(frame.origin.x) - float(camp.x)
+		var dz := float(frame.origin.z) + float(camp.z)
+		if sqrt(dx * dx + dz * dz) - footprint < float(Content.constants.THIRD.BLD_CLEAR_R):
+			return true
+	return false
+
+static func cleared_buildings(records: Array, camps: Array) -> Dictionary:
+	var removed := {}
+	for record: Dictionary in records:
+		var bounds: Dictionary = record.bounds
+		var width := float(bounds.w)
+		var depth := float(bounds.d)
+		var reach := float(Content.constants.THIRD.BLD_CLEAR_R) + sqrt(width * width + depth * depth) / 2
+		for camp: Dictionary in camps:
+			var dx := float(bounds.x) - float(camp.x)
+			var dz := float(bounds.z) + float(camp.z)
+			if sqrt(dx * dx + dz * dz) < reach:
+				removed[record.key] = true
+				break
+	return removed
+
+static func removes_blocker(blocker: Dictionary, camps: Array, buildings: Dictionary) -> bool:
+	var building: String = blocker.get("buildingKey", "")
+	if buildings.has(building):
+		return true
+	if not blocker.get("bld", false) or not building.is_empty() or blocker.get("osm", false):
+		return false
+	for camp: Dictionary in camps:
+		var dx := float(blocker.x) - float(camp.x)
+		var dz := float(blocker.z) + float(camp.z)
+		if sqrt(dx * dx + dz * dz) - float(blocker.get("r", 0)) < float(Content.constants.THIRD.BLD_CLEAR_R):
+			return true
+	return false
+
 static func clearance(obstacles: Array, camps: Array) -> Dictionary:
 	var groups := {}
 	for obstacle: Dictionary in obstacles:

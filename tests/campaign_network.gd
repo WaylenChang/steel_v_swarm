@@ -10,6 +10,7 @@ var roster_seen := false
 var floor_seen := false
 var dialogue_seen := false
 var stages_seen := false
+var floor_tower := 0
 
 func _physics_process(delta: float) -> void:
 	elapsed += delta
@@ -39,6 +40,7 @@ func _physics_process(delta: float) -> void:
 				get_tree().quit(1)
 				return
 			fixture_ready_at = elapsed
+			_tower_identity.rpc_id(Session.seats.transport_for(fixture_pilot.peer_id), fixture_tower.entity_id)
 		simulation.clock += delta
 		if not boss_settled and elapsed - fixture_ready_at > 1.0:
 			boss_settled = true
@@ -50,7 +52,7 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	dialogue_seen = dialogue_seen or campaign_dialogue.at > 0 and campaign_dialogue.total > 0 and campaign_dialogue.bar != null
 	if roster_seen and floor_seen and dialogue_seen and stages_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_CAMPAIGN_PASS roster=true map=true stages=true floor=true boss=true radio=true source=true")
 		Session.stop()
 		get_tree().quit()
@@ -60,12 +62,12 @@ func _receive_state(state: Dictionary) -> void:
 	if Session.dedicated or simulation == null or not Session.config.has("campaign"):
 		return
 	var selection: Dictionary = Session.config.campaign
-	var expected := CampaignRules.roster(int(selection.index), selection.side, selection.pilot, multiplayer.get_unique_id())
+	var expected := CampaignRules.roster(int(selection.index), selection.side, selection.pilot, Session.player_id())
 	var current: Array = []
 	for unit: Dictionary in state.units:
 		if not unit.character.is_empty() and unit.special.get("role") != "clone":
 			current.append({"peer": int(unit.peer), "side": unit.side, "character": unit.character, "bot": unit.bot})
-		if unit.kind == "tower" and int(unit.special.get("siege_stage", -1)) == 0 and float(unit.hp) == 1:
+		if int(unit.id) == floor_tower and float(unit.hp) == 1:
 			floor_seen = true
 	if current.size() == expected.size():
 		for player: Dictionary in expected:
@@ -76,3 +78,7 @@ func _receive_state(state: Dictionary) -> void:
 		roster_seen = true
 	var stage_state: Dictionary = state.get("siege", {})
 	stages_seen = stages_seen or stage_state.get("enabled", false) and stage_state.get("defender") == "SWARM" and campaign_dialogue.track_label.visible
+
+@rpc("authority", "call_remote", "reliable")
+func _tower_identity(id: int) -> void:
+	floor_tower = id

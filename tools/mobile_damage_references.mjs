@@ -1,5 +1,5 @@
 // Original mobile damage owns all expected tint, local-scar, cap and release results.
-export function captureMobileDamage({THREE,sceneDamage,graphOf,disposeTree}) {
+export function captureMobileDamage({THREE,toon,sceneDamage,graphOf,disposeTree}) {
   const mobileDamageGeometry=[];
   for(const kind of ['robot','soldier','decoy','unknown'])for(const indexed of [false,true]) {
     const root=new THREE.Group();root.position.set(12,20,-9);root.rotation.y=.4;
@@ -10,11 +10,16 @@ export function captureMobileDamage({THREE,sceneDamage,graphOf,disposeTree}) {
     const nodes=[];
     for(let index=0;index<26;index++) {
       let material=index===5?transparent:index===6?[opaque]:index===9?[opaque,transparent,opaque,opaque,transparent,opaque]:opaque;
-      const node=index===7?new THREE.SkinnedMesh(geometry,material):index===8?new THREE.InstancedMesh(geometry,material,3):new THREE.Mesh(geometry,material);
+      let node=index===7?new THREE.SkinnedMesh(geometry,material):index===8?new THREE.InstancedMesh(geometry,material,3):new THREE.Mesh(geometry,material);
+      if(index===2) {
+        const owner=toon.outlinify(node);
+        const shell=owner.children.find(child=>child.userData.isOutline);
+        if(!shell)throw new Error('Original mobile-damage outline exclusion fixture has no source shell');
+        owner.remove(shell);node=shell;
+      }
       node.name='part'+index;
       node.position.set(Math.fround(index*.37),Math.fround(index*.11),Math.fround(-index*.21));
       if(index===1)node.userData.noPaint=true;
-      if(index===2)node.userData.isOutline=true;
       if(index===3)node.userData.teamRing=true;
       if(index===4)node.userData.weatherScorch=true;
       if(node.isInstancedMesh)for(let slot=0;slot<3;slot++)node.setMatrixAt(slot,new THREE.Matrix4().makeTranslation(slot*2,slot*.5,0));

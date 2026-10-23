@@ -62,14 +62,14 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	if simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null or pilot.cockpit == null:
 		return
 	if selected_slot == "heavy" and pilot.camera.fov == Content.constants.UNITS[pilot.kind].zoomFov:
 		var rig := pilot.cockpit
 		zoom_seen = rig.gun.get_children().all(func(child): return child == rig.flash or not child.visible)
 	if death_seen and not pilot.cockpit.visible and light_seen and heavy_seen and reload_seen and pose_seen and zoom_seen and authority_pose_seen and authority_muzzle_seen and physical_muzzle_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_COCKPIT_PASS feedback=true reload=true pose=true zoom=true death=true authority_pose=true authority_muzzle=true physical_muzzle=true")
 		Input.action_release("aim")
 		Session.stop()
@@ -79,7 +79,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null or pilot.cockpit == null:
 		return
 	var authority_pose: Dictionary = state.weapon_pose

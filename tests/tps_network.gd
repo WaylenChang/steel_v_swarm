@@ -30,7 +30,7 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	if simulation == null or not view_ready:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null or pilot.body == null or pilot.body.source_root == null:
 		return
 	if phase == 0 and pilot.view_mode == "tps":
@@ -73,7 +73,7 @@ func _physics_process(delta: float) -> void:
 		if aiming or player_view.mode != "tps":
 			_fail("An older snapshot must not undo immediate empty-heavy restoration")
 			return
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_TPS_PASS body=true ring=true heading=true modes=true muzzle=true empty_heavy=true stale_snapshot=true resources=true")
 		Session.stop()
 		get_tree().quit()

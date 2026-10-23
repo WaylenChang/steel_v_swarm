@@ -11,6 +11,34 @@ export async function movementReferences(d, source, gameSource) {
     return new Function(...Object.keys(scope),`return function ${text.slice(start+1,end+4).trimStart().slice(name.length)}`)(...Object.values(scope));
   };
   const stepLift=method('_stepLift'),chargeJump=method('_chargeJump'),morphLaunch=method('_morphLaunch');
+  const unbalanced=method('_unbalanced'),sinkHit=method('_airSinkHit');
+  const flightContext=state=>({_flying:()=>state.flying,dead:state.dead,isDrone:state.drone,_altAG:state.altitude,
+    _unbalAltThreshold:()=>d.unbalAltThreshold(state.wind),_airSink:state.sink,_airSinkV:state.sink_speed,
+    _liftLockUntil:state.lock_until,unbalLeft:state.unbalance_left,defending:state.defending,sp:state.shield,
+    env:{getWeatherDynamics:()=>({wind:state.wind})}});
+  const movementUnbalance=[];
+  for(const flying of [false,true]) for(const dead of [false,true]) for(const drone of [false,true])
+    for(const wind of [0,75,87.5,100,150]) for(const altitude of [0,d.unbalAltThreshold(wind)-.00001,d.unbalAltThreshold(wind),d.unbalAltThreshold(wind)+.00001])
+      for(const [sink,lock_until,unbalance_left] of [[0,10,0],[1,10,0],[0,10.00001,0],[0,9,1],[1,11,1]]) {
+        const state={flying,dead,drone,wind,altitude,sink,sink_speed:2,lock_until,unbalance_left,defending:false,shield:0};
+        const ctx={...flightContext(state),lift:25,pos:{y:altitude},_env:{code:0},_liftMax:d.liftMax,
+          _liftBaseY:()=>null,_ceilY:()=>500,_unbalanced:unbalanced,hud:{feed(){}}};
+        const result=unbalanced.call(ctx,10),target={y:0};
+        stepLift.call(ctx,.1,10,target,d.UNITS[drone?'drone':'morph']);
+        movementUnbalance.push({state,now:10,result,lift:ctx.lift});
+      }
+  const movementSinkHits=[];
+  for(const flying of [false,true]) for(const drone of [false,true]) for(const wind of [0,80,100])
+    for(const altitude of [0,d.unbalAltThreshold(wind)-.00001,d.unbalAltThreshold(wind),100])
+      for(const defending of [false,true]) for(const shield of [0,1]) {
+        const state={flying,dead:false,drone,wind,altitude,sink:3,sink_speed:7,lock_until:10.2,unbalance_left:0,defending,shield};
+        const ctx=flightContext(state),steps=[];
+        for(const [damage,now] of [[-1,10],[0,10.1],[1,10.2],[100,10.3],[500,10.4]]) {
+          sinkHit.call(ctx,damage,now);
+          steps.push({damage,now,result:{sink:ctx._airSink,speed:ctx._airSinkV,lock_until:ctx._liftLockUntil}});
+        }
+        movementSinkHits.push({state,steps});
+      }
   const movementCosts=[];
   for(const charge of [-1,0,.001,.35,.45,.5,.999,1,2]) for(const morph of [false,true]) {
     movementCosts.push({charge,morph,result:morph?d.morphLiftCost(charge):d.cjumpLiftCost(charge)});
@@ -52,5 +80,5 @@ export async function movementReferences(d, source, gameSource) {
         position:ctx.pos.toArray(),flying:!!ctx.flight,low_gravity:!!ctx._lowG,iframes});
     }
   }
-  return {movementCosts,movementSink,movementLift,movementLaunch};
+  return {movementCosts,movementSink,movementLift,movementLaunch,movementUnbalance,movementSinkHits};
 }

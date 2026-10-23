@@ -48,6 +48,9 @@ func configure(key: String, phase: Callable = Callable()) -> bool:
 	visual_random.randomize()
 	for index in range(materials.size()):
 		if materials[index] is ShaderMaterial:
+			var curve := Content.local_view_curve()
+			materials[index].set_shader_parameter("curve_knee", curve.knee)
+			materials[index].set_shader_parameter("curve_inverse_radius", curve.inverse)
 			var sample: float = phase.call(index) if phase.is_valid() else float(visual_random.randi()) / 4294967296.0
 			materials[index].set_shader_parameter("uTime", sample * float(Content.balance.bodyRules.shield.timeWindow))
 	# Allocate before filling: emitter entries and morph shield state share identity.
@@ -82,9 +85,11 @@ func configure(key: String, phase: Callable = Callable()) -> bool:
 		morph.air = forms.air
 		if forms.ground.get("shield") != null and forms.air.get("shield") != null:
 			forms.air.shield.state = forms.ground.shield.state
-	return true
+	return SourceOutlineBinding.install(source_root)
 
 func _collect(node: Node3D) -> void:
+	if node.get_meta("source_outline_helper", false):
+		return
 	var id := int(String(node.name).trim_prefix("n_"))
 	nodes[id] = node
 	node.set_meta("source_id", id)

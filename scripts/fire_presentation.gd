@@ -26,6 +26,7 @@ func sync(states: Array, now: float, weather: Dictionary) -> void:
 				node.rotation_order = EULER_ORDER_XYZ
 				if node is MeshInstance3D:
 					node.mesh = node.mesh.duplicate(true)
+			SourceOutlineBinding.install(visual)
 			entries[id] = {"root": visual, "nodes": nodes, "fx": Content.balance.hazard_visuals[key].fx}
 		var root: Node3D = entries[id].root
 		root.position = state.position

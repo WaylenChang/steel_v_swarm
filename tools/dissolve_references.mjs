@@ -1,8 +1,8 @@
 // Capture source shader functions and the original material/ghost lifecycle offline.
 export function captureDissolve({THREE,d,toon,BattleClient,sceneDamage,mapBuilding,disposeTree}) {
   if(d.DISSOLVE.FAR_M>0)throw new Error('Distance dissolve requires source DOF integration before enabling it');
-  const sample=new THREE.MeshStandardMaterial();toon.applyCelPatch(sample,{dissolve:true});
-  const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};
+  const sample=toon.toonMat(0xffffff,{dissolve:true});
+  const shader={uniforms:{},vertexShader:THREE.ShaderLib.toon.vertexShader,fragmentShader:THREE.ShaderLib.toon.fragmentShader};
   sample.onBeforeCompile(shader);
   const take=name=>{
     const start=shader.fragmentShader.indexOf(name),brace=shader.fragmentShader.indexOf('{',start);
@@ -19,7 +19,7 @@ export function captureDissolve({THREE,d,toon,BattleClient,sceneDamage,mapBuildi
   const materialCases=[];
   for(const instanced of [false,true])for(const shared of [false,true])for(const grouped of [false,true]) {
     const root=new THREE.Group();root.position.set(12,20,-9);root.rotation.set(.13,.21,-.17);root.scale.set(-1.2,1.7,.9);
-    const opaque=new THREE.MeshStandardMaterial({color:0x8090a0});toon.applyCelPatch(opaque,{dissolve:true});
+    const opaque=toon.toonMat(0x8090a0,{dissolve:true});
     const plain=new THREE.MeshBasicMaterial({color:0x304050});
     const transparent=new THREE.MeshBasicMaterial({color:0xb06030,transparent:true,opacity:.35});
     const materials=[opaque,plain,transparent,shared?opaque:toon.cloneVisualMaterial(opaque)];
@@ -49,7 +49,7 @@ export function captureDissolve({THREE,d,toon,BattleClient,sceneDamage,mapBuildi
       // Non-neutral known profiles use the shared flatten effect, captured separately.
       if(!neutral&&sceneDamage.sceneDamageProfile(kind))continue;
       const scene=new THREE.Scene(),root=new THREE.Group();root.position.set(12,20,-9);root.visible=visible;scene.add(root);
-      const surface=new THREE.MeshStandardMaterial({color:0x8090a0});if(enabled)toon.applyCelPatch(surface,{dissolve:true});
+      const surface=enabled?toon.toonMat(0x8090a0,{dissolve:true}):new THREE.MeshStandardMaterial({color:0x8090a0});
       const mesh=new THREE.Mesh(new THREE.BoxGeometry(2,6,2),surface);root.add(mesh);
       const outline=new THREE.Mesh(mesh.geometry,new THREE.MeshBasicMaterial());outline.userData.isOutline=true;root.add(outline);
       const ent={id:42,kind,mesh:root,neutral,collapsed,dmgFx:new THREE.Group()};root.add(ent.dmgFx);

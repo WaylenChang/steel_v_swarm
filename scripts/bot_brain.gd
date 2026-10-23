@@ -44,10 +44,10 @@ func op(kind: String) -> bool:
 	return true
 
 func light_weapon() -> Dictionary:
-	return Content.weapon(unit.character, "light", unit.combat_level("light"))
+	return simulation.weapon_definition(unit.character, "light", unit.combat_level("light"))
 
 func heavy_weapon() -> Dictionary:
-	return Content.weapon(unit.character, "heavy", unit.combat_level("heavy"))
+	return simulation.weapon_definition(unit.character, "heavy", unit.combat_level("heavy"))
 
 func heavy_ready(definition: Dictionary = {}) -> bool:
 	if not difficulty.heavy:
@@ -104,7 +104,7 @@ func control_factor() -> float:
 	return factor * (0.5 if unit.has_status("confuse_until", simulation.clock) else 1.0)
 
 func speed(direction: Vector2 = Vector2.ZERO) -> float:
-	var value: float = Content.heroes[unit.character].flySpeed if flying() else Content.heroes[unit.character].speed
+	var value := simulation.hero_speed(unit.character, flying())
 	value *= control_factor() * (1 - float(Content.constants.HIGH_SUP.SPEED) * simulation._suppression(unit))
 	if enraged():
 		value *= float(Content.constants.BOSS.ENRAGE_SPD_F)
@@ -136,7 +136,7 @@ func resolve_role() -> void:
 	if not difficulty.tactic or role_character == unit.character:
 		return
 	role_character = unit.character
-	var profile: Dictionary = Content.balance.bot.profiles[role_character]
+	var profile := simulation.bot_profile(role_character)
 	role = profile.role
 	tactics = profile.tactic
 
@@ -245,7 +245,7 @@ func fire(target: BattleUnit, slot: String, mode: String = "direct") -> bool:
 func ready(slot: String) -> Dictionary:
 	if not unit.cast_state.is_empty() or unit.has_status("cast_lock_until", simulation.clock) or float(unit.cooldowns.get(slot, 0)) > simulation.clock:
 		return {}
-	var definition := Content.ability(unit.character, slot, unit.combat_level(slot))
+	var definition := simulation.ability_definition(unit.character, slot, unit.combat_level(slot))
 	return definition if unit.power >= float(definition.mp) else {}
 
 func cast_support(fraction: float) -> void:
@@ -503,7 +503,7 @@ func update(delta: float) -> void:
 				can_buy = can_buy or unit.money >= float(step.price) and unit.score >= float(step.score)
 	if (can_buy or not unit.special.get("boss", false) and unit.money >= float(Content.constants.CREEP_UPG.PRICE)) and op("buy"):
 		var bought := false
-		var order: Array = Content.balance.bot.profiles[unit.character].buy if not role.is_empty() else Content.constants.BOT_BUY_ORDER
+		var order: Array = simulation.bot_profile(unit.character).buy if not role.is_empty() else Content.constants.BOT_BUY_ORDER
 		for item: String in order:
 			if not difficulty.ability and item in ["def", "atk"]:
 				continue

@@ -46,7 +46,7 @@ func _physics_process(delta: float) -> void:
 		return
 	super._physics_process(delta)
 	if missile_snapshot_seen and missile_event_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_MISSILE_PASS snapshot=true nativeGeometry=true interception=true")
 		Session.stop()
 		get_tree().quit()
@@ -55,7 +55,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	var states: Array = state.get("missiles", [])

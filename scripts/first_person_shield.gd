@@ -36,6 +36,9 @@ func set_character(pilot: String) -> bool:
 	var root := (load(path) as PackedScene).instantiate() as Node3D
 	var materials: Array = root.get_meta("source_materials")
 	var next_material := materials[int(profiles[pilot].material)] as ShaderMaterial
+	var curve := Content.local_view_curve()
+	next_material.set_shader_parameter("curve_knee", curve.knee)
+	next_material.set_shader_parameter("curve_inverse_radius", curve.inverse)
 	if source_root != null:
 		root.transform = source_root.transform
 		root.visible = source_root.visible
@@ -53,16 +56,19 @@ func hit(strength: float) -> void:
 		ShieldPresentation.hit(material, strength)
 
 func advance(delta: float, now: float, view_mode: String, defending: bool, shield: float, dead: bool,
-		expanded_until: float, cast: Variant = null, cast_duration: float = 0) -> void:
+		expanded_until: float, cast: Variant = null, cast_duration: float = 0, expanded_override: Variant = null) -> void:
 	if source_root == null:
 		return
-	source_root.scale.x = float(Content.balance.bodyRules.shield.expand) if expanded_until > now else 1.0
+	var expanded := expanded_until > now
+	if expanded_override is bool:
+		expanded = expanded_override
+	source_root.scale.x = float(Content.balance.bodyRules.shield.expand) if expanded else 1.0
 	source_root.visible = view_mode == "fpv" and defending and shield > 0 and not dead
 	ShieldPresentation.step(material, delta)
 	if cast is Dictionary and cast.get("slot") == "def" and now >= float(cast.t0) and now - float(cast.t0) < cast_duration:
 		source_root.visible = view_mode == "fpv" and not dead
 
-func update_view(unit: BattleUnit, delta: float, now: float, view_mode: String) -> void:
+func update_view(unit: BattleUnit, delta: float, now: float, view_mode: String, owned: Dictionary = {}) -> void:
 	set_character(unit.character)
 	if source_root == null:
 		return
@@ -70,5 +76,5 @@ func update_view(unit: BattleUnit, delta: float, now: float, view_mode: String) 
 	var duration := 0.0
 	if unit.body != null:
 		duration = float(unit.body.forms.get(unit.body.form, {}).get("combat", {}).get("clips", {}).get("def", {}).get("duration", 0))
-	advance(delta, now, view_mode, unit.defending, unit.shield, not unit.alive(),
-		float(unit.status.get("shield_expand_until", 0)), cast, duration)
+	advance(delta, now, view_mode, bool(owned.get("defending", unit.defending)), unit.shield, not unit.alive(),
+		float(unit.status.get("shield_expand_until", 0)), cast, duration, owned.get("expanded"))

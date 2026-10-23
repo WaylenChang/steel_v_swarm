@@ -6,6 +6,23 @@ static func armor_multiplier(armor: float, penetration: float = 0.0) -> float:
 	var effective := maxf(0.0, armor - penetration)
 	return 1.0 - effective / (effective + Content.constants.VITALS.AR_K)
 
+static func weapon_cycle(definition: Dictionary) -> float:
+	var rate: float = definition.rate if definition.rate else Content.constants.RATE_DEF
+	return float(definition.mag) / rate + float(definition.reload)
+
+static func weapon_dps(definition: Dictionary, damage: float = NAN) -> float:
+	return (float(definition.dmg) if is_nan(damage) else damage) * float(definition.mag) / weapon_cycle(definition)
+
+static func strike_area(definition: Dictionary) -> float:
+	match definition.area:
+		"blast": return PI * pow(maxf(0, float(definition.r)) * float(Content.constants.BLAST.EDGE), 2)
+		"fan": return deg_to_rad(float(definition.arc) if definition.arc else 15.0) * float(definition.range) * float(definition.range)
+		"line": return 2.0 * float(definition.lanceRadius) * float(definition.range)
+	return float(Content.balance.balancePreferences.definitions.singleStrikeArea)
+
+static func zone_area(definition: Dictionary) -> float:
+	return float(definition.range) * 2.0 * sqrt(strike_area(definition) / PI)
+
 static func shield_split(definition: Dictionary, damage: float, shield: float) -> Dictionary:
 	var shield_multiplier: float = definition.get("vsSp", 1.0)
 	var hp_multiplier: float = definition.get("vsHp", 1.0)

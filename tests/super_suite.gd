@@ -164,6 +164,8 @@ static func room_lifecycle(h: Node) -> void:
 		var session := SessionScript.new()
 		h.add_child(session)
 		session.active = true
+		session.seats.add(1, 1, "test-super-host", "SUPER", "player", "s09")
+		session.seats.set_ready(1, true)
 		session.config = {"super": true, "team_size": size}
 		session.roster = [{"peer": 1, "side": "SUPER", "character": "s09", "bot": false}]
 		session.start_battle()

@@ -6,8 +6,18 @@ class LaunchSimulation extends BattleSimulation:
 		requests += 1
 		return true
 
+class BalanceSimulation extends BattleSimulation:
+	var balance: Dictionary = {}
+	func flight_balance_state(_unit: BattleUnit) -> Dictionary:
+		return balance
+
+class SinkSimulation extends BattleSimulation:
+	var altitude := 0.0
+	func _missile_target_altitude(_unit: BattleUnit) -> float:
+		return altitude
+
 static func run(h: Node, fixtures: Dictionary) -> void:
-	for key: String in ["movementCosts", "movementSink", "movementLift", "movementLaunch"]:
+	for key: String in ["movementCosts", "movementSink", "movementLift", "movementLaunch", "movementUnbalance", "movementSinkHits"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original movement references before final verification: " + key)
 			return
@@ -15,6 +25,51 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._near(MovementRules.jump_cost(item.charge, item.morph), item.result, "Original proportional, rounded and bounded jump cost")
 	for item: Dictionary in fixtures.movementSink:
 		h._near(MovementRules.sink_distance(item.damage, item.wind), item.result, "Original damage-proportional altitude loss and wind factor")
+	var balance_simulation := BalanceSimulation.new()
+	var balance_unit := BattleUnit.new()
+	for item: Dictionary in fixtures.movementUnbalance:
+		h._check(MovementRules.flight_unbalanced(item.state, item.now) == item.result,
+			"Original flight-unbalance predicate honors death, non-flight, low-drone exemption, weather threshold and strict lock deadline")
+		balance_simulation.balance = item.state
+		balance_simulation.clock = item.now
+		balance_simulation.weather_dynamics = {"wind": item.state.wind}
+		balance_unit.kind = "drone" if item.state.drone else "morph"
+		balance_unit.lift = 25
+		balance_unit.wet = 0
+		balance_unit._step_lift(balance_simulation, 0, .1)
+		h._near(balance_unit.lift, item.lift, "Native flight power consumes the original complete unbalance predicate, including low-drone recovery")
+	balance_unit.free()
+	balance_simulation.free()
+	for item: Dictionary in fixtures.movementSinkHits:
+		var state: Dictionary = item.state.duplicate(true)
+		var sink_simulation := SinkSimulation.new()
+		sink_simulation.altitude = state.altitude
+		sink_simulation.weather_dynamics = {"wind": state.wind}
+		var sink_unit := BattleUnit.new()
+		sink_unit.character = "fixture"
+		sink_unit.kind = "drone" if state.drone else "morph"
+		sink_unit.flying = state.flying
+		sink_unit.hp = 100
+		sink_unit.shield = state.shield
+		sink_unit.defending = state.defending
+		sink_unit.air_sink = state.sink
+		sink_unit.air_sink_speed = state.sink_speed
+		sink_unit.lift_lock_until = state.lock_until
+		for step: Dictionary in item.steps:
+			var actual := MovementRules.sink_hit(state, step.damage, step.now)
+			sink_simulation.clock = step.now
+			sink_simulation._record_air_sink(sink_unit, step.damage)
+			for key: String in step.result:
+				h._near(actual[key], step.result[key], "Original successive hit sink/velocity/defensive lock accumulation: " + key)
+			h._near(sink_unit.air_sink, step.result.sink, "Authority damage uses the original accumulated sink distance")
+			h._near(sink_unit.air_sink_speed, step.result.speed, "Authority damage resets pending sink speed after each accepted loss")
+			h._near(sink_unit.lift_lock_until, step.result.lock_until, "Authority damage preserves stronger existing locks and shield-depletion ordering")
+			h._check(sink_unit.hp == 100 and sink_unit.shield == state.shield, "Flight reaction cannot settle or duplicate health and shield loss")
+			state.sink = actual.sink
+			state.sink_speed = actual.speed
+			state.lock_until = actual.lock_until
+		sink_unit.free()
+		sink_simulation.free()
 	var frames := 0
 	for item: Dictionary in fixtures.movementLift:
 		var lift: float = item.initial

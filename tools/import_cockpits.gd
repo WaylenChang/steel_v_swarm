@@ -1,5 +1,10 @@
 extends Node
 
+const ResourcePublisher = preload("res://tools/source_resource_publisher.gd")
+
+var source_textures := SourceTextureImages.new()
+var cel_data: SourceCelData
+
 func _ready() -> void:
 	_import.call_deferred()
 
@@ -22,14 +27,32 @@ func _import() -> void:
 		if not first_person_shields and not weapon_effects and not npc_effects and not civilians and not bodies and not projectiles and not companions and not hazards and not loot and not selection.is_empty() and character not in selection:
 			continue
 		var data: Dictionary = Content.read_json("res://data/%s/%s.json" % [folder, character])
+		if DisplayServer.get_name() == "headless" and data.nodes.any(func(spec): return spec.has("instances") and not spec.instances.is_empty()):
+			push_error("Native MultiMesh packing requires a real rendering driver: " + character)
+			get_tree().quit(1)
+			return
+		if not source_textures.configure(data.get("textureImages", [])) or not _prepare_textures(data):
+			get_tree().quit(1)
+			return
 		var textures: Array[ImageTexture] = []
-		for encoded: String in data.textures:
-			var image := Image.new()
-			if image.load_png_from_buffer(Marshalls.base64_to_raw(encoded)) != OK:
-				push_error("Invalid source cockpit texture: " + character)
+		cel_data = SourceCelData.new()
+		if not cel_data.configure(data, source_textures):
+			get_tree().quit(1)
+			return
+		for index in range(data.textures.size()):
+			var image: Image
+			if index < source_textures.images.size():
+				image = source_textures.images[index].duplicate()
+			else:
+				image = Image.new()
+				if image.load_png_from_buffer(Marshalls.base64_to_raw(data.textures[index])) != OK:
+					push_error("Invalid source cockpit texture: " + character)
+					get_tree().quit(1)
+					return
+			if not image.get_meta("source_manual_mipmaps", false) and image.generate_mipmaps() != OK:
+				push_error("Cannot generate native source cockpit mipmaps: " + character)
 				get_tree().quit(1)
 				return
-			image.generate_mipmaps()
 			textures.append(ImageTexture.create_from_image(image))
 		var materials: Array[Material] = []
 		for spec: Dictionary in data.materials:
@@ -42,6 +65,10 @@ func _import() -> void:
 			var material := StandardMaterial3D.new()
 			material.resource_local_to_scene = bodies
 			material.set_meta("source_material_id", materials.size())
+			if spec.has("cel"):
+				if not cel_data.attach(material, spec.cel):
+					get_tree().quit(1)
+					return
 			material.albedo_color = Color.hex((int(spec.color) << 8) | 0xff)
 			material.albedo_color.a = spec.opacity
 			material.set_meta("source_transparent", bool(spec.transparent))
@@ -50,6 +77,7 @@ func _import() -> void:
 			material.set_meta("source_opacity", spec.opacity)
 			material.set_meta("source_depth_write", bool(spec.depthWrite))
 			material.set_meta("source_emissive_intensity", spec.emissionIntensity)
+			material.vertex_color_use_as_albedo = bool(spec.get("vertexColors", false))
 			material.roughness = spec.roughness
 			material.metallic = spec.metalness
 			material.cull_mode = BaseMaterial3D.CULL_DISABLED if int(spec.side) == 2 else BaseMaterial3D.CULL_FRONT if int(spec.side) == 1 else BaseMaterial3D.CULL_BACK
@@ -61,7 +89,12 @@ func _import() -> void:
 				material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 			material.no_depth_test = not spec.depthTest
 			material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS if spec.depthWrite else BaseMaterial3D.DEPTH_DRAW_DISABLED
-			if int(spec.texture) >= 0:
+			if spec.has("sourceTexture"):
+				material.albedo_texture = source_textures.resolve(spec.sourceTexture)
+				if material.albedo_texture == null or not SourceTextureImages.apply_sampling(material, spec.sourceTexture):
+					get_tree().quit(1)
+					return
+			elif int(spec.texture) >= 0:
 				material.albedo_texture = textures[int(spec.texture)]
 			material.emission_energy_multiplier = spec.emissionIntensity
 			if int(spec.emission) != 0:
@@ -75,12 +108,21 @@ func _import() -> void:
 			node.rotation_order = {"XYZ": EULER_ORDER_XYZ, "XZY": EULER_ORDER_XZY, "YXZ": EULER_ORDER_YXZ,
 				"YZX": EULER_ORDER_YZX, "ZXY": EULER_ORDER_ZXY, "ZYX": EULER_ORDER_ZYX}[spec.get("rotationOrder", "XYZ")]
 			node.set_meta("source_name", spec.name)
+			if spec.has("helper"):
+				if spec.helper.get("type") != "SkeletonHelper" or bool(spec.visible) or spec.helper.get("visualizationAvailable", true):
+					push_error("Unsupported source rig-preview helper")
+					get_tree().quit(1)
+					return
+				node.set_meta("source_helper", spec.helper.duplicate(true))
 			if spec.has("effect"):
 				node.set_meta("source_effect", spec.effect)
 			if spec.has("trs"):
 				node.set_meta("source_trs", spec.trs)
 			for flag: String in spec.get("flags", {}):
 				node.set_meta(flag, bool(spec.flags[flag]))
+			if spec.has("outlineUniforms"):
+				node.set_meta("source_outline_uniforms", spec.outlineUniforms.duplicate(true))
+				node.set_meta("source_outline_frustum_culled", bool(spec.outlineFrustumCulled))
 			var m: Array = spec.matrix
 			node.transform = Transform3D(Basis(Vector3(m[0], m[1], m[2]), Vector3(m[4], m[5], m[6]), Vector3(m[8], m[9], m[10])), Vector3(m[12], m[13], m[14]))
 			node.visible = spec.visible
@@ -90,6 +132,9 @@ func _import() -> void:
 				node.owner = nodes[0]
 			if spec.has("mesh"):
 				var geometry := _mesh(data.meshes[int(spec.mesh)], spec.materials, data.materials, materials, spec.get("flags", {}).get("materialArray", false))
+				if geometry == null:
+					get_tree().quit(1)
+					return
 				node.set_meta("source_dissolve_slots", spec.materials.map(func(id): return bool(data.materials[int(id)].get("dissolve", false))))
 				geometry.set_meta("source_geometry_id", int(spec.mesh))
 				geometry.set_meta("source_indices", data.meshes[int(spec.mesh)].indices)
@@ -109,12 +154,16 @@ func _import() -> void:
 						if instances.use_colors:
 							var color: Array = spec.instanceColors[index]
 							instances.set_instance_color(index, Color(color[0], color[1], color[2]))
+					if instances.buffer.size() != instances.instance_count * (16 if instances.use_colors else 12):
+						push_error("Native renderer did not preserve the source MultiMesh buffer: " + character)
+						get_tree().quit(1)
+						return
 					node.multimesh = instances
 					if instances.use_colors:
 						for surface in range(geometry.get_surface_count()):
 							var material := geometry.surface_get_material(surface) as BaseMaterial3D
 							if material != null:
-							material.vertex_color_use_as_albedo = true
+								material.vertex_color_use_as_albedo = true
 				else:
 					var mesh_node := node as MeshInstance3D
 					mesh_node.mesh = geometry
@@ -124,10 +173,18 @@ func _import() -> void:
 							# Direct node references let PackedScene remap scene-local materials.
 							mesh_node.set_surface_override_material(surface, material)
 				(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if (civilians or bodies or companions or hazards or loot) and spec.get("castShadow", false) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if not _preserve_outline_shells(node, spec, data, materials):
+				get_tree().quit(1)
+				return
+		nodes[0].set_meta("source_cel_data", cel_data)
 		if bodies or first_person_shields:
 			nodes[0].set_meta("source_materials", materials)
 		var scene := PackedScene.new()
-		if scene.pack(nodes[0]) != OK or ResourceSaver.save(scene, "res://assets/%s/%s.scn" % [folder, character], ResourceSaver.FLAG_COMPRESS) != OK:
+		var packing_error := scene.pack(nodes[0])
+		if packing_error == OK:
+			packing_error = await ResourcePublisher.publish(scene, "res://assets/%s/%s.scn" % [folder, character], get_tree())
+		if packing_error != OK:
+			nodes[0].free()
 			push_error("Cannot pack source cockpit: " + character)
 			get_tree().quit(1)
 			return
@@ -135,6 +192,47 @@ func _import() -> void:
 		count += 1
 	print("FIRST_PERSON_SHIELD_IMPORT_PASS profiles=" if first_person_shields else "WEAPON_EFFECT_IMPORT_PASS profiles=" if weapon_effects else "NPC_EFFECT_IMPORT_PASS profiles=" if npc_effects else "CIVILIAN_PART_IMPORT_PASS profiles=" if civilians else "BODY_IMPORT_PASS profiles=" if bodies else "LOOT_IMPORT_PASS profiles=" if loot else "HAZARD_IMPORT_PASS profiles=" if hazards else "COMPANION_IMPORT_PASS profiles=" if companions else "PROJECTILE_IMPORT_PASS profiles=" if projectiles else "COCKPIT_IMPORT_PASS characters=", count)
 	get_tree().quit()
+
+func _prepare_textures(data: Dictionary) -> bool:
+	var domains := {}
+	for id in range(data.materials.size()):
+		var material: Dictionary = data.materials[id]
+		if not material.has("sourceTexture"):
+			continue
+		var texture: Dictionary = material.sourceTexture
+		var domain: Array = []
+		if (texture.wrapS == "clamp") != (texture.wrapT == "clamp"):
+			var channel := int(texture.get("channel", 0))
+			var key := "uv" if channel == 0 else "uv" + str(channel)
+			# Material switches can introduce a source material after the initial pose.
+			# Bound the complete captured graph's UV channel and retain shared bindings.
+			if not domains.has(key):
+				var combined: Array = []
+				for mesh: Dictionary in data.meshes:
+					combined.append_array(mesh.get(key, []))
+				domains[key] = combined
+			domain = domains[key]
+		material.sourceTexture = SourceTextureImages.prepare(texture, domain)
+		if material.sourceTexture.is_empty():
+			return false
+	return true
+
+func _preserve_outline_shells(node: Node3D, spec: Dictionary, data: Dictionary, materials: Array[Material]) -> bool:
+	var shells: Array = []
+	for outline: Dictionary in spec.get("outlines", []):
+		var geometry := _mesh(data.meshes[int(outline.mesh)], [int(outline.material)], data.materials, materials)
+		if geometry == null:
+			push_error("Cannot preserve original outline geometry")
+			return false
+		geometry.set_meta("source_geometry_id", int(outline.mesh))
+		shells.append({"geometry": geometry, "uniforms": outline.uniforms.duplicate(true),
+			"matrix": outline.matrix.duplicate(), "same_geometry": bool(outline.sameGeometry),
+			"geo_keep": bool(outline.geoKeep), "child_index": int(outline.childIndex),
+			"visible": bool(outline.visible), "frustum_culled": bool(outline.frustumCulled)})
+	if spec.has("outlines"):
+		# Deferred shell geometry is data, so it cannot alter authored rig node IDs.
+		node.set_meta("source_outline_shells", shells)
+	return true
 
 func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials: Array[Material], array_materials: bool = false) -> ArrayMesh:
 	var vertices := PackedVector3Array()
@@ -145,8 +243,12 @@ func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials
 		normals.append(Vector3(spec.normal[i], spec.normal[i + 1], spec.normal[i + 2]))
 	var colors := PackedColorArray()
 	var raw_colors: Array = spec.get("color", [])
-	for i in range(0, raw_colors.size(), 3):
-		colors.append(Color(raw_colors[i], raw_colors[i + 1], raw_colors[i + 2]))
+	var color_size := int(spec.get("colorSize", 3))
+	if color_size not in [3, 4] or raw_colors.size() % color_size != 0:
+		push_error("Invalid original model vertex colour layout")
+		return null
+	for i in range(0, raw_colors.size(), color_size):
+		colors.append(Color(raw_colors[i], raw_colors[i + 1], raw_colors[i + 2], raw_colors[i + 3] if color_size == 4 else 1.0))
 	var raw: Array = spec.indices
 	if raw.is_empty():
 		raw = range(vertices.size())
@@ -154,16 +256,30 @@ func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials
 	if groups.is_empty():
 		groups = [{"start": 0, "count": raw.size(), "materialIndex": 0}]
 	var mesh := ArrayMesh.new()
+	mesh.set_meta("source_custom_attributes", spec.get("attributes", {}))
 	for group: Dictionary in groups:
 		if array_materials and int(group.materialIndex) >= material_ids.size():
 			continue
 		var material_id := int(material_ids[0 if material_ids.size() == 1 else int(group.materialIndex)])
 		var desc: Dictionary = descriptions[material_id]
 		var uv := PackedVector2Array()
-		for i in range(0, spec.uv.size(), 2):
-			var x: float = spec.uv[i] * desc.repeat[0] + desc.offset[0]
-			var y: float = spec.uv[i + 1] * desc.repeat[1] + desc.offset[1]
-			uv.append(Vector2(x, 1 - y if desc.flipY else y))
+		if desc.has("sourceTexture"):
+			var channel := int(desc.sourceTexture.get("channel", 0))
+			var coordinates: Array = spec.get("uv" if channel == 0 else "uv" + str(channel), [])
+			if coordinates.size() != vertices.size() * 2:
+				push_error("Missing original model material UV channel")
+				return null
+			for i in range(0, coordinates.size(), 2):
+				var point := SourceTextureImages.coordinates(Vector2(coordinates[i], coordinates[i + 1]), desc.sourceTexture)
+				if not point.is_finite():
+					push_error("Non-finite original model texture coordinates")
+					return null
+				uv.append(point)
+		else:
+			for i in range(0, spec.uv.size(), 2):
+				var x: float = spec.uv[i] * desc.repeat[0] + desc.offset[0]
+				var y: float = spec.uv[i + 1] * desc.repeat[1] + desc.offset[1]
+				uv.append(Vector2(x, 1 - y if desc.flipY else y))
 		var indices := PackedInt32Array()
 		for i in range(int(group.start), int(group.start + group.count), 3):
 			# Preserve Three.js vertices/normals while reversing Godot's front-face winding.
@@ -176,9 +292,8 @@ func _mesh(spec: Dictionary, material_ids: Array, descriptions: Array, materials
 			arrays[Mesh.ARRAY_NORMAL] = normals
 		if uv.size() == vertices.size():
 			arrays[Mesh.ARRAY_TEX_UV] = uv
-		if colors.size() == vertices.size() and materials[material_id] is BaseMaterial3D:
+		if colors.size() == vertices.size() and desc.get("vertexColors", false):
 			arrays[Mesh.ARRAY_COLOR] = colors
-			(materials[material_id] as BaseMaterial3D).vertex_color_use_as_albedo = true
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, materials[material_id])
 	return mesh

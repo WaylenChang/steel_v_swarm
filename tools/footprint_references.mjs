@@ -41,6 +41,7 @@ export async function footprintReferences(d, gameSource, source) {
     ];
     if (area === 'fan') cases.push(
       { name: 'front screens rear same bins', targets: [row([0, 0, -20]), row([0, 0, -40])] },
+      { name: 'siege-locked front still screens rear bins', targets: [row([0, 0, -20], { kind: 'tower', locked: true, radius: 8 }), row([0, 0, -40])] },
       { name: 'stable angular side winners', targets: [row([-5, 0, -30]), row([5, 0, -30])] },
       { name: 'large body spans bins', targets: [row([0, 0, -30], { radius: 8 }), row([0, 0, -50])] },
       { name: 'equal-distance insertion order', targets: [row([0, 0, -30]), row([0, 0, -30])] },
@@ -48,6 +49,7 @@ export async function footprintReferences(d, gameSource, source) {
       { name: 'downward fan bands', origin: [0, 20, 0], forward: [0, -.35, -Math.sqrt(1 - .35 ** 2)], targets: [row([0, 8, -30])] });
     if (area === 'line') cases.push(
       { name: 'front and rear budgets', targets: [row([0, 0, -20]), row([0, 0, -40])] },
+      { name: 'siege-locked front still spends penetration budget', targets: [row([0, 0, -20], { kind: 'tower', locked: true, radius: 20 }), row([0, 0, -40])] },
       { name: 'large front exhausts each zone', targets: [row([0, 0, -20], { radius: 20 }), row([0, 0, -40])] },
       { name: 'out-of-range blocker consumes before honest gate', targets: [row([0, 0, -20], { radius: 20, rangeFactor: .01 }), row([0, 0, -40])] },
       { name: 'obstructed blocker consumes before clearance gate', targets: [row([0, 0, -20], { radius: 20, cut: 0 }), row([0, 0, -40])] },
@@ -78,7 +80,7 @@ export async function footprintReferences(d, gameSource, source) {
         visible: target.visible !== false, self: !!target.self, dead: !!target.dead, garrison: !!target.garrison,
         ally: !!target.ally, foe: !target.ally && !target.neutral }));
       const ents = entries.map(t => ({ id: t.id, kind: t.kind, side: t.ally ? 'STEEL' : 'SWARM',
-        neutral: !!t.neutral, isSelf: t.self, dead: t.dead, gar: t.garrison,
+        neutral: !!t.neutral, isSelf: t.self, dead: t.dead, gar: t.garrison, lk: !!t.locked,
         dimTop: t.top, dimH: t.height, hr: t.radius, reach: t.reach,
         mesh: { position: V(t.position), visible: t.visible } }));
       for (const ent of ents) entries[ent.id - 1].penetration_cost = d.lancePenCost(ent);

@@ -47,6 +47,8 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		session.battle_started.connect(func(config, roster): emitted.append({"config": config.duplicate(true), "roster": roster.duplicate(true)}))
 		session.config = settings
 		session.active = true
+		session.seats.add(1, 1, "test-campaign-host", input.side, "player", input.pilot)
+		session.seats.set_ready(1, true)
 		session.roster = [{"peer": 1, "side": input.side, "character": input.pilot, "bot": false}]
 		session.start_battle()
 		h._check(emitted.size() == 1, "Shared native room lifecycle starts a campaign once")

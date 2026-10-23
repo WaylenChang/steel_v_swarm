@@ -4,7 +4,27 @@ const Helper = preload("res://tests/status_suite.gd")
 const ControlsTests = preload("res://tests/controls_suite.gd")
 
 static func run(h: Node, fixtures: Dictionary) -> void:
-	for key: String in ["mobileDevice", "mobilePreferences", "mobileTouchPreferences", "mobileModes", "touchPrograms", "gyroPrograms", "mobileFlight"]:
+	if not Content.balance.mobile.has("kindPresentation"):
+		h._check(false, "Regenerate original spectator/player touch button presentation")
+		return
+	var kind_preferences := ControlPreferences.new()
+	kind_preferences.persist = false
+	kind_preferences.configure(Content.balance.mobile)
+	var kind_controls := NativeTouchControls.new()
+	h.add_child(kind_controls)
+	kind_controls.configure(kind_preferences)
+	for kind: String in ["", "mech", "drone", "morph", "robot", ""]:
+		kind_controls.set_kind(kind if not kind.is_empty() else "mech")
+		kind_controls.set_spectating(kind.is_empty())
+		var expected: Dictionary = Content.balance.mobile.kindPresentation[kind]
+		h._check(kind_controls.buttons.jump.text == expected.jump and kind_controls.buttons.special.text == expected.special and kind_controls.buttons.swap.text == expected.swap,
+			"Original observer rise/view/follow labels and restored player controls")
+		for action: String in expected.hidden:
+			h._check(kind_controls.buttons[action].visible == (not expected.hidden[action]), "Original observer/player button visibility: " + action)
+		h._check(kind_controls.buttons.swap.disabled == (not kind.is_empty()), "Only observer target cycling enables the implemented swap path")
+	kind_controls.free()
+	kind_preferences.free()
+	for key: String in ["mobileDevice", "mobilePreferences", "mobileTouchPreferences", "mobileModes", "mobilePower", "touchMirrors", "touchRotations", "touchPrograms", "gyroPrograms", "mobileFlight"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original mobile/control oracle: " + key)
 			return
@@ -12,6 +32,78 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._check(ControlPreferences.device_scheme(item.touch, item.coarse, item.noHover, Vector2(item.width, item.height)) == item.result, "Original touch/hybrid/coarse/screen-size device selection")
 	for item: Dictionary in fixtures.mobilePreferences:
 		h._check(ControlPreferences.source_bool(item.value) == item.result, "Original strict boolean preference normalization")
+	for item: Dictionary in fixtures.touchMirrors:
+		Helper.compare(h, NativeTouchControls.mirror_state(item.cd, item.ready, item.locked, item.charges), item.result,
+			"Original pad HUD cooldown threshold, binary half-ties, charges, ready and locked state")
+	for item: Dictionary in fixtures.touchRotations:
+		var preferences := ControlPreferences.new()
+		preferences.persist = false
+		preferences.configure(Content.balance.mobile)
+		var controls := NativeTouchControls.new()
+		h.add_child(controls)
+		controls.configure(preferences)
+		controls.enabled = true
+		controls.rotate_shown = false
+		controls.rotate_hint.hide()
+		for step: Dictionary in item.steps:
+			if step.kind in ["initial", "resize"]:
+				controls._update_rotate_hint(step.portrait, step.kind == "resize")
+			elif step.kind == "dismiss":
+				controls.rotate_hint.position = Vector2.ZERO
+				controls.rotate_hint.size = Vector2(300, 60)
+				controls._down(17, Vector2(10, 10), 0)
+			elif step.kind == "timeout":
+				controls.rotate_timer.timeout.emit()
+			Helper.compare(h, {"visible": controls.rotate_hint.visible, "shown": controls.rotate_shown}, step.result,
+				"Original once-per-match portrait hint, timeout, dismiss and rotation re-entry")
+		h._check(absf(controls.rotate_timer.wait_time * 1000 - float(item.delay)) < 0.001, "Native hint timer retains source wall-time duration")
+		controls.enabled = false
+		controls.begin_match()
+		h._check(not controls.rotate_shown, "A new match rearms its own portrait hint")
+		controls.enabled = true
+		controls._update_rotate_hint(true)
+		h._check(controls.rotate_shown and controls.rotate_hint.visible, "A later portrait match shows its own hint")
+		controls.free()
+		preferences.free()
+	for item: Dictionary in fixtures.mobilePower:
+		var preferences := ControlPreferences.new()
+		preferences.persist = false
+		preferences.configure(Content.balance.mobile)
+		preferences.device_pick = "pad" if item.pad else "kbm"
+		preferences.power_pref = item.saved
+		var path := "user://mobile_power_fixture.cfg"
+		preferences.persist = true
+		h._check(preferences.save(path) == OK, "Persist unset or explicitly saved power state")
+		var initial := ControlPreferences.new()
+		initial.configure(Content.balance.mobile)
+		initial.device_pick = preferences.device_pick
+		initial.load_save(path)
+		h._check(initial.power_pref == item.saved and initial.low_power() == preferences.low_power(), "Reload preserves unset versus explicit off and invalid stored values")
+		initial.free()
+		preferences.persist = false
+		var notifications: Array = []
+		preferences.changed.connect(func(): notifications.append("controls"))
+		preferences.power_changed.connect(func(): notifications.append("power"))
+		for step: Dictionary in item.steps:
+			notifications.clear()
+			var before = preferences.power_pref
+			if step.kind == "scheme":
+				preferences.device_pick = "pad" if step.pad else "kbm"
+			elif step.kind == "set":
+				preferences.set_low_power(step.on)
+			h._check(preferences.low_power() == step.result and preferences.power_pref == step.saved,
+				"Original low-power unset, explicit-off, strict saved strings and touch-scheme transitions")
+			h._check(notifications.count("controls") == 0 and notifications.count("power") == int(before != preferences.power_pref),
+				"Presentation preference changes never reset held controls or publish room settings")
+		preferences.persist = true
+		h._check(preferences.save(path) == OK, "Persist explicit low-power preference using native ConfigFile")
+		var restored := ControlPreferences.new()
+		restored.configure(Content.balance.mobile)
+		restored.load_save(path)
+		h._check(restored.power_pref == preferences.power_pref and restored.low_power(), "Explicit power preference survives reload")
+		preferences.free()
+		restored.free()
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	for item: Dictionary in fixtures.mobileTouchPreferences:
 		var path := "user://mobile_preferences_fixture.cfg"
 		var file := ConfigFile.new()

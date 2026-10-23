@@ -64,7 +64,7 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	bar_seen = bar_seen or boss_hud.visible and boss_hud.active_unit != null and boss_hud.active_unit.character == "s01"
 	if segments_seen.size() == 4 and bar_seen and stages_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_BOSS_PASS segments=true shield=true upgrades=true scale=true stages=true bar=true authority=true")
 		Session.stop()
 		get_tree().quit()

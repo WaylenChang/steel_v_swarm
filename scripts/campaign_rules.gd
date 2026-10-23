@@ -40,7 +40,7 @@ static func settings(index: int, side: String, pilot: String, swapped: bool = fa
 	var environment: Dictionary = data.env.duplicate()
 	environment.bot_difficulty = difficulties[index] if index < difficulties.size() else Content.constants.DEFAULT_BOT_DIFF
 	return {"campaign": {"index": index, "chapter": data.id, "side": side, "pilot": pilot, "swapped": swapped},
-		"team_size": int(data.teamSize), "env": environment}
+		"room_name": data[side].title, "is_public": false, "team_size": int(data.teamSize), "env": environment}
 
 static func next_pilot(roster_ids: Array, current: String, direction: int) -> String:
 	if roster_ids.is_empty():

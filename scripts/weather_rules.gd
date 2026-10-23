@@ -1,6 +1,37 @@
 class_name WeatherRules
 extends RefCounted
 
+static func resolve_environment(environment: Dictionary, next_random: Callable) -> Dictionary:
+	var season := _pick_environment(Content.constants.ENV.seasons, environment.get("season"), next_random)
+	var lunar = environment.get("lunarDay")
+	if not (lunar is int or lunar is float) or not is_finite(float(lunar)) or float(lunar) != floorf(float(lunar)) or float(lunar) < 1 or float(lunar) > 30:
+		lunar = int(floorf(float(next_random.call()) * 30)) + 1
+	var time := _pick_environment(Content.constants.ENV.times, environment.get("time"), next_random)
+	var weather = environment.get("weather")
+	if not weather is String or not Content.constants.ENV.weathers.has(weather):
+		weather = pick_seasonal_weather(season, float(next_random.call()))
+	return {"season": season, "lunarDay": int(lunar), "time": time, "weather": weather}
+
+static func _pick_environment(choices: Dictionary, requested: Variant, next_random: Callable) -> String:
+	if requested is String and choices.has(requested):
+		return requested
+	var keys := choices.keys()
+	return keys[int(floorf(float(next_random.call()) * keys.size()))]
+
+static func pick_seasonal_weather(season: String, roll: float) -> String:
+	# A supplied source roll and strict boundaries must remain observable to fixtures.
+	var all_weights: Dictionary = Content.constants.SEASON_WEATHER_WEIGHTS
+	var weights: Dictionary = all_weights.get(season, all_weights.summer)
+	var total := 0.0
+	for weight in weights.values():
+		total += float(weight)
+	var remaining := roll * total
+	for weather: String in weights:
+		if remaining < float(weights[weather]):
+			return weather
+		remaining -= float(weights[weather])
+	return weights.keys()[0]
+
 # Climate uses scalar doubles and its own seed; it never advances combat RNG.
 static func solar_schedule(season: String = "summer", latitude: float = 25.0, rotation: float = 0.0, lunar_day: int = 15) -> Dictionary:
 	var declination := {"spring": 0.0, "summer": 23.44, "autumn": 0.0, "winter": -23.44}
@@ -232,6 +263,16 @@ static func _ramp(begin: float, end: float, value: float) -> float:
 	var t := _cover_clamp((value - begin) / (end - begin))
 	return t * t * (3 - 2 * t)
 
+static func wind_profile(dyn: Dictionary) -> Vector4:
+	var wind := _cover_clamp(float(dyn.get("wind", 0)) / 100)
+	return Vector4(_ramp(0.25, 0.9, wind) * 0.85, _ramp(0.45, 1, wind) * 0.16,
+		lerpf(0.18, 1, wind), lerpf(0.55, 1.7, wind))
+
+static func water_profile(dyn: Dictionary) -> Vector4:
+	var wind := _cover_clamp(float(dyn.get("wind", 0)) / 100)
+	return Vector4(_ramp(0.3, 1, wind) * 0.65, lerpf(0.08, 0.3, wind),
+		_ramp(0.35, 0.95, wind), _ramp(0.5, 1, wind) * 0.55)
+
 static func particle_profiles(dyn: Dictionary) -> Dictionary:
 	var wind := _cover_clamp(float(dyn.get("wind", 0)) / 100)
 	var profiles := {}
@@ -251,3 +292,9 @@ static func particle_profiles(dyn: Dictionary) -> Dictionary:
 				"drift": lerpf(5, 35, strength) * lerpf(0.6, 1.4, wind), "turbulence": lerpf(1, 8, strength), "veil": _ramp(0.2, 1, strength) * 0.22})
 		profiles[kind] = p
 	return profiles
+
+static func wildlife_activity(dyn: Dictionary) -> float:
+	var strength := _cover_clamp(float(dyn.get("wind", 0)) / 100) * 0.8
+	for key: String in ["effectiveRain", "effectiveSnow", "effectiveSand"]:
+		strength = maxf(strength, _cover_clamp(float(dyn.get(key, 0))))
+	return maxf(0.15, 1 - strength)

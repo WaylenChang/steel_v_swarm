@@ -42,8 +42,8 @@ func _collect(node: Node3D) -> void:
 		material.shader = preload("res://shaders/combat_energy.gdshader")
 		material.set_shader_parameter("tint", Vector3(color.r, color.g, color.b))
 		material.set_shader_parameter("opacity", source.get_meta("source_opacity"))
-		material.set_shader_parameter("curve_knee", Content.balance.bodyRules.curve.knee)
-		material.set_shader_parameter("curve_inverse_radius", Content.balance.bodyRules.curve.inverse)
+		material.set_shader_parameter("curve_knee", Content.local_view_curve().knee)
+		material.set_shader_parameter("curve_inverse_radius", Content.local_view_curve().inverse)
 		material.set_meta("source_transparent", true)
 		mesh.material_override = material
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

@@ -61,6 +61,9 @@ func apply(units: Dictionary, footprint: Dictionary, anchor: int) -> void:
 		var unit: BattleUnit = units.get(id)
 		if id == anchor or unit == null or not unit.alive() or not unit.presentation_visible:
 			continue
+		# Keep locked structures in victim math: only the weapon billboard is hidden.
+		if not skill_layer and unit.special.get("siege_locked", false):
+			continue
 		if not unit.visual_dimensions().is_empty():
 			lit[id] = unit
 	for id: int in active.keys():

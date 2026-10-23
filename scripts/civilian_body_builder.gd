@@ -74,7 +74,17 @@ static func configure(body: BodyRig, seed_value: int, profession: int, side: Str
 	body.profile = {"modelKey": "civ", "kind": "civilian", "character": null, "side": side, "static": false,
 		"npcShotSlot": "light", "spin": [], "dimensions": dimensions, "appearance": appearance}
 	body.forms = {"ground": rig}
-	return true
+	if not Content.balance.get("outline", {}).has("unitWidth"):
+		push_error("Missing original civilian outline width rules; regenerate source content")
+		return false
+	var width := OutlineRules.unit_width(target, Content.balance.outline)
+	var inverse_basis := body.source_root.global_basis.inverse()
+	for node: Node3D in body.nodes.values():
+		if node.get_meta("isOutline", false):
+			# Source outlinify runs after all civilian appearance and height scaling.
+			node.set_meta("source_outline_uniforms", OutlineRules.local_uniforms(
+				inverse_basis * (node.get_parent() as Node3D).global_basis, width, Content.balance.outline))
+	return SourceOutlineBinding.install(body.source_root)
 
 static func _part(key: String, appearance: Dictionary) -> Dictionary:
 	var root: Node3D = (load("res://assets/civilian_parts/%s.scn" % key) as PackedScene).instantiate()

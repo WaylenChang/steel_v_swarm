@@ -110,7 +110,8 @@ static func _integration(h: Node, cases: Array) -> void:
 		"hp": 700, "shield": 120, "power": 80, "ammo": {"light": 4, "heavy": 2}})
 	var clone := Helper.actor(simulation, {"id": 3, "character": item.character, "side": "STEEL", "position": [200, 20, 0],
 		"hp": 700, "shield": 120, "power": 80, "ammo": {"light": 4, "heavy": 2}})
-	clone.special = {"role": "clone", "owner_id": owner.entity_id}
+	clone.special = {"role": "clone"}
+	clone.peer_id = owner.peer_id
 	for actor: BattleUnit in [owner, clone]:
 		actor._configure_body("steel_" + item.character)
 		h._check(actor.body_presentation != null, "Pack actual pilot/clone rigs for remote burst integration")
@@ -150,6 +151,9 @@ static func _integration(h: Node, cases: Array) -> void:
 		"One remote callback advances both owner and same-pilot clone rigs exactly once")
 	simulation.units.erase(owner.entity_id)
 	h._check(simulation._hero_representative(owner.entity_id) == clone, "A visible clone retains the original pilot identity after the main body leaves view")
+	simulation.units.erase(owner.entity_id)
+	h._check(simulation._hero_representative(owner.entity_id, owner.peer_id) == clone,
+		"A report's public player ID resolves a visible clone after owner removal without exposing owner entity IDs")
 	h._check(resources == [owner.hp, owner.shield, owner.power, owner.ammo, owner.fire_serial,
 		clone.hp, clone.shield, clone.ammo, simulation.rng.state, simulation.projectile_rng.state], "Remote flashes, shells and callbacks cannot spend resources or repeat damage/RNG")
 	simulation.free()

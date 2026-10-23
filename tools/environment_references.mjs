@@ -5,6 +5,20 @@ export async function environmentReferences(d, BattleSim, config, source, gameSo
   const {readSrc,grabFn,grabMethod,grabBlock}=await import(pathToFileURL(join(source,'tools/audit_src.mjs')).href);
   const terrainText=readSrc('public','js','terrain.js'),biomeText=readSrc('public','js','biomes.js'),mainText=readSrc('public','js','main.js');
   const classifier=new Function('WATER',`${grabFn(biomeText,'terrainEnvCode')}\nreturn terrainEnvCode;`)(d.WATER);
+  const bandMask = new Function(`${grabFn(readSrc('public','js','ground.js'),'makeBandMask')}\nreturn makeBandMask;`)();
+  const environmentBorderMasks = [];
+  const masks = [
+    {cell:24,halfWidthMax:9,grid:{}},
+    {cell:24,halfWidthMax:9,grid:{'0,0':[{x0:-10,z0:0,x1:60,z1:0,hw:9}]}},
+    {cell:24,halfWidthMax:60,grid:{'-2,-1':[{x0:-32,z0:-16,x1:-32,z1:-16,hw:60}]}},
+    {cell:24,halfWidthMax:9,grid:{'-1,0':[{x0:-30,z0:1,x1:30,z1:31,hw:3}],
+      '0,1':[{x0:0,z0:24,x1:0,z1:24,hw:0}]}}];
+  for (const profile of masks) {
+    const query = bandMask(new Map(Object.entries(profile.grid)),profile.cell,profile.halfWidthMax);
+    for (const x of [-96,-64,-32,-24.001,-24,-9,0,9,24,48,60,69,69.001,96])
+      for (const z of [-80,-24,-16,-9,-3,0,1,3,9,9.001,24,31,60])
+        environmentBorderMasks.push({profile,x,z,result:query(x,z)});
+  }
   const distance=new Function(`${grabFn(terrainText,'distToSegs')}\nreturn distToSegs;`)();
   const sample=new Function('field','x','z','N','minX','maxX','minZ','maxZ',grabBlock(terrainText,'function sampleField('));
   let frozen=false;
@@ -24,12 +38,12 @@ export async function environmentReferences(d, BattleSim, config, source, gameSo
   for(const ground of [0,1,2])for(const waterY of [null,.3])for(const foot of [-30,0,.3,2.5,30])for(const body of [0,8,26])for(const ice of [false,true])
     environmentTriggers.push({ground,waterY,foot,body,frozen:ice,result:d.envTrigger(ground,waterY,foot,body,ice)});
   for(const height of [-10,.3,1,3])for(const color of [null,[30,30,70],[80,90,80],[100,60,30]])for(const dry of [false,true])
-    for(const foot of [-15,0,.3,2.5,8,30])for(const body of [8,26])for(const flying of [false,true])for(const ice of [false,true]) {
+    for(const foot of [-15,0,.3,2.5,8,30])for(const body of [8,26])for(const flying of [false,true])for(const ice of [false,true])for(const border of [false,true]) {
       frozen=ice;
-      const terrain={waterY:.3,heightAt:()=>height,sampleColor:()=>color,inDryBand:()=>dry};
+      const terrain={waterY:.3,heightAt:()=>height,sampleColor:()=>color,inDryBand:()=>dry,inBorderBand:()=>border};
       const context={terrain,pos:{x:0,z:0,y:foot},selfH:body,_flying:()=>flying,_surf:()=>height,_env:null,floods:[]};
       context._env=envAt.call(context);
-      environmentStates.push({height,color:color||[],dry,waterY:.3,foot,body,flying,frozen:ice,surface:height,
+      environmentStates.push({height,color:color||[],dry,border,waterY:.3,foot,body,flying,frozen:ice,surface:height,
         ground:classifier(terrain,0,0),state:context._env,speed:slow.call(context),jump:jump.call(context)});
     }
   for(const hour of [0,6,12,18,24])for(const lunarDay of [0,1,8,15,23,30,31])for(const marine of [false,true])
@@ -78,5 +92,5 @@ export async function environmentReferences(d, BattleSim, config, source, gameSo
     environmentFloods.push({flying,airborne,x,floods:[{x:0,z:0,radius:10,...(modifier==null?{}:{slow:modifier})}],
       active:!flying&&!airborne&&x<=10,speed:zone.call(context),jump:jump.call(context)});
   }
-  return {environmentHeights,environmentDryBands,environmentTriggers,environmentStates,environmentTides,environmentFire,environmentBurn,environmentIce,environmentWetGrid,environmentFloods};
+  return {environmentHeights,environmentDryBands,environmentBorderMasks,environmentTriggers,environmentStates,environmentTides,environmentFire,environmentBurn,environmentIce,environmentWetGrid,environmentFloods};
 }

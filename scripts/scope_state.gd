@@ -37,3 +37,7 @@ static func weather_stops(density: float) -> Vector2:
 static func fov_step(current: float, wanted: float, delta: float) -> float:
 	var rules: Dictionary = Content.balance.view
 	return current + (wanted - current) * (1 - exp(-float(rules.fovSpeed) * delta)) if absf(current - wanted) > rules.fovSnap else wanted
+
+static func aim_blend(fov: float, base_fov: float, zoom_fov: float) -> float:
+	var span := base_fov - zoom_fov
+	return clampf((base_fov - fov) / span, 0, 1) if span > 0 else 0.0

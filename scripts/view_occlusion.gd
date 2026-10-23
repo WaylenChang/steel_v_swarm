@@ -62,10 +62,14 @@ func advance(now: float) -> void:
 		state.k = float(state.k) + clampf(wanted - float(state.k), -rate * delta, rate * delta)
 		var factor := 1 - (1 - float(rules.OPACITY_F)) * float(state.k)
 		for item: Dictionary in state.items:
-			var material: BaseMaterial3D = item.faded
-			var color := material.albedo_color
-			color.a = float(item.alpha) * factor
-			material.albedo_color = color
+			var material: Material = item.faded
+			if material is ShaderMaterial and material.get_meta("source_outline", false):
+				material.set_shader_parameter("source_opacity", float(item.alpha) * factor)
+			else:
+				var native := material as BaseMaterial3D
+				var color := native.albedo_color
+				color.a = float(item.alpha) * factor
+				native.albedo_color = color
 		if wanted == 0 and float(state.k) <= 0:
 			_restore(id)
 
@@ -155,6 +159,8 @@ func _restore(id: int) -> void:
 	fades.erase(id)
 
 static func _geometry(node: Node) -> Mesh:
+	if node.get_meta("source_sprite", false):
+		return null
 	if node is MeshInstance3D:
 		return node.mesh
 	if node is MultiMeshInstance3D and node.multimesh != null:
@@ -186,6 +192,8 @@ static func _local_bounds(node: Node) -> Dictionary:
 	return result
 
 static func _opaque(material: Material) -> bool:
+	if material is ShaderMaterial and material.get_meta("source_outline", false):
+		return not bool(material.get_meta("source_transparent", false))
 	if not material is BaseMaterial3D:
 		return false
 	var native := material as BaseMaterial3D
@@ -203,6 +211,8 @@ static func _has_opaque(mesh: GeometryInstance3D) -> bool:
 static func _material_item(material: Material, base: Material, surface: int) -> Dictionary:
 	if not _opaque(material):
 		return {}
+	if material is ShaderMaterial and material.get_meta("source_outline", false):
+		return {"faded": SourceOutlineMaterial.faded(material), "base": base, "surface": surface, "alpha": float(material.get_meta("source_opacity", 1))}
 	var faded: BaseMaterial3D = material.duplicate()
 	faded.set_meta("source_transparent", true)
 	faded.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

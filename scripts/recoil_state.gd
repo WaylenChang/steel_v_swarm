@@ -15,8 +15,8 @@ var steady_at := 0.0
 var charge_progress := 0.0
 var echoes := BurstPresentationQueue.new()
 
-func basis(base_yaw: float, base_pitch: float) -> Basis:
-	return Basis(Vector3.UP, base_yaw + view_yaw) * Basis(Vector3.RIGHT, base_pitch + view_pitch) * Basis(Vector3.BACK, shake.z)
+func basis(base_yaw: float, base_pitch: float, roll: float = 0.0) -> Basis:
+	return Basis(Vector3.UP, base_yaw + view_yaw) * Basis(Vector3.RIGHT, base_pitch + view_pitch) * Basis(Vector3.BACK, roll + shake.z)
 
 func third_person_basis(base_yaw: float, base_pitch: float, roll: float = 0.0) -> Basis:
 	# TPS applies recoil around the already pitched camera's local axes.
@@ -81,18 +81,22 @@ func accepted(definition: Dictionary, slot: String, now: float, flying: bool, ra
 	if not echo:
 		var factor := maxf(0, 1 - pow(minf(1, maxf(0, climb) / float(Content.constants.RECOIL_CLIMB_MAX)), float(Content.constants.RECOIL.MOVE_K)))
 		move_factor = minf(move_factor, factor) if active() else factor
-		if float(profile.get("burst", 0)) != 0 and not definition.get("fan", false):
-			burst_count[slot] = float(burst_count.get(slot, 0)) + float(definition.burst.count)
-			if float(burst_count[slot]) >= float(profile.burst):
-				burst_count[slot] = 0
-				var duration := float(profile.get("settle", 0))
-				settle_until[slot] = now + (duration if duration != 0 else 0.4)
+		accepted_cadence(definition, slot, now)
 		echoes.schedule(definition, now, {"slot": slot, "definition": definition})
 	pitch += climb
 	yaw += (float(random.call()) - 0.5) * float(Content.balance.controls.recoil.yawSpread) * float(profile.get("kick", 1)) * air
 	var shake_rules: Dictionary = Content.constants.SHAKE
 	trauma = minf(1, trauma + float(shake_rules.FIRE) * float(profile.get("kick", 1)) * air * (float(shake_rules.HEAVY_F) if not echo and slot == "heavy" else 1.0))
 	return float(profile.get("back", 0)) * air
+
+func accepted_cadence(definition: Dictionary, slot: String, now: float) -> void:
+	var profile: Dictionary = definition.get("recoil", {})
+	if float(profile.get("burst", 0)) != 0 and not definition.get("fan", false):
+		burst_count[slot] = float(burst_count.get(slot, 0)) + float(definition.burst.count)
+		if float(burst_count[slot]) >= float(profile.burst):
+			burst_count[slot] = 0
+			var duration := float(profile.get("settle", 0))
+			settle_until[slot] = now + (duration if duration != 0 else 0.4)
 
 func release_fire() -> void:
 	rail_at = 0

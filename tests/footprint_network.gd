@@ -56,7 +56,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	for unit: Dictionary in state.units:
@@ -89,7 +89,7 @@ func _receive_state(state: Dictionary) -> void:
 			_overlay(shop, false)
 			shop_checked = true
 	elif warning_seen and normal_seen and shop_checked and simulation.footprint_glows.active.is_empty():
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_FOOTPRINT_PASS victims=2 warning=true normal=true hidden=true shop=true")
 		Session.stop()
 		get_tree().quit()

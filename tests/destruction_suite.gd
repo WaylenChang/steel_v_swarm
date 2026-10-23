@@ -64,7 +64,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 				effects._drop(effect)
 			effects.effects.clear()
 	h._check(effects.free_nodes.comic.size() <= int(Content.balance.npcShots.limits.pools.comic), "Retained comic nodes respect the original pool budget")
-	var held := effects.free_nodes.comic.size()
+	var held: int = effects.free_nodes.comic.size()
 	for index in range(int(Content.balance.npcShots.limits.pools.comic) + 5):
 		effects.comic(Vector3.ZERO)
 	effects.advance(1)

@@ -20,8 +20,11 @@ func configure(key: String) -> void:
 		var material := mesh.get_active_material(0).duplicate() as StandardMaterial3D
 		mesh.set_surface_override_material(0, material)
 		animated_materials[int(id)] = material
+	SourceOutlineBinding.install(source_root)
 
 func _collect(node: Node3D) -> void:
+	if node.get_meta("source_outline_helper", false):
+		return
 	nodes[int(String(node.name).trim_prefix("n_"))] = node
 	for child: Node3D in node.get_children():
 		_collect(child)

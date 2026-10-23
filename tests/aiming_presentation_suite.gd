@@ -7,7 +7,7 @@ class PreviewSimulation extends BattleSimulation:
 		return not unit.get_meta("hidden", false)
 
 static func run(h: Node, fixtures: Dictionary) -> void:
-	for key: String in ["skillFootprints", "lockGlowPoses", "lockWarnings"]:
+	for key: String in ["skillFootprints", "lockGlowPoses", "lockWarnings", "footprintGlowStates"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original aiming presentation references: " + key)
 			return
@@ -26,6 +26,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		for sample: Dictionary in item.visibility:
 			h._check((float(sample.now) < until) == bool(sample.result), "Original incoming-lock warning inclusive expiry")
 	preview_integration(h)
+	_glow_visibility(h, fixtures.footprintGlowStates)
 	print("AIMING_PRESENTATION_REFERENCE_PASS skills=", fixtures.skillFootprints.size(), " lockPoses=", fixtures.lockGlowPoses.size())
 
 static func preview_integration(h: Node) -> void:
@@ -115,6 +116,29 @@ static func preview_integration(h: Node) -> void:
 	enemy.free()
 	simulation.lock_glow.advance(3)
 	h._check(simulation.lock_glow.target_id == 0 and not simulation.lock_glow.visible, "Freed target clears lock without stale object access")
+	simulation.free()
+
+static func _glow_visibility(h: Node, fixtures: Array) -> void:
+	var simulation := PreviewSimulation.new()
+	h.add_child(simulation)
+	simulation.set_physics_process(false)
+	for id in [1, 2, 3]:
+		actor(simulation, id, "SWARM", Vector3.ZERO)
+	for item: Dictionary in fixtures:
+		for id: int in simulation.units:
+			simulation.units[id].special.siege_locked = item.locked.has(id)
+		var weapon := {"hits": item.hits, "side": "STEEL", "warn": false} if item.hits != null else {}
+		var skill := {"hits": item.skills, "side": "STEEL", "warn": false} if item.casting else {}
+		simulation.apply_footprint(weapon, {"anchor": item.anchor})
+		simulation.apply_skill_footprint(skill)
+		var weapon_ids: Array = simulation.footprint_glows.active.keys()
+		var skill_ids: Array = simulation.skill_glows.active.keys()
+		weapon_ids.sort()
+		skill_ids.sort()
+		StatusHelper.compare(h, weapon_ids, item.weapon, "Original weapon glows exclude siege locks and the separate lock anchor after victim math")
+		StatusHelper.compare(h, skill_ids, item.skill, "Original skill glows remain independent of siege locks, weapon availability and the lock anchor")
+	h._check(simulation.footprint_glows.active.is_empty() and simulation.skill_glows.active.is_empty(),
+		"Ending the shot and cast returns both native glow layers to their pools")
 	simulation.free()
 
 static func actor(simulation: BattleSimulation, id: int, side: String, position: Vector3) -> BattleUnit:

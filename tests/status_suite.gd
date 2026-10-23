@@ -124,7 +124,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		var target: BattleUnit = simulation.units[2]
 		if item.cast != null:
 			target.cast_state = {"start": item.cast.start, "duration": item.cast.dur,
-				"definition": Content.ability("s08", "def"), "point": target.position}
+				"definition": Content.ability("s08", "def"), "point": target.position, "level": 1}
 			target.status.cast_lock_until = 20
 		var context: Dictionary = item.context.duplicate(true)
 		var key := "blast" if context.has("blast") else "origin"
@@ -176,7 +176,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		simulation.clock = item.now
 		var unit := actor(simulation, {"character": item.character, "id": 1, "side": "STEEL", "position": [0, 0, 0]})
 		unit.status.cast_lock_until = 40
-		unit.cast_state = {"start": item.start, "duration": item.duration, "definition": Content.ability(item.character, "def", int(item.level)), "point": Vector3.ZERO}
+		unit.cast_state = {"start": item.start, "duration": item.duration, "definition": Content.ability(item.character, "def", int(item.level)), "point": Vector3.ZERO, "level": item.level}
 		simulation._interrupt_cast(unit)
 		h._near(simulation.interrupted_fraction, item.fraction, "Original interrupted cast clamps elapsed time before squaring")
 		h._check(unit.cast_state.is_empty() and unit.status.cast_lock_until == item.lock, "Original cast clears before applying its interrupted effect")

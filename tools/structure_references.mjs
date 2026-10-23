@@ -1,8 +1,38 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { captureSupportBundle } from './support_capture.mjs';
+import {readWorldHeader} from './world_source.mjs';
+
+export function sourceSlabUpload(main) {
+  const start = main.indexOf('      const slabs = ['), end = main.indexOf(';', start);
+  const decks = main.lastIndexOf('      const decks = ud.decks', start);
+  if (start < 0 || end < 0 || decks < 0) throw new Error('Missing source slab upload');
+  return new Function('ud', 'rd', 'LOS', `${main.slice(decks, end + 1)} return slabs;`);
+}
+
+export function acceptedSourceSlabs(d, BattleSim, config, simSource, raw) {
+  const sim = new BattleSim(config);
+  const entries = [], seen = new Set();
+  class OrderedMap extends Map {
+    set(key, value) {
+      value.push = (...items) => {
+        for (const item of items) if (!seen.has(item)) { seen.add(item); entries.push(item); }
+        return Array.prototype.push.apply(value, items);
+      };
+      return super.set(key, value);
+    }
+  }
+  const name = '_ingestSlabs', start = simSource.indexOf(`\n  ${name}(`), end = simSource.indexOf('\n  }\n', start);
+  if (start < 0 || end < 0) throw new Error('Missing source slab ingestion');
+  const method = simSource.slice(start + 1, end + 4).trimStart();
+  const ingest = new Function('LOS', 'Map', `return function ${method.slice(name.length)}`)(d.LOS, OrderedMap);
+  ingest.call(sim, { slabs: raw });
+  return { sim, entries };
+}
 
 export async function structureReferences(d, BattleSim, config, source, root, gameSource) {
-  const main = await readFile(join(source, 'public/js/main.js'), 'utf8');
+  const main = (await readFile(join(source, 'public/js/main.js'), 'utf8')).replace(/\r\n?/g, '\n');
   const simSource = (await readFile(join(source, 'server/sim.js'), 'utf8')).replace(/\r\n/g, '\n');
   const biome = (await readFile(join(source, 'public/js/biomes.js'), 'utf8')).replace(/\r\n/g, '\n');
   const extract = name => {
@@ -12,6 +42,12 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
   };
   const deckCode = extract('makeDeckIndex'), tunnelCode = extract('makeTunnelIndex');
   const deckIndex = new Function(`return ${deckCode}`)();
+  const blockerTopCode = extract('makeBlockerTopIndex');
+  const blockerTopIndex = new Function(`return ${blockerTopCode}`)();
+  const roofStart = main.indexOf('function makeRoofPlatformIndex('), roofEnd = main.indexOf('\n}', roofStart);
+  if (roofStart < 0 || roofEnd < 0) throw new Error('Missing source polygon roof index');
+  const roofCode = main.slice(roofStart, roofEnd + 2);
+  const roofPlatformIndex = new Function(`return ${roofCode}`)();
   // Roof output is outside this classifier; source floor/ceiling/open selection executes unchanged.
   const tunnelIndex = new Function('tunRoofTop', `return ${tunnelCode}`)(cy => cy);
   const grab = (text, regex) => {
@@ -31,35 +67,36 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
     deckMargin: grab(gameSource, /deckY\?\.\(this\.pos\.x, this\.pos\.z, ([\d.]+)\)/),
     bridgeThreshold: grab(gameSource, /!inTun && sy > th \+ ([\d.]+)/),
     bridgeHeightTolerance: grab(gameSource, /Math\.abs\(sy - dY2\) < ([\d.]+)/),
+    blockerTopCell: grab(blockerTopCode, /const CELL = ([\d.]+)/),
+    blockerTopPad: grab(blockerTopCode, /b\.x - r - ([\d.]+)/),
+    blockerTopMargin: grab(main, /const BLK_MARGIN = ([\d.]+)/),
+    roofCell: grab(roofCode, /cell = ([\d.]+)/),
+    instanceClearanceFactor: grab(biome, /Math\.hypot\(S\.x, S\.z\) \/ 2 \* ([\d.]+)/),
+    structurePadTolerance: grab(main, /Math\.abs\(p\.x - x\) < ([\d.]+) && Math\.abs\(p\.z - z\)/),
   };
-  const uploadStart = main.indexOf('      const slabs = ['), uploadEnd = main.indexOf(';', uploadStart);
-  if (uploadStart < 0 || uploadEnd < 0) throw new Error('Missing source slab upload');
-  const upload = new Function('ud', 'rd', 'LOS', `${main.slice(main.lastIndexOf('      const decks = ud.decks', uploadStart), uploadEnd + 1)} return slabs;`);
+  const structurePads = [];
+  for (const kind of ['tower','base']) {
+    const assignment = main.indexOf('terrain.' + kind + 'PadY =');
+    const start = main.indexOf('(x, z) => {',assignment), end = main.indexOf('\n    };',start);
+    if (assignment < 0 || start < 0 || end < 0) throw new Error('Missing original structure platform query: ' + kind);
+    const code = main.slice(start,end+6);
+    if (grab(code,/Math\.abs\(p\.x - x\) < ([\d.]+)/) !== rules.structurePadTolerance)
+      throw new Error('Original platform query tolerances diverged');
+    const factory = new Function(kind+'Pads','return '+code+';');
+    for (const pads of [[],[{x:0,z:0,y:0}],[{x:0,z:0,y:14},{x:1,z:1,y:20},{x:-32,z:16,y:-5}]]) {
+      const query = factory(pads);
+      for (const x of [-32,-2.00001,-2,-1.99999,0,1,1.99999,2,3]) for (const z of [-2,-1.99999,0,1,2,16])
+        structurePads.push({kind,pads:{[kind]:pads},x,z,result:query(x,z)});
+    }
+  }
+  const upload = sourceSlabUpload(main);
   const rd = value => Math.round(value * 10) / 10;
   const poseStart = gameSource.indexOf('      const sy = this._surf(this.pos.x, this.pos.z, this.pos.y);');
   const poseEnd = gameSource.indexOf('      const lev = inTun ? 2 : onBridge ? 1 : 0;', poseStart);
   if (poseStart < 0 || poseEnd < 0) throw new Error('Missing source player structure pose');
   const playerPose = new Function(`return function() { ${gameSource.slice(poseStart, poseEnd)}
     const lev = inTun ? 2 : onBridge ? 1 : 0; return {level:lev,reference:sEff}; }`)();
-  const accepted = raw => {
-    const sim = new BattleSim(config);
-    const entries = [], seen = new Set();
-    class OrderedMap extends Map {
-      set(key, value) {
-        value.push = (...items) => {
-          for (const item of items) if (!seen.has(item)) { seen.add(item); entries.push(item); }
-          return Array.prototype.push.apply(value, items);
-        };
-        return super.set(key, value);
-      }
-    }
-    const name = '_ingestSlabs', start = simSource.indexOf(`\n  ${name}(`), end = simSource.indexOf('\n  }\n', start);
-    if (start < 0 || end < 0) throw new Error('Missing source slab ingestion');
-    const method = simSource.slice(start + 1, end + 4).trimStart();
-    const ingest = new Function('LOS', 'Map', `return function ${method.slice(name.length)}`)(d.LOS, OrderedMap);
-    ingest.call(sim, { slabs: raw });
-    return { sim, entries };
-  };
+  const accepted = raw => acceptedSourceSlabs(d, BattleSim, config, simSource, raw);
   const nativePoint = (x, z) => [Math.fround(x), Math.fround(-z)];
   const structureSeparation = [], structureLevels = [], structureClient = [], structureWorlds = [], structureBlasts = [];
   const groups = [];
@@ -122,19 +159,97 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
   const surfaceBody = main.slice(main.indexOf('{', surfaceStart) + 1, surfaceEnd);
   const surfaceAt = new Function('terrain', 'tunnelAt', 'deckY', 'DECK_MARGIN', 'DECK_STEP', 'DECK_UNDER', 'MAX_MECH_H',
     'blockerTop', 'BLK_MARGIN', 'roofPlatformAt', 'isWeatherFrozen', `return (x,z,curY) => {${surfaceBody}}`);
-  const projectileSurfaces = [];
+  const projectileSurfaces = [], flightSupportSurfaces = [];
+  const supportGroups = [
+    {name:'rotated building and giant rock tops', blockers:[
+      {x:-32,z:16,y:2,h:18,hw2:8,hd2:3,ry:.7,bld:1,r:9},
+      {x:0,z:0,y:1,h:8,r:6,std:1}, {x:0,z:0,y:0,h:50,r:4},
+      {x:0,z:0,y:3,h:15,r:3,bld:1}], roofs:[]},
+    {name:'courtyard with inactive upper roof', blockers:[], roofs:[
+      {platform:1,y:20,outer:[[-10,-10],[10,-10],[10,10],[-10,10]], holes:[[[-2,-2],[2,-2],[2,2],[-2,2]]],
+        bounds:{minX:-10,maxX:10,minZ:-10,maxZ:10}},
+      {platform:1,active:false,y:40,outer:[[-10,-10],[10,-10],[10,10],[-10,10]], holes:[],
+        bounds:{minX:-10,maxX:10,minZ:-10,maxZ:10}},
+      {platform:1,y:8,outer:[[-3,-3],[3,-3],[0,3]],holes:[],bounds:{minX:-3,maxX:3,minZ:-3,maxZ:3}}]},
+    {name:'empty source support set',blockers:[],roofs:[]}];
+  supportGroups.push({name:'closed courtyard rings',blockers:[],roofs:[{
+    platform:1,y:12,outer:[[-12,-8],[12,-8],[12,8],[-12,8],[-12,-8]],
+    holes:[[[-4,-3],[4,-3],[4,3],[-4,3],[-4,-3]]],bounds:{minX:-12,maxX:12,minZ:-8,maxZ:8}}]});
+  const supportQueries = [];
+  for (const group of supportGroups) {
+    const tops = blockerTopIndex(group.blockers), roofs = roofPlatformIndex(group.roofs);
+    for (const x of [-40,-32,-24,-10,-6.6,-6,-3,-2,0,2,3,6,6.6,10,16])
+      for (const z of [-10,-3,-2,0,2,3,10,16,20]) for (const margin of [0,rules.blockerTopMargin,1]) {
+        const point = [x,z].map(Math.fround);
+        supportQueries.push({...group,point,margin,top:tops(...point,margin),roof:roofs(...point)});
+      }
+  }
+  const THREE = await import(pathToFileURL(join(source, 'out/forest_review/three.module.js')).href);
+  const supportCaptures = [];
+  for (const group of supportGroups) {
+    const root = new THREE.Group();
+    Object.assign(root.userData, {blockers:group.blockers,roofPlatforms:group.roofs,mapBuildings:new Map()});
+    const captured = captureSupportBundle(root, THREE);
+    const query = roofPlatformIndex(group.roofs);
+    const probes = [];
+    for (const x of [-20.125,-10.125,-5.125,-1.125,.125,3.125,8.125,12.125])
+      for (const z of [-10.125,-5.125,-1.125,.125,3.125,7.125,10.125]) probes.push({point:[x,z],result:query(x,z)});
+    supportCaptures.push({name:group.name,captured,probes});
+  }
+  const {buildingNear, buildingBounds} = await import(pathToFileURL(join(source, 'public/js/mapBuilding.js')).href);
+  const clearAssignment = biome.indexOf('group.userData.clearAround =');
+  const clearStart = biome.indexOf('(wx, wz, r) => {', clearAssignment), clearEnd = biome.indexOf('\n  };', clearStart);
+  if (clearAssignment < 0 || clearStart < 0 || clearEnd < 0) throw new Error('Missing original scenery clearance closure');
+  const clearScenery = new Function('group','buildingNear','detachMapBuilding','THREE','bldMeshes','landmarkG','climbs',
+    'return ' + biome.slice(clearStart,clearEnd+4) + ';');
+  const sceneryClearance = [];
+  const radius = d.THIRD.BLD_CLEAR_R;
+  const frame = (x,z,sx,sy,sz,angle=0)=>new THREE.Matrix4().compose(new THREE.Vector3(x,0,z),
+    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),angle),new THREE.Vector3(sx,sy,sz));
+  const sourceMatrices = [frame(0,0,12,20,8),frame(radius+9,0,12,20,8),frame(-radius-20,0,12,20,8),
+    frame(0,-40,7,10,3,.7),frame(0,0,0,0,0),frame(8,0,-12,20,8,.7)];
+  for (const camps of [[],[{x:0,z:0}],[{x:0,z:40}],[{x:1000,z:1000}],[{x:0,z:0},{x:0,z:40}]]) {
+    const group = new THREE.Group();
+    Object.assign(group.userData,{mapBuildings:new Map(),blockers:[]});
+    const batch = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial(),sourceMatrices.length);
+    sourceMatrices.forEach((matrix,i)=>batch.setMatrixAt(i,matrix));
+    const matrices = sourceMatrices.map((_,i)=>{const m=new THREE.Matrix4();batch.getMatrixAt(i,m);return m.toArray();});
+    const landmarkSpecs = [{x:0,z:0,r:9},{x:radius+12,z:0,r:12},{x:0,z:0,r:9,key:'owned'}];
+    const landmarks = landmarkSpecs.map(spec=>{const g=new THREE.Group();if(spec.key)g.userData.buildingKey=spec.key;return {...spec,g};});
+    const clear = clearScenery(group,buildingNear,()=>{throw new Error('Unexpected owned building fixture');},THREE,[batch],landmarks,[]);
+    for (const camp of camps) clear(camp.x,-camp.z,radius);
+    sceneryClearance.push({camps,matrices,landmarks:landmarkSpecs,
+      result:{matrices:sourceMatrices.map((_,i)=>{const m=new THREE.Matrix4();batch.getMatrixAt(i,m);return m.toArray();}),
+        visible:landmarks.map(landmark=>landmark.g.visible)}});
+    batch.geometry.dispose();batch.material.dispose();
+  }
+  const supportClearance = [];
+  const records = [
+    {key:'rotated',bounds:buildingBounds([{x:-17,z:22,y:0,h:20,hw2:8,hd2:3,ry:.7}])},
+    {key:'separated-volumes',bounds:buildingBounds([{x:50,z:0,y:3,h:20,hw2:4,hd2:5,ry:0},
+      {x:70,z:0,y:0,h:8,hw2:5,hd2:5,ry:0}])}];
+  for (const camps of [[],[{x:-17,z:-22}],[{x:60,z:0}],[{x:1000,z:1000}],
+    [{x:-17,z:-22},{x:60,z:0}]]) {
+    const buildings = Object.fromEntries(records.filter(record=>camps.some(camp=>buildingNear(record.bounds,camp.x,-camp.z,d.THIRD.BLD_CLEAR_R)))
+      .map(record=>[record.key,true]));
+    supportClearance.push({records,camps,buildings});
+  }
   const surfaceGroups = [...geometryGroups,
     {name:'stacked reachable decks',decks:[{x1:-40,z1:0,y1:5,x2:40,z2:0,y2:5,hw:8},
       {x1:-40,z1:0,y1:20,x2:40,z2:0,y2:20,hw:8}],tunnels:[]},
-    {name:'terrain without structures',decks:[],tunnels:[]}];
+    {name:'terrain without structures',decks:[],tunnels:[]},
+    ...supportGroups.map(group=>({...group,decks:[],tunnels:[]}))];
   for (const group of surfaceGroups) for (const ground of [0, 50]) {
     const roofIndex = new Function('tunRoofTop', `return ${tunnelCode}`)(cy => cy + rules.tunnelRoofThickness);
     const tunnelAt = roofIndex(group.tunnels), deckAt = deckIndex(group.decks);
     const query = surfaceAt({heightAt:()=>ground},tunnelAt,deckAt,rules.deckMargin,rules.deckStep,rules.deckUnder,rules.maximumMechHeight,
-      ()=>null,0,()=>null,()=>false);
-    for (const x of [0,40,40.74,41.01,55]) for (const z of [0,8,8.01,11.01]) for (const y of [-.5,1,2.8,5,8,8.01,15,17.2,20,40,51]) {
+      blockerTopIndex(group.blockers || []),rules.blockerTopMargin,roofPlatformIndex(group.roofs || []),()=>false);
+    const xs = group.blockers ? [-40,-32,-24,-10,-2,0,2,6,10] : [0,40,40.74,41.01,55];
+    const zs = group.blockers ? [-10,-2,0,2,8,10,16,20] : [0,8,8.01,11.01];
+    for (const x of xs) for (const z of zs) for (const y of [-.5,1,2.8,5,8,8.01,15,17.2,20,40,51]) {
       const point=[x,y,z].map(Math.fround);
       projectileSurfaces.push({name:group.name,...group,point,ground,result:query(point[0],point[2],point[1])});
+      if (y === -.5) flightSupportSurfaces.push({name:group.name,...group,point:[point[0],point[2]],ground,result:query(point[0],point[2],Infinity)});
     }
   }
   const clientCase = (name, geometry, point, surface, ground) => {
@@ -151,7 +266,8 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
   }
   const worlds = {};
   for (const file of (await readdir(join(root, 'data/worlds'))).filter(f => f.endsWith('.json')).sort()) {
-    const world = JSON.parse(await readFile(join(root, 'data/worlds', file), 'utf8'));
+    console.log('SOURCE_STRUCTURE_WORLD '+file);
+    const world = await readWorldHeader(join(root, 'data/worlds', file));
     const raw = upload(world, rd, d.LOS), { sim, entries } = accepted(raw);
     const key = file.slice(0, -5);
     worlds[key] = entries;
@@ -163,5 +279,6 @@ export async function structureReferences(d, BattleSim, config, source, root, ga
     }
     structureWorlds.push({ key, count: entries.length, probes });
   }
-  return { rules, worlds, fixtures: { structureSeparation, structureLevels, structureClient, structureWorlds, structureBlasts, projectileSurfaces } };
+  return { rules, worlds, fixtures: { structureSeparation, structureLevels, structureClient, structureWorlds, structureBlasts,
+    projectileSurfaces, flightSupportSurfaces, supportQueries, supportCaptures, supportClearance, sceneryClearance, structurePads } };
 }

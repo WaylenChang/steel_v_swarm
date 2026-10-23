@@ -21,11 +21,15 @@ var npc_progress := 0.0
 var npc_engaged := false
 var npc_cooldown := 0.0
 var geometry_override: Dictionary = {}
+var head_marks: HeadMarks
+var vital_bar: VitalBar
 var lane: int = 0
 var has_lane := false
 var spawn_slot: int = 0
 var is_bot := false
 var hp := 0.0
+# Source health upgrades adjust current HP without setting the death flag.
+var upgrade_survivor := false
 var max_hp := 0.0
 var shield := 0.0
 var max_shield := 0.0
@@ -59,6 +63,7 @@ var status: Dictionary = {}
 var cast_state: Dictionary = {}
 var cast_preview: Dictionary = {}
 var ability_charges: Dictionary = {}
+var public_abilities: Dictionary = {}
 var defending := false
 var last_fired_at: Dictionary = {}
 var recoil := RecoilState.new()
@@ -80,6 +85,9 @@ var charge := 0.0
 var low_gravity := false
 var lift := -1.0
 var jump_was_held := false
+var slope_blocked := false
+var climb := ClimbState.new()
+var movement_roll := 0.0
 var air_sink := 0.0
 var air_sink_speed := 0.0
 var lift_lock_until := 0.0
@@ -115,6 +123,7 @@ var animation_until := 0.0
 var movement_shape: CollisionShape3D
 var hit_area: Area3D
 var presentation_visible := true
+var charred := false
 var remote_burst_driven := false
 var view_offset := Vector3.ZERO
 var view_offset_ready := false
@@ -133,7 +142,7 @@ var damage_fx: DamageFx:
 var damage_fx_stage: int:
 	get: return damage_fx_binding.stage
 
-func configure(info: Dictionary) -> void:
+func configure(info: Dictionary, replica: bool = false) -> void:
 	entity_id = int(info.id)
 	peer_id = int(info.get("peer", 0))
 	side = info.side
@@ -145,7 +154,7 @@ func configure(info: Dictionary) -> void:
 	spawn_slot = int(info.get("spawn_slot", 0))
 	is_bot = info.get("bot", false)
 	if side == Content.constants.SUPER_SIDE:
-		upgrades["super"] = 0
+		upgrades["super"] = int(info.get("super_level", 0)) if replica else 0
 	effect_radius = float(info.get("effect_radius", 0))
 	creep_multiplier = float(info.get("creep_multiplier", 1))
 	if not Content.constants.UNITS.has(kind) and not (kind == "slab" and special.get("role") == "slab") and not (kind == "decoy_beacon" and special.get("role") == "hologram") and not (kind == "kami" and special.get("role") == "carrier") and not (special.get("role") == "hazard" and (Content.constants.HAZARDS.has(kind) or kind in ["aasite", "relay"])):
@@ -162,18 +171,18 @@ func configure(info: Dictionary) -> void:
 	elif special.get("role") == "hazard":
 		radius = Content.balance.hazard_volumes[kind].radius
 		height = Content.balance.hazard_volumes[kind].height
-		max_hp = special.hp
-		armor = special.armor
+		max_hp = float(info.max_hp) if replica else float(special.hp)
+		armor = NAN if replica else float(special.armor)
 	elif special.get("role") == "carrier":
 		var profile: Dictionary = Content.balance.companions[special.model_key]
 		radius = profile.radius
 		height = profile.height
-		max_hp = float(special.hp)
+		max_hp = float(info.max_hp) if replica else float(special.hp)
 	elif kind == "slab":
 		var soldier_height: float = Content.constants.TARGET_H["creep:soldier"]
 		radius = soldier_height * 0.5
 		height = soldier_height * 1.6
-		max_hp = float(special.hp)
+		max_hp = float(info.max_hp) if replica else float(special.hp)
 	elif kind == "decoy_beacon":
 		radius = Content.balance.companions[side.to_lower() + "_" + kind].radius
 		height = Content.balance.companions[side.to_lower() + "_" + kind].height
@@ -289,10 +298,12 @@ func _build_model() -> void:
 		model = scene.instantiate()
 		add_child(model)
 		model.rotation_order = EULER_ORDER_XYZ
-		model.scale = Vector3.ONE * float(special.scale)
+		model.scale = Vector3.ONE * float(special.get("scale", 1))
 		geometry_override = Content.balance.hazard_visuals[kind].dimensions.duplicate()
 		for property: String in ["height", "top", "centre", "radius"]:
-			geometry_override[property] = float(geometry_override[property]) * float(special.scale)
+			geometry_override[property] = float(geometry_override[property]) * float(special.get("scale", 1))
+		if not SourceOutlineBinding.install(model):
+			return
 		if special.get("collapsed", false):
 			apply_collapse(true)
 		return
@@ -364,7 +375,7 @@ func _configure_body(key: String) -> void:
 	body.rotation.y = 0 if body.profile["static"] else PI
 	body_presentation = BodyPresentation.new()
 	body_presentation.configure(body, str(entity_id))
-	if is_pilot() and peer_id == multiplayer.get_unique_id():
+	if is_pilot() and peer_id == Session.player_id():
 		body_presentation.pending_snap = false
 
 func is_hero() -> bool:
@@ -426,9 +437,13 @@ func ensure_cockpit() -> void:
 	cockpit = CockpitRig.new()
 	camera.add_child(cockpit)
 	cockpit.configure(character)
+	var simulation := get_parent() as BattleSimulation
+	if simulation != null and peer_id == Session.player_id():
+		cockpit.client_weapons = simulation.client_weapons
+		simulation.client_weapon_definition(self, "light")
 
 func alive() -> bool:
-	return hp > 0
+	return hp > 0 or upgrade_survivor
 
 func has_status(key: String, now: float) -> bool:
 	return float(status.get(key, 0)) > now
@@ -555,12 +570,13 @@ func aim_direction() -> Vector3:
 	return aim_basis() * Vector3.FORWARD
 
 func aim_basis() -> Basis:
-	return recoil.third_person_basis(yaw, pitch) if view_mode == "tps" else recoil.basis(yaw, pitch)
+	return recoil.third_person_basis(yaw, pitch, movement_roll) if view_mode == "tps" else recoil.basis(yaw, pitch, movement_roll)
 
 func aim_transform() -> Transform3D:
 	return Transform3D(aim_basis(), view_origin())
 
 func simulate_movement(delta: float) -> void:
+	slope_blocked = false
 	if not alive() or speed <= 0:
 		return
 	var motion: Vector2 = input_state.get("move", Vector2.ZERO)
@@ -571,6 +587,10 @@ func simulate_movement(delta: float) -> void:
 	var frozen := bool(simulation.weather_dynamics.get("isFrozen", false))
 	var terrain_factor := EnvironmentRules.movement_factor(fluid_environment, frozen) * float(simulation._flood_effect(self).slow)
 	var standing_surface := simulation._movement_surface(position)
+	if not flying and not is_finite(standing_surface):
+		simulation.message.emit(peer_id, "unavailable_surface")
+		return
+	var slope_queries: Dictionary = {} if flying else simulation.movement_slope_queries()
 	var held: bool = input_state.get("jump_held", false)
 	var previous_position := position
 	var slow: float = status.get("slow_factor", 0.6)
@@ -589,17 +609,21 @@ func simulate_movement(delta: float) -> void:
 		camera.fov = stats.get("zoomFov", 35) if input_state.get("aim", false) else stats.get("fovAir", stats.get("fov", 68)) if flying else stats.get("fov", 68)
 	var move_basis := InputRules.movement_basis(yaw, pitch, flying and is_hero(), input_state.get("level_move", false))
 	var direction := move_basis * Vector3(motion.x, 0, motion.y)
+	var climb_direction := Vector3.ZERO if has_status("freeze_until", now) else direction
 	var weather_direction := direction
 	if has_status("confuse_until", now):
 		direction.x = -direction.x
 		direction.z = -direction.z
 	if not flying:
 		weather_direction = direction
-	var current_speed := speed
+	var climbing := _step_climb(simulation, delta, now, climb_direction, -motion.y,
+		held or bool(input_state.get("jump", false)), movement_factor, float(stats.get("jump", 0)))
+	var current_speed := simulation.hero_speed(character) if is_hero() else speed
+	var bank_speed: float = simulation.hero_speed(character, flying) if is_hero() else speed
 	if input_state.get("sprint", false):
 		current_speed *= Content.balance.movement.sprint
 	if is_hero() and flying:
-		current_speed = Content.heroes[character].flySpeed
+		current_speed = simulation.hero_speed(character, true)
 		if input_state.get("sprint", false):
 			current_speed *= Content.balance.movement.sprint
 	current_speed *= StatusRules.movement_modifier(buffs, "speed", now) * movement_factor * terrain_factor
@@ -607,7 +631,10 @@ func simulate_movement(delta: float) -> void:
 	current_speed *= simulation.weather_movement(self, weather_direction, flying or low_gravity or velocity.y > 0 or not is_on_floor(), not flying)
 	if has_status("sup_until", now):
 		current_speed *= 1 - Content.constants.HIGH_SUP.SPEED * float(status.get("sup_factor", 0))
-	if flying:
+		bank_speed *= 1 - Content.constants.HIGH_SUP.SPEED * float(status.get("sup_factor", 0))
+	if climbing:
+		velocity = Vector3.ZERO
+	elif flying:
 		if kind == "drone" and held and not jump_was_held:
 			var last_shot := maxf(float(last_fired_at.get("light", -INF)), float(last_fired_at.get("heavy", -INF)))
 			if now - maxf(last_shot, damaged_at) < Content.constants.IFRAME.COMBAT_S and simulation.request_iframe(self):
@@ -622,6 +649,12 @@ func simulate_movement(delta: float) -> void:
 		velocity = velocity.lerp(target, 1 - exp(-4.0 * delta))
 	else:
 		air_sink = 0
+		var slope_speed := MovementRules.slope_speed(position.x, position.z, position.y, direction.x, direction.z,
+			false, bool(fluid_environment.get("air", false)), velocity.y, slope_queries)
+		if not is_finite(slope_speed):
+			simulation.message.emit(peer_id, "unavailable_surface")
+			return
+		current_speed *= slope_speed
 		var grounded: bool = is_on_floor() or (is_finite(standing_surface) and velocity.y <= 0 and position.y <= standing_surface + Content.constants.AIR.OFF_GROUND)
 		if movement_factor <= 0:
 			charge = 0
@@ -645,7 +678,33 @@ func simulate_movement(delta: float) -> void:
 			if is_hero():
 				_step_lift(simulation, 0, delta)
 		input_state["jump"] = false
+	if not climbing:
+		var right := Basis(Vector3.UP, yaw) * Vector3.RIGHT
+		movement_roll = MovementRules.camera_roll(movement_roll, velocity.dot(right), bank_speed, flying, delta)
+	floor_snap_length = 0.0
+	if not flying and not climbing:
+		var along := func(dx: float, dz: float) -> float:
+			return MovementRules.slope_along(previous_position.x, previous_position.z, previous_position.y, dx, dz,
+				false, bool(fluid_environment.get("air", false)), velocity.y, slope_queries)
+		var step := MovementRules.slope_step(float(velocity.x) * delta, float(velocity.z) * delta, along)
+		if not step.valid:
+			simulation.message.emit(peer_id, "unavailable_surface")
+			return
+		if step.blocked:
+			velocity.x = float(step.x) / delta if delta > 0 else 0.0
+			velocity.z = float(step.z) / delta if delta > 0 else 0.0
+			impulse_velocity = Vector2.ZERO
+		slope_blocked = bool(step.blocked) and float(step.x) == 0 and float(step.z) == 0
+		var next_surface := simulation._movement_surface(previous_position + Vector3(step.x, 0, step.z))
+		if is_finite(next_surface):
+			var run := sqrt(float(step.x) * float(step.x) + float(step.z) * float(step.z))
+			var support := MovementRules.slope_ground(position.y, standing_surface, next_surface, run, velocity.y, low_gravity)
+			if support.snap:
+				floor_snap_length = MovementRules.slope_snap_distance(run)
+		floor_max_angle = deg_to_rad(float(Content.constants.SLOPE.SNAP_DEG))
 	move_and_slide()
+	if floor_snap_length > 0 and not is_on_floor():
+		apply_floor_snap()
 	if frozen and simulation.world.water_plane(position.x, position.z) != null:
 		var ice_surface := simulation._movement_surface(Vector3(position.x, previous_position.y, position.z))
 		if is_finite(ice_surface) and position.y < ice_surface:
@@ -694,11 +753,36 @@ func simulate_movement(delta: float) -> void:
 func _step_lift(simulation: BattleSimulation, vertical: float, delta: float) -> float:
 	var stats: Dictionary = Content.constants.UNITS[kind]
 	var reference: float = float(simulation.world.water_y) if simulation.world != null and simulation.world.water_y != null else simulation.world.native_data.min_height if simulation.world != null and simulation.world.native_data != null else NAN
-	var unbalanced := flying and (air_sink > 0 or lift_lock_until > simulation.clock or has_status("unbalanced_until", simulation.clock))
+	var unbalanced := MovementRules.flight_unbalanced(simulation.flight_balance_state(self), simulation.clock)
 	var state := MovementRules.step_lift(lift, vertical, position.y, reference, float(stats.get("vspeed", 0)),
 		float(stats.get("vdown", stats.get("vspeed", 0))), delta, unbalanced, StatusRules.fluid_factor(wet), WeatherRules.air_lift(simulation.weather_dynamics))
 	lift = state.lift
 	return state.vertical
+
+func _step_climb(simulation: BattleSimulation, delta: float, now: float, direction: Vector3,
+		forward: float, jump: bool, cc: float, jump_speed: float) -> bool:
+	var state := {"x": float(position.x), "y": float(position.y), "z": float(position.z), "vertical": float(velocity.y),
+		"impulse_x": float(impulse_velocity.x), "impulse_z": float(impulse_velocity.y),
+		"charge": charge, "low_gravity": low_gravity, "roll": movement_roll}
+	var input := {"move_x": float(direction.x), "move_z": float(direction.z), "forward": forward,
+		"jump": jump, "jump_speed": jump_speed, "cc": cc, "speed": StatusRules.movement_modifier(buffs, "speed", now),
+		"flying": flying, "dead": not alive()}
+	var active := climb.advance(delta, now, state, input, simulation.world.climb_query())
+	if climb.entered:
+		simulation.events.append({"type": "climb_grab", "actor": entity_id, "peer": peer_id, "only_peer": peer_id, "kind": climb.entered_kind})
+	charge = float(state.charge)
+	low_gravity = bool(state.low_gravity)
+	movement_roll = float(state.roll)
+	velocity.y = float(state.vertical)
+	impulse_velocity = Vector2(state.impulse_x, state.impulse_z)
+	# Reach the authored support height before crossing its wall edge; native sweeps
+	# still stop intervening ceilings, bodies and newly occupied route endpoints.
+	if float(state.y) != float(position.y):
+		move_and_collide(Vector3(0, float(state.y) - float(position.y), 0))
+	var horizontal := Vector3(float(state.x) - float(position.x), 0, float(state.z) - float(position.z))
+	if not horizontal.is_zero_approx():
+		move_and_collide(horizontal)
+	return active
 
 func _launch_charged_jump(simulation: BattleSimulation) -> void:
 	var morph := kind == "morph"
@@ -719,7 +803,7 @@ func _launch_charged_jump(simulation: BattleSimulation) -> void:
 			velocity.y = Content.constants.CJUMP.V * charge * StatusRules.movement_modifier(buffs, "jump", simulation.clock) * jump_factor
 			low_gravity = true
 			var forward := Vector2(-sin(yaw), -cos(yaw))
-			var momentum: float = speed * StatusRules.movement_modifier(buffs, "speed", simulation.clock) * Content.constants.CJUMP.FWD_F * Content.constants.CJUMP.AIR_SPD_F * charge
+			var momentum: float = simulation.hero_speed(character) * StatusRules.movement_modifier(buffs, "speed", simulation.clock) * Content.constants.CJUMP.FWD_F * Content.constants.CJUMP.AIR_SPD_F * charge
 			if has_status("sup_until", simulation.clock):
 				momentum *= 1 - Content.constants.HIGH_SUP.SPEED * float(status.get("sup_factor", 0))
 			impulse_velocity += forward * momentum
@@ -735,7 +819,7 @@ func play_action(action: String) -> void:
 
 func present_body_event(event: Dictionary, now: float) -> bool:
 	if body_presentation != null:
-		var is_self := is_pilot() and peer_id == multiplayer.get_unique_id()
+		var is_self := is_pilot() and peer_id == Session.player_id()
 		if event.get("type") == "body_echo" and not is_self and remote_burst_driven:
 			return false
 		if not is_self and (body_presentation.report.is_empty() or not presentation_visible):
@@ -755,17 +839,23 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	var was_collapsed := bool(special.get("collapsed", false))
 	var was_garrison := bool(special.get("garrison", false))
 	hp = state.hp
+	upgrade_survivor = hp <= 0 and not bool(state.get("dead", hp <= 0))
+	charred = bool(state.get("charred", false))
 	max_hp = state.max_hp
 	shield = state.shield
 	max_shield = state.max_shield
-	power = state.power
-	money = state.money
-	score = state.score
-	deaths = state.deaths
-	ammo = state.ammo
-	upgrades = state.upgrades
-	reload_at = state.reload_at
-	cooldowns = state.cooldowns
+	power = state.get("power", 0)
+	money = state.get("money", 0)
+	score = state.get("score", 0)
+	deaths = int(state.get("deaths", 0))
+	ammo = state.get("ammo", {}).duplicate(true)
+	upgrades = state.get("upgrades", {}).duplicate(true)
+	if state.has("super_level"):
+		upgrades["super"] = int(state.super_level)
+	reload_at = state.get("reload_at", {}).duplicate(true)
+	cooldowns = state.get("cooldowns", {}).duplicate(true)
+	public_abilities = state.get("public_abilities", {}).duplicate(true)
+	max_power = float(state.get("max_power", max_power))
 	status = state.get("status", {}).duplicate(true)
 	buffs = state.get("buffs", []).duplicate(true)
 	wet = int(state.get("wet", 0))
@@ -782,7 +872,7 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 		refresh_collision()
 	creep_multiplier = float(state.get("creep_multiplier", 1))
 	charge = state.get("charge", 0)
-	lift = state.get("lift", Content.constants.FLIGHT.LIFT_MAX)
+	lift = state.get("lift", -1.0)
 	respawn_at = state.respawn_at
 	view_reset = int(state.get("view_reset", 0))
 	flying = state.flying
@@ -797,9 +887,10 @@ func apply_snapshot(state: Dictionary, instant: bool = false) -> void:
 	target_position = state.position
 	target_yaw = state.yaw
 	yaw = state.get("view_yaw", state.yaw)
-	pitch = state.pitch
+	pitch = state.get("pitch", 0.0)
+	movement_roll = float(state.get("movement_roll", 0))
 	view_mode = state.get("view_mode", "fpv")
-	authority_fov = state.get("view_fov", authority_fov)
+	authority_fov = state.get("view_fov", Content.constants.UNITS.get(kind, {}).get("fov", 68))
 	if not player_view.rules.is_empty():
 		player_view.mode = view_mode
 		player_view.body_yaw = state.yaw
@@ -817,6 +908,7 @@ func interpolate(delta: float) -> void:
 	sync_view_camera()
 
 func present_scene_damage(state: Dictionary, effects: CombatEffects = null, initial: bool = false) -> void:
+	charred = bool(state.get("charred", false))
 	if model == null:
 		return
 	var profile: Dictionary = Content.balance.destruction.sceneProfiles.get(kind, {})
@@ -824,7 +916,7 @@ func present_scene_damage(state: Dictionary, effects: CombatEffects = null, init
 		return
 	var mobile := bool(profile.get("mobile", false))
 	var destination := SceneDamageGeometry.health_stage(float(state.hp), float(state.max_hp))
-	if destination >= 3 and not initial and not (is_hero() and float(state.hp) <= 0):
+	if destination >= 3 and not initial and not (is_hero() and bool(state.get("dead", float(state.hp) <= 0))):
 		return
 	var dimensions: Dictionary = body.profile.dimensions if body != null else geometry_override
 	if dimensions.is_empty():
@@ -848,7 +940,7 @@ func present_damage_fx(state: Dictionary, effects: CombatEffects = null) -> void
 	if model == null:
 		return
 	var properties: Dictionary = state.get("special", special)
-	var flags := {"isSelf": is_pilot() and peer_id == multiplayer.get_unique_id(),
+	var flags := {"isSelf": is_pilot() and peer_id == Session.player_id(),
 		"civ": properties.get("role") == "civilian", "decoy": kind == "decoy", "kami": kind == "kami",
 		"neutral": properties.get("neutral", false), "collapsed": properties.get("collapsed", false),
 		"dead": state.get("dead", is_hero() and float(state.hp) <= 0)}
@@ -877,6 +969,8 @@ func apply_collapse(instant: bool = false) -> void:
 	if not Session.dedicated:
 		scene_damage.apply(model, kind, entity_id, geometry_override, 3, special.get("neutral", false))
 	clear_damage_fx()
+	if is_instance_valid(vital_bar):
+		vital_bar.clear_bar()
 	if instant or Session.dedicated:
 		var pose := SceneRules.collapse_pose(entity_id, model.scale, model.rotation, 1)
 		model.scale = pose.scale
@@ -892,7 +986,7 @@ func apply_collapse(instant: bool = false) -> void:
 	effects.scene_collapse(model, entity_id)
 	effects.scene_damage_burst(entity_id, kind, global_position, float(geometry_override.height), float(geometry_override.radius), 3)
 
-func snapshot() -> Dictionary:
+func snapshot(include_view_offset: bool = true) -> Dictionary:
 	var public_special := special.duplicate(true)
 	if special.get("role") == "civilian":
 		public_special = {"role": "civilian", "neutral": true, "civil_side": special.civil_side, "profession": special.profession,
@@ -903,8 +997,8 @@ func snapshot() -> Dictionary:
 		"creep_multiplier": creep_multiplier,
 		"wet": wet, "fluid_environment": fluid_environment.duplicate(true),
 		"lane": lane, "has_lane": has_lane, "bot": is_bot, "position": global_position, "yaw": facing_yaw(), "pitch": pitch,
-		"view_yaw": yaw, "view_mode": view_mode, "view_fov": authority_fov,
-		"hp": hp, "max_hp": max_hp, "shield": shield, "max_shield": max_shield,
+		"view_yaw": yaw, "view_mode": view_mode, "view_fov": authority_fov, "movement_roll": movement_roll,
+		"hp": hp, "max_hp": max_hp, "shield": shield, "max_shield": max_shield, "dead": not alive(),
 		"power": power, "money": money, "score": score, "deaths": deaths,
 		"ammo": ammo.duplicate(), "upgrades": upgrades.duplicate(), "reload_at": reload_at.duplicate(),
 		"cooldowns": cooldowns.duplicate(), "respawn_at": respawn_at, "view_reset": view_reset, "flying": flying,
@@ -913,4 +1007,4 @@ func snapshot() -> Dictionary:
 		"charge": charge, "lift": lift,
 		"cast": {"slot": cast_state.slot, "start": cast_state.start, "duration": cast_state.duration} if not cast_state.is_empty() else {},
 		"ability_charges": ability_charges.duplicate(true),
-		"view_offset": Basis(Vector3.UP, -yaw) * (view_origin() - global_position) if is_pilot() else Vector3.ZERO}
+		"view_offset": Basis(Vector3.UP, -yaw) * (view_origin() - global_position) if is_pilot() and include_view_offset else Vector3.ZERO}

@@ -5,9 +5,9 @@ static func flight_seconds(definition: Dictionary, distance: float, height: floa
 	var horizontal := maxf(0, distance)
 	return sqrt(2 * maxf(0, horizontal - height) / float(Content.constants.BALLISTIC.G)) if definition.trajectory == "lob" else sqrt(horizontal * horizontal + height * height) / float(definition.projectile.speed)
 
-static func record(trail: Array, now: float, x: float, z: float) -> void:
+static func record(trail: Array, now: float, x: float, z: float, duration: float = NAN) -> void:
 	trail.append({"at": now, "x": x, "z": z})
-	var cutoff := now - float(Content.balance.bot.shotTrailSeconds)
+	var cutoff := now - (float(Content.balance.bot.shotTrailSeconds) if is_nan(duration) else duration)
 	var count := 0
 	while count + 1 < trail.size() and float(trail[count + 1].at) <= cutoff:
 		count += 1

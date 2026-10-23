@@ -23,6 +23,7 @@ func sync(states: Array, now: float) -> void:
 		var entry := {"root": root, "ground": float(state.position.y), "born": now, "landing": state.landing}
 		for name: String in ["crate", "chute", "groundChute", "halo"]:
 			entry[name] = root.find_child("n_%d" % int(Content.balance.loot_visuals[key][name]), true, false)
+		SourceOutlineBinding.install(root)
 		entries[id] = entry
 	for id: int in entries.keys():
 		if not seen.has(id):

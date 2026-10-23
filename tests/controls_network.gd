@@ -66,7 +66,7 @@ func _physics_process(delta: float) -> void:
 			simulation.clock = 10.04
 		return
 	super._physics_process(delta)
-	if simulation != null and not requested and simulation.pilots.has(multiplayer.get_unique_id()):
+	if simulation != null and not requested and simulation.pilots.has(Session.player_id()):
 		requested = true
 		var wheel := InputEventMouseButton.new()
 		wheel.button_index = MOUSE_BUTTON_WHEEL_UP
@@ -81,7 +81,7 @@ func _physics_process(delta: float) -> void:
 		gesture.pressed = true
 		_unhandled_input(gesture)
 	if mode_seen and cast_seen and pulse_seen and view_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_CONTROLS_PASS bindings=true ordered=true mode=true source=true recoil=true view=true")
 		Session.stop()
 		get_tree().quit()
@@ -90,7 +90,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	mode_seen = mode_seen or aiming and selected_slot == "heavy" and int(state.get("aim_control", {}).get("request", 0)) >= 1

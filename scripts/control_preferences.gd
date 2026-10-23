@@ -3,6 +3,7 @@ extends Node
 
 signal changed
 signal view_changed(value: String)
+signal power_changed
 signal save_failed(error: Error)
 
 const SAVE_PATH := "user://controls.cfg"
@@ -15,6 +16,7 @@ var device_pick := ""
 var room := ""
 var persist := true
 var view_pref := "fpv"
+var power_pref: Variant = null
 
 func _ready() -> void:
 	if not Content.balance.has("mobile"):
@@ -33,6 +35,7 @@ func configure(metadata: Dictionary) -> void:
 	pick = ""
 	device_pick = ""
 	room = ""
+	power_pref = null
 	if Content.balance.has("playerView"):
 		view_pref = Content.balance.playerView.defaultMode
 
@@ -92,8 +95,10 @@ func load_save(path: String = SAVE_PATH) -> void:
 	saved = file.get_value("control", "view_mode", view_pref)
 	if saved is String and saved in Content.balance.get("playerView", {}).get("modeKeys", []):
 		view_pref = saved
+	power_pref = file.get_value("presentation", "low_power", null)
 	changed.emit()
 	view_changed.emit(view_pref)
+	power_changed.emit()
 
 func save(path: String = SAVE_PATH) -> Error:
 	if not persist:
@@ -104,11 +109,24 @@ func save(path: String = SAVE_PATH) -> Error:
 	file.set_value("control", "mode", pref)
 	file.set_value("control", "scheme", pick)
 	file.set_value("control", "view_mode", view_pref)
+	if power_pref != null:
+		file.set_value("presentation", "low_power", power_pref)
 	var error := file.save(path)
 	if error != OK:
 		push_error("Cannot save control preferences: " + error_string(error))
 		save_failed.emit(error)
 	return error
+
+func low_power() -> bool:
+	return scheme() == "pad" if power_pref == null else power_pref is String and power_pref == "1"
+
+func set_low_power(on: bool) -> void:
+	var next := "1" if on else "0"
+	if power_pref is String and power_pref == next:
+		return
+	power_pref = next
+	save()
+	power_changed.emit()
 
 func set_value(key: String, value: Variant) -> bool:
 	if not values.has(key):

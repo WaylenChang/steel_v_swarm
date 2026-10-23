@@ -2,6 +2,13 @@ extends RefCounted
 
 const Helper = preload("res://tests/status_suite.gd")
 const BotTests = preload("res://tests/bot_suite.gd")
+const LocalCastTests = preload("res://tests/local_cast_suite.gd")
+const AbilityTargetTests = preload("res://tests/ability_target_suite.gd")
+const LocalFeedbackTests = preload("res://tests/local_feedback_suite.gd")
+const LocalDefenseTests = preload("res://tests/local_defense_suite.gd")
+const LocalStatusTests = preload("res://tests/local_status_suite.gd")
+const ControlEffectTests = preload("res://tests/control_effect_suite.gd")
+const StatusIconTests = preload("res://tests/status_icon_suite.gd")
 
 class ReferenceSimulation extends BattleSimulation:
 	var values: Array = []
@@ -19,6 +26,13 @@ class ReferenceSimulation extends BattleSimulation:
 		return true
 
 static func run(h: Node, fixtures: Dictionary) -> void:
+	LocalCastTests.run(h, fixtures)
+	AbilityTargetTests.run(h, fixtures)
+	LocalFeedbackTests.run(h, fixtures)
+	LocalDefenseTests.run(h, fixtures)
+	LocalStatusTests.run(h, fixtures)
+	ControlEffectTests.run(h, fixtures)
+	StatusIconTests.run(h, fixtures)
 	for key: String in ["controlsLook", "controlsMoving", "controlsNumpad", "controlsStance", "recoilSequences", "recoilGates"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original controls/recoil oracle: " + key)

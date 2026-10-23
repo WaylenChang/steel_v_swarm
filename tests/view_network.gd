@@ -34,7 +34,7 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	if simulation == null or not view_ready or touch_controls == null or not touch_controls.visible:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	if phase == 0:
@@ -66,7 +66,7 @@ func _physics_process(delta: float) -> void:
 		if absf(bound - expected) > 0.00001 or view_lock.hold or view_lock.target != 0:
 			_fail("Native scope material must use the same density/radius as original acquisition")
 			return
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_VIEW_PASS touch=true cycle=true release=true pose=true scope=true resources=true target_rpc=false")
 		Session.stop()
 		get_tree().quit()

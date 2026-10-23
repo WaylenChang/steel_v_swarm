@@ -41,6 +41,55 @@ static func ground_code(height: float, water_y: Variant, color: Array = [], dry:
 		return 2
 	return 0
 
+static func valid_border_mask(profile: Variant) -> bool:
+	if not profile is Dictionary or not profile.get("grid") is Dictionary:
+		return false
+	for key: String in ["cell", "halfWidthMax"]:
+		var value: Variant = profile.get(key)
+		if not (value is float or value is int) or not is_finite(float(value)):
+			return false
+	if float(profile.cell) <= 0 or float(profile.halfWidthMax) < 0:
+		return false
+	for key: Variant in profile.grid:
+		if not key is String:
+			return false
+		var parts: PackedStringArray = key.split(",")
+		if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int() or not profile.grid[key] is Array:
+			return false
+		for segment: Variant in profile.grid[key]:
+			if not segment is Dictionary:
+				return false
+			for field: String in ["x0", "z0", "x1", "z1", "hw"]:
+				var value: Variant = segment.get(field)
+				if not (value is float or value is int) or not is_finite(float(value)):
+					return false
+			if float(segment.hw) < 0:
+				return false
+	return true
+
+static func in_border_band(x: float, z: float, profile: Dictionary) -> bool:
+	if profile.is_empty():
+		return false
+	var cell: float = profile.cell
+	var reach := maxi(1, ceili(float(profile.halfWidthMax) / cell))
+	var column := floori(x / cell)
+	var row := floori(z / cell)
+	var grid: Dictionary = profile.grid
+	for dz in range(-reach, reach + 1):
+		for dx in range(-reach, reach + 1):
+			for segment: Dictionary in grid.get("%d,%d" % [column + dx, row + dz], []):
+				var ex := float(segment.x1) - float(segment.x0)
+				var ez := float(segment.z1) - float(segment.z0)
+				var square := ex * ex + ez * ez
+				if square == 0:
+					square = 1.0
+				var fraction := clampf(((x - float(segment.x0)) * ex + (z - float(segment.z0)) * ez) / square, 0, 1)
+				var ox := float(segment.x0) + ex * fraction - x
+				var oz := float(segment.z0) + ez * fraction - z
+				if sqrt(ox * ox + oz * oz) <= float(segment.hw):
+					return true
+	return false
+
 static func wet_at(grid: Dictionary, x: float, native_z: float) -> int:
 	if grid.is_empty() or not is_finite(x) or not is_finite(native_z):
 		return 0

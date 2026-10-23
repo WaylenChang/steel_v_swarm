@@ -105,7 +105,7 @@ static func _owner_binding(h: Node, fixtures: Dictionary) -> void:
 	var profile: Dictionary = Content.balance.bodies[trace.key]
 	var unit := BattleUnit.new()
 	h.add_child(unit)
-	unit.configure({"id": 1031, "peer": h.multiplayer.get_unique_id(), "character": profile.character,
+	unit.configure({"id": 1031, "peer": Session.player_id(), "character": profile.character,
 		"kind": Content.heroes[profile.character].kind, "side": profile.side, "position": Vector3.ZERO})
 	if unit.body_presentation == null:
 		h._check(false, "Pack original local body frame scene")

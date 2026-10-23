@@ -8,6 +8,8 @@ var heroes: Dictionary
 var structures: Dictionary
 var campaign: Dictionary = {}
 var art_cache: Dictionary = {}
+var balance_preferences: BalancePreferences
+var local_balance: BalanceDefinitions
 
 func _ready() -> void:
 	balance = read_json("res://data/balance.json")
@@ -45,10 +47,35 @@ func ability(character: String, slot: String, level: float = 1) -> Dictionary:
 	var tiers: Array = heroes[character].abilities[slot]
 	return tiers[clampi(int(level) - 1, 0, tiers.size() - 1)]
 
-func map_variant(index: int, size: int) -> Dictionary:
+func initialize_local_balance(persist: bool) -> Error:
+	if local_balance != null:
+		return OK
+	if not balance.get("balancePreferences", {}).has("definitions"):
+		return ERR_UNAVAILABLE
+	balance_preferences = BalancePreferences.new()
+	balance_preferences.configure(balance.balancePreferences)
+	balance_preferences.persist = persist
+	var error := balance_preferences.load_save()
+	local_balance = BalanceDefinitions.new()
+	local_balance.configure(balance_preferences, balance.balancePreferences.definitions)
+	return error
+
+func local_weapon(character: String, slot: String, level: float = 1) -> Dictionary:
+	return local_balance.weapon(character, slot, level) if local_balance != null else weapon(character, slot, level)
+
+func local_ability(character: String, slot: String, level: float = 1) -> Dictionary:
+	return local_balance.ability(character, slot, level) if local_balance != null else ability(character, slot, level)
+
+func local_view_curve() -> Dictionary:
+	return local_balance.view_curve() if local_balance != null else balance.bodyRules.curve
+
+func map_variant(index: int, size: int, swapped: bool = false) -> Dictionary:
 	var entry: Dictionary = maps[clampi(index, 0, maps.size() - 1)]
-	var variant: Dictionary = entry.variants[str(clampi(size, 1, 5))].duplicate(true)
-	variant.native_world = "res://assets/worlds/%s_%d.res" % [entry.id, clampi(size, 1, 5)]
+	var variants: Dictionary = entry.get("swapped_variants", {}) if swapped else entry.variants
+	if not variants.has(str(clampi(size, 1, 5))):
+		return {}
+	var variant: Dictionary = variants[str(clampi(size, 1, 5))].duplicate(true)
+	variant.native_world = "res://assets/worlds/%s%s_%d.res" % [entry.id, "_swap" if swapped else "", clampi(size, 1, 5)]
 	return variant
 
 func side_info(side: String) -> Dictionary:
@@ -74,10 +101,22 @@ func campaign_map(index: int, side: String, swapped: bool = false) -> Dictionary
 			return variant
 	return {}
 
+func battle_map(settings: Dictionary) -> Dictionary:
+	var result := campaign_map(int(settings.campaign.index), settings.campaign.side, settings.campaign.swapped) if settings.has("campaign") else map_variant(int(settings.map_index), int(settings.team_size), bool(settings.get("swapped", false)))
+	if not result.is_empty():
+		result.config["super"] = bool(settings.get("super", false)) and not settings.has("campaign")
+	return result
+
 func campaign_available(index: int, side: String) -> bool:
+	var chapter := CampaignRules.chapter(index)
+	if chapter.is_empty():
+		return false
 	for swapped in [false, true]:
 		var map := campaign_map(index, side, swapped)
-		if map.is_empty() or not ResourceLoader.exists(map.native_world) or not structures.has(map.native_world.get_file().get_basename()):
+		if map.is_empty():
+			return false
+		var path := WorldVariant.path(map.native_world, chapter.env)
+		if path.is_empty() or not ResourceLoader.exists(path):
 			return false
 	return true
 
@@ -103,7 +142,7 @@ func story_texture(path: String, mipmaps: bool = false) -> Texture2D:
 	return texture
 
 func label(key: String) -> String:
-	return str(text.get(key, key))
+	return str(balance.get("rooms", {}).get("ui", {}).get(key, text.get(key, key)))
 
 func _install_input() -> void:
 	var keys := {"forward": [KEY_W, KEY_UP], "back": [KEY_S, KEY_DOWN], "left": [KEY_A, KEY_LEFT], "right": [KEY_D, KEY_RIGHT],

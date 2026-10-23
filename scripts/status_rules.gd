@@ -58,7 +58,7 @@ static func tier_value(value: Variant, level: float) -> float:
 	var step := last - float(value[-2]) if value.size() > 1 else 0.0
 	return maxf(0, last + step * (index - (value.size() - 1)))
 
-static func self_attack_boost(character: String, level: float, light_level: float, heavy_level: float) -> Dictionary:
+static func self_attack_boost(character: String, level: float, light_level: float, heavy_level: float, heavy_definition: Dictionary = {}) -> Dictionary:
 	var neutral := {"dmgMul": 0.0, "heal": 0.0, "alphaX": 1.0}
 	var raw: Dictionary = Content.heroes[character].atk
 	# The original compensation gate uses effect semantics, including direct team effects.
@@ -67,7 +67,7 @@ static func self_attack_boost(character: String, level: float, light_level: floa
 	var tier := (light_level + heavy_level) / 2.0
 	var budget: float = Content.constants.SPECIAL.BASE * (1 + Content.constants.SPECIAL.PER_LVL * (tier - 1))
 	var equivalent: float = budget * Content.constants.SELF_ATK.REALIZED_F * tier_value(raw.cd, level) / Content.constants.SPECIAL_CD_S
-	var weapon := Content.weapon(character, "heavy", heavy_level)
+	var weapon := heavy_definition if not heavy_definition.is_empty() else Content.weapon(character, "heavy", heavy_level)
 	var cycle: float = weapon.mag / (weapon.rate if weapon.rate else Content.constants.RATE_DEF) + weapon.reload
 	var dps: float = weapon.dmg * weapon.mag / cycle
 	if raw.fx == "stealth" and dps > 0:

@@ -153,8 +153,8 @@ func _sprite(path: String, additive: bool, colour: int, opacity: float) -> MeshI
 	var material := ShaderMaterial.new()
 	material.shader = preload("res://shaders/combat_spark.gdshader") if additive else preload("res://shaders/combat_smoke.gdshader")
 	material.set_shader_parameter("spark_texture", load(path))
-	material.set_shader_parameter("curve_knee", Content.balance.bodyRules.curve.knee)
-	material.set_shader_parameter("curve_inverse_radius", Content.balance.bodyRules.curve.inverse)
+	material.set_shader_parameter("curve_knee", Content.local_view_curve().knee)
+	material.set_shader_parameter("curve_inverse_radius", Content.local_view_curve().inverse)
 	material.set_meta("source_transparent", true)
 	node.material_override = material
 	_tint(node, colour, opacity)
@@ -174,8 +174,8 @@ func _surface(colour: int, opacity: float, textured: bool, additive: bool, flame
 		material.set_shader_parameter("depth_factor", rules.polygonOffsetFactor)
 		material.set_shader_parameter("depth_units", rules.polygonOffsetUnits)
 		material.set_shader_parameter("depth_unit", pow(2, -int(rules.depthBits)))
-	material.set_shader_parameter("curve_knee", Content.balance.bodyRules.curve.knee)
-	material.set_shader_parameter("curve_inverse_radius", Content.balance.bodyRules.curve.inverse)
+	material.set_shader_parameter("curve_knee", Content.local_view_curve().knee)
+	material.set_shader_parameter("curve_inverse_radius", Content.local_view_curve().inverse)
 	material.set_meta("source_transparent", true)
 	return material
 

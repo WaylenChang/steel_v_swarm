@@ -12,7 +12,7 @@ class ThirdSimulation extends BattleSimulation:
 	var released := 0
 	var terrain_mode := "none"
 
-	func spawn(info: Dictionary) -> BattleUnit:
+	func spawn(info: Dictionary, _replica: bool = false) -> BattleUnit:
 		var unit := BattleUnit.new()
 		add_child(unit)
 		unit.entity_id = next_id

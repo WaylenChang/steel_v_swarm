@@ -3,16 +3,50 @@ extends RefCounted
 
 static func run(h: Node, fixtures: Dictionary) -> void:
 	references(h, fixtures)
+	scenery_references(h, fixtures)
 	await blasts(h, fixtures.structureBlasts)
 	await physics(h)
 	await tunnel_impacts(h)
+	await support_physics(h, fixtures)
 
 static func references(h: Node, fixtures: Dictionary) -> void:
 	var layers := StructureLayers.new()
 	for fixture: Dictionary in fixtures.projectileSurfaces:
 		layers.configure([], fixture.decks, fixture.tunnels)
+		layers.configure_supports(fixture.get("blockers", []), fixture.get("roofs", []))
 		var surface := layers.projectile_surface(h._reference_vector(fixture.point), fixture.ground)
 		h._check(absf(surface - fixture.result) < 0.00001, "Original surfaceAt at the launch muzzle: " + fixture.name)
+	if not fixtures.has("supportQueries") or not fixtures.has("supportClearance") or not fixtures.has("flightSupportSurfaces") or not fixtures.has("structurePads"):
+		h._check(false, "Regenerate source blocker-top and polygon-roof references")
+		return
+	var world := BattleWorld.new()
+	world.native_data = NativeWorldData.new()
+	for fixture: Dictionary in fixtures.structurePads:
+		world.native_data.structure_pads = fixture.pads
+		var pad: Variant = world.pad_height(fixture.kind, fixture.x, fixture.z)
+		h._check((pad == null) == (fixture.result == null), "Original tower/base strict platform-anchor bounds and first match")
+		if pad != null and fixture.result != null:
+			h._near(pad, fixture.result, "Original tower/base anchor retains zero and below-ground heights")
+	world.free()
+	for fixture: Dictionary in fixtures.flightSupportSurfaces:
+		layers.configure([], fixture.decks, fixture.tunnels)
+		layers.configure_supports(fixture.get("blockers", []), fixture.get("roofs", []))
+		h._near(layers.projectile_surface(Vector3(fixture.point[0], INF, fixture.point[1]), fixture.ground), fixture.result,
+			"Original infinite-altitude surface query retains buildings, roofs and structural layers")
+	for fixture: Dictionary in fixtures.supportClearance:
+		h._check(CampRules.cleared_buildings(fixture.records, fixture.camps) == fixture.buildings,
+			"Original buildingNear and buildingBounds select complete source-owned volumes")
+	for fixture: Dictionary in fixtures.supportQueries:
+		layers.configure_supports(fixture.blockers, fixture.roofs)
+		var point := Vector2(fixture.point[0], fixture.point[1])
+		var top: Variant = layers.blocker_top(point, fixture.margin)
+		var roof: Variant = layers.roof_platform_top(point)
+		h._check((top == null) == (fixture.top == null), "Original blocker top presence: " + fixture.name)
+		if top != null and fixture.top != null:
+			h._near(top, fixture.top, "Original rotated/circular blocker highest top")
+		h._check((roof == null) == (fixture.roof == null), "Original polygon roof/hole/edge/active selection: " + fixture.name)
+		if roof != null and fixture.roof != null:
+			h._near(roof, fixture.roof, "Original highest active polygon roof")
 	layers.configure([])
 	var previous: Array = []
 	for fixture: Dictionary in fixtures.structureSeparation:
@@ -52,6 +86,78 @@ static func references(h: Node, fixtures: Dictionary) -> void:
 			var point := Vector2(probe.point[0], probe.point[1])
 			h._check(layers.inferred_level(point) == int(probe.level), "Native map source ribbon precedence: " + fixture.key)
 			h._check(layers.separated(2, point, point, 0) == probe.separation, "Native map source blast-grid registration")
+
+static func support_physics(h: Node, fixtures: Dictionary) -> void:
+	if not fixtures.has("supportCaptures"):
+		h._check(false, "Regenerate original roof polygon/triangulation captures")
+		return
+	for fixture: Dictionary in fixtures.supportCaptures:
+		var root := Node3D.new()
+		root.position = Vector3(4096, 0, 4096)
+		h.add_child(root)
+		var body := StaticBody3D.new()
+		body.collision_layer = 1024
+		root.add_child(body)
+		for platform: Dictionary in fixture.captured.roofPlatforms:
+			var vertices := PackedVector3Array()
+			for offset in range(0, platform.faces.size(), 3):
+				vertices.append(Vector3(platform.faces[offset], platform.faces[offset + 1], platform.faces[offset + 2]))
+			var shape := ConcavePolygonShape3D.new()
+			shape.set_faces(vertices)
+			shape.backface_collision = true
+			var collision := CollisionShape3D.new()
+			collision.shape = shape
+			collision.disabled = platform.active == false
+			body.add_child(collision)
+		await h.get_tree().physics_frame
+		await h.get_tree().physics_frame
+		for probe: Dictionary in fixture.probes:
+			var query := PhysicsRayQueryParameters3D.create(root.global_position + Vector3(probe.point[0], 100, probe.point[1]),
+				root.global_position + Vector3(probe.point[0], -100, probe.point[1]), 1024)
+			var hit := root.get_world_3d().direct_space_state.intersect_ray(query)
+			h._check(hit.is_empty() == (probe.result == null), "Original roof courtyard and native concave support presence: " + fixture.name)
+			if not hit.is_empty() and probe.result != null:
+				h._near(hit.position.y, probe.result, "Original highest active roof survives source triangulation and native physics")
+		root.free()
+		await h.get_tree().physics_frame
+
+static func scenery_references(h: Node, fixtures: Dictionary) -> void:
+	if not fixtures.has("sceneryClearance"):
+		h._check(false, "Regenerate original whole-scenery clearAround references")
+		return
+	var matrices = preload("res://tests/quaternion_suite.gd")
+	for fixture: Dictionary in fixtures.sceneryClearance:
+		var root := Node3D.new()
+		var batch := MultiMeshInstance3D.new()
+		batch.multimesh = MultiMesh.new()
+		batch.multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		batch.multimesh.mesh = BoxMesh.new()
+		batch.multimesh.instance_count = fixture.matrices.size()
+		for index in range(fixture.matrices.size()):
+			batch.multimesh.set_instance_transform(index, matrices.frame(fixture.matrices[index]))
+		var original := batch.multimesh
+		batch.set_meta("source_camp_building_batch", true)
+		root.add_child(batch)
+		var landmarks: Array[MeshInstance3D] = []
+		for spec: Dictionary in fixture.landmarks:
+			var node := MeshInstance3D.new()
+			node.mesh = BoxMesh.new()
+			if not spec.has("key"):
+				node.set_meta("source_camp_landmark", spec)
+			root.add_child(node)
+			landmarks.append(node)
+		var presentation := SceneryPresentation.new()
+		h._check(presentation.configure(root), "Bind original building batches and unkeyed landmark roster")
+		presentation.clear_camps(fixture.camps, {})
+		presentation.clear_camps(fixture.camps, {})
+		for index in range(fixture.matrices.size()):
+			h._check(batch.multimesh.get_instance_transform(index).is_equal_approx(matrices.frame(fixture.result.matrices[index])),
+				"Original instanced clearAround overlap, rotation, mirror, zero-scale and repeated calls")
+			h._check(original.get_instance_transform(index).is_equal_approx(matrices.frame(fixture.matrices[index])),
+				"Camp visual clearance cannot mutate the imported shared MultiMesh")
+		for index in range(landmarks.size()):
+			h._check(landmarks[index].visible == fixture.result.visible[index], "Original landmark clearance retains keyed ownership and strict circle boundary")
+		root.free()
 
 static func blasts(h: Node, fixtures: Array) -> void:
 	var sim := BattleSimulation.new()

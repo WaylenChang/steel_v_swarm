@@ -62,11 +62,14 @@ static func screen_uv(bearing: float, elevation: float, half_horizontal: float, 
 
 static func alpha(left: float, glint: bool = false) -> float:
 	var rules: Dictionary = Content.balance.screenSplats.glint if glint else Content.balance.screenSplats.blood
+	return envelope(left, rules, float(rules.PEAK))
+
+static func envelope(left: float, rules: Dictionary, peak: float) -> float:
 	var remaining := clampf(0 if is_nan(left) else left, 0, float(rules.HOLD_S) + float(rules.FADE_S))
 	if remaining >= float(rules.FADE_S):
-		return float(rules.PEAK)
+		return peak
 	var fraction := remaining / float(rules.FADE_S)
-	return float(rules.PEAK) * fraction * fraction * (3 - 2 * fraction)
+	return peak * fraction * fraction * (3 - 2 * fraction)
 
 func advance(delta: float) -> Dictionary:
 	var updates := {"blood": null, "glint": null}

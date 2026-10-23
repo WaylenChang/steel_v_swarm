@@ -57,7 +57,7 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	incoming_seen = incoming_seen or (lock_warning.visible and locked_until > float(Time.get_ticks_msec()) / 1000.0)
 	if lock_seen and skill_seen and independent_clear_seen and hidden_clear_seen and incoming_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_AIMING_PASS lock=true incoming_warning=true skill=true independent_clear=true hidden=true private=true")
 		Session.stop()
 		get_tree().quit()

@@ -14,8 +14,15 @@ var movement_rect := Rect2()
 var look_rect := Rect2()
 var held: Dictionary = {}
 var kind := "mech"
+var spectating := false
 var enabled := false
 var view_lock_active := false
+var map_near := false
+var badges: Dictionary = {}
+var mirrors: Dictionary = {}
+var rotate_hint: PanelContainer
+var rotate_timer: Timer
+var rotate_shown := false
 
 func configure(settings: ControlPreferences) -> void:
 	preferences = settings
@@ -39,6 +46,30 @@ func configure(settings: ControlPreferences) -> void:
 		button.modulate.a = 0.75
 		add_child(button)
 		buttons[definition.action] = button
+	for action: String in ["def", "atk", "jump", "special"]:
+		var badge := Label.new()
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.add_theme_font_size_override("font_size", 11)
+		badge.add_theme_color_override("font_color", Color(preferences.rules.touchHud.danger))
+		buttons[action].add_child(badge)
+		badges[action] = badge
+	rotate_hint = NativeUi.panel(Vector2.ZERO)
+	rotate_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	rotate_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rotate_text := NativeUi.label(preferences.rules.touchHud.rotateText, 11)
+	rotate_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rotate_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rotate_hint.add_child(rotate_text)
+	rotate_hint.hide()
+	add_child(rotate_hint)
+	rotate_timer = Timer.new()
+	rotate_timer.one_shot = true
+	rotate_timer.ignore_time_scale = true
+	rotate_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	rotate_timer.wait_time = preferences.rules.touchHud.rotateSeconds
+	rotate_timer.timeout.connect(func(): rotate_hint.hide())
+	add_child(rotate_timer)
 	for action: String in ["lock", "swap"]:
 		buttons[action].disabled = action == "swap" or not Content.balance.has("view")
 		buttons[action].tooltip_text = Content.label(("touch_lock_pending" if buttons[action].disabled else "view_lock_hint") if action == "lock" else "touch_squad_single")
@@ -57,6 +88,29 @@ func sync(in_battle: bool, blocked: bool) -> void:
 	var shown := enabled and preferences.scheme() == "pad" and not blocked
 	state.set_blocked(not shown)
 	visible = shown
+	if shown:
+		_update_rotate_hint(size.y >= size.x)
+
+func begin_match() -> void:
+	set_spectating(false)
+	rotate_shown = false
+	rotate_timer.stop()
+	rotate_hint.hide()
+	mirrors.clear()
+	for badge: Label in badges.values():
+		badge.text = ""
+	_layout()
+
+static func mirror_state(cd: float, ready: bool, locked: bool, charges: String = "") -> Dictionary:
+	return {"text": "%ds" % int(CssDecimal.fixed(cd, 0)) if cd > float(Content.balance.mobile.touchHud.cooldownThreshold) else charges,
+		"ready": ready, "locked": locked}
+
+func mirror(action: String, cd: float, ready: bool, locked: bool, charges: String = "") -> void:
+	if not badges.has(action):
+		return
+	var result := mirror_state(cd, ready, locked, charges)
+	mirrors[action] = result
+	badges[action].text = result.text
 
 func reset() -> void:
 	if state == null:
@@ -71,9 +125,26 @@ func set_kind(value: String) -> void:
 	if kind == value:
 		return
 	kind = value
-	buttons.jump.text = preferences.rules.mobilLabels.get(kind, preferences.rules.mobilLabels.mech)
-	buttons.dive.visible = kind in ["drone", "morph"]
-	buttons.swap.visible = kind == "drone"
+	_apply_kind()
+
+func set_spectating(on: bool) -> void:
+	spectating = on
+	_apply_kind()
+
+func _apply_kind() -> void:
+	if not preferences.rules.has("kindPresentation"):
+		return
+	var plan: Dictionary = preferences.rules.kindPresentation.get("" if spectating else kind, preferences.rules.kindPresentation.mech)
+	buttons.jump.text = plan.jump
+	buttons.special.text = plan.special
+	buttons.swap.text = plan.swap
+	for action: String in plan.hidden:
+		buttons[action].visible = not plan.hidden[action]
+	buttons.swap.disabled = not spectating
+	buttons.swap.tooltip_text = "" if spectating else Content.label("touch_squad_single")
+	for action: String in ["def", "atk", "jump", "special"]:
+		if spectating:
+			badges[action].text = ""
 
 func set_gyro_status(key: String) -> void:
 	buttons.gyro.tooltip_text = Content.label(key)
@@ -82,6 +153,11 @@ func set_gyro_status(key: String) -> void:
 func set_view_lock(on: bool) -> void:
 	if view_lock_active != on:
 		view_lock_active = on
+		queue_redraw()
+
+func set_map_near(on: bool) -> void:
+	if map_near != on:
+		map_near = on
 		queue_redraw()
 
 func show_civilian(on: bool) -> void:
@@ -122,7 +198,22 @@ func _layout() -> void:
 	var current_kind := kind
 	kind = ""
 	set_kind(current_kind)
+	for action: String in badges:
+		var badge: Label = badges[action]
+		badge.position = Vector2(0, buttons[action].size.y * 0.66)
+		badge.size = Vector2(buttons[action].size.x, buttons[action].size.y * 0.33)
+	rotate_hint.position = layout_rect.position + Vector2(space.x * 0.06, space.y * 0.4)
+	rotate_hint.size = Vector2(space.x * 0.88, 60)
+	_update_rotate_hint(size.y >= size.x, true)
 	queue_redraw()
+
+func _update_rotate_hint(portrait: bool, resized_hint: bool = false) -> void:
+	if not portrait or resized_hint and rotate_shown:
+		rotate_hint.hide()
+	elif enabled and not rotate_shown:
+		rotate_shown = true
+		rotate_hint.show()
+		rotate_timer.start()
 
 func _place(action: String, centre: Vector2, dimensions: Vector2) -> void:
 	if preferences.values.lefty:
@@ -132,6 +223,9 @@ func _place(action: String, centre: Vector2, dimensions: Vector2) -> void:
 	button.size = dimensions
 
 func _down(id: int, point: Vector2, now: float) -> void:
+	if rotate_hint.visible and Rect2(rotate_hint.position, rotate_hint.size).has_point(point):
+		rotate_hint.hide()
+		return
 	for action: String in buttons:
 		var button: Button = buttons[action]
 		if button.visible and Rect2(button.position, button.size).has_point(point):
@@ -189,8 +283,13 @@ func _draw() -> void:
 		draw_circle(rect.get_center() + Vector2(vector.x, -vector.y) * rect.size.x * 0.21, rect.size.x * 0.17, Color(0.5, 0.85, 1, 0.6))
 	for action: String in buttons:
 		var pressed := action in state.held.values() or state.taps.values().any(func(tap): return tap.action == action)
-		var on := action == "lefty" and bool(preferences.values.lefty) or action == "gyro" and bool(preferences.values.gyro) and NativeGyro.supported() or action == "lock" and view_lock_active
+		var on := action == "lefty" and bool(preferences.values.lefty) or action == "gyro" and bool(preferences.values.gyro) and NativeGyro.supported() or action == "lock" and view_lock_active or action == "map" and map_near
 		buttons[action].modulate = Color(0.5, 0.9, 1, 1) if on else Color(1, 1, 1, 1 if pressed else 0.75)
+		var result: Dictionary = mirrors.get(action, {})
+		if not result.is_empty():
+			buttons[action].add_theme_color_override("font_color", Color(preferences.rules.touchHud.ok) if result.ready else Color.WHITE)
+			if result.locked:
+				buttons[action].modulate.a = 0.375
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:

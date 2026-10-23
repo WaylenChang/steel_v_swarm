@@ -1,12 +1,16 @@
 class_name BattleWorld
 extends Node3D
 
+signal build_progress
+
+var build_complete := false
+var build_error := ""
+
 var paths: Array[Path3D] = []
 var lane_points: Array = []
 var lane_distances: Array = []
 var bases: Dictionary
 var bounds: Dictionary
-var ambience: AudioStreamPlayer
 var native_data: Resource
 var ceiling := 110.0
 var hero_spawns: Dictionary
@@ -28,12 +32,21 @@ var loot_visuals: LootPresentation
 var mine_visuals: MinePresentation
 var airdrop_visuals: AirdropPresentation
 var active_columns: Array = []
+var blocker_query := SourceBlockerQuery.new()
+var active_roof_platforms: Array = []
 var weather_obstacles: Array = []
 var cleared_camps: Array[Dictionary] = []
 var cleared_camp_keys: Dictionary = {}
 var lane_surface := LaneSurfaceProfile.new()
 var visual_frozen := false
 var combat_effects: CombatEffects
+var climb_index := ClimbIndex.new()
+var climb_visuals := ClimbPresentation.new()
+var scenery_view := SceneryPresentation.new()
+var marine_view: MarinePresentation
+var wildlife_view: WildlifePresentation
+var petal_view: PetalPresentation
+var aquatic_view: AquaticPresentation
 
 func clear_camp_columns(camps: Array) -> void:
 	if native_data == null:
@@ -50,20 +63,29 @@ func clear_camp_columns(camps: Array) -> void:
 		return
 	var obstacles: Array = native_data.water_profile.get("obstacles", [])
 	var clearance := CampRules.clearance(obstacles, cleared_camps)
+	var buildings: Dictionary = CampRules.cleared_buildings(native_data.source_buildings, cleared_camps) if native_data.supports_captured else clearance.buildings
+	scenery_view.clear_camps(cleared_camps, buildings)
+	if native_data.climbs_captured:
+		climb_index.configure(ClimbIndex.after_camp_clearance(native_data.climb_routes, cleared_camps, buildings))
 	var removed := {}
 	for index in range(native_data.columns.size()):
 		var column: Dictionary = native_data.columns[index]
-		var key: String = column.get("buildingKey", "")
-		# Source presentation keeps unkeyed bridge and vegetation pillars.
-		if not key.is_empty() and clearance.buildings.has(key):
+		if CampRules.removes_blocker(column, cleared_camps, buildings):
 			removed[index] = true
+	active_roof_platforms = native_data.roof_platforms.duplicate(true)
+	for platform: Dictionary in active_roof_platforms:
+		if buildings.has(platform.get("buildingKey", "")):
+			platform.active = false
 	for shape: CollisionShape3D in find_children("*", "CollisionShape3D", true, false):
 		if shape.has_meta("source_column_index") and removed.has(int(shape.get_meta("source_column_index"))):
 			shape.set_deferred("disabled", true)
+		if shape.has_meta("source_roof_platform_index"):
+			shape.set_deferred("disabled", active_roof_platforms[int(shape.get_meta("source_roof_platform_index"))].get("active", true) == false)
 	active_columns = []
 	for index in range(native_data.columns.size()):
 		if not removed.has(index):
 			active_columns.append(native_data.columns[index])
+	layers.configure_supports(active_columns, active_roof_platforms)
 	weather_obstacles = []
 	for index in range(obstacles.size()):
 		if index not in clearance.removed:
@@ -139,7 +161,8 @@ func water_code(x: float, z: float) -> int:
 	if native_data == null or native_data.water_profile.is_empty():
 		return 0
 	var dry := EnvironmentRules.in_dry_band(x, z, native_data.water_profile.dryBands)
-	return EnvironmentRules.ground_code(source_height(x, z), water_y, [], dry)
+	var border := EnvironmentRules.in_border_band(x, z, native_data.water_profile.get("borderMask", {}))
+	return EnvironmentRules.ground_code(source_height(x, z), water_y, [], dry, border)
 
 func wet_at(x: float, z: float) -> int:
 	return EnvironmentRules.wet_at(native_data.water_profile.wetGrid, x, z) if native_data != null and not native_data.water_profile.is_empty() else 0
@@ -186,6 +209,7 @@ func ensure_projectile_visuals() -> ProjectilePresentation:
 func ensure_combat_effects() -> CombatEffects:
 	if combat_effects == null:
 		combat_effects = CombatEffects.new()
+		combat_effects.low_power = Controls.low_power()
 		add_child(combat_effects)
 	return combat_effects
 
@@ -212,48 +236,103 @@ func visual_collision(start: Vector3, end: Vector3) -> Dictionary:
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
 func build(map_data: Dictionary, _environment: Dictionary) -> void:
+	build_complete = false
+	build_error = ""
+	build_progress.emit()
 	bounds = map_data.bounds
 	hero_spawns = map_data.hero_spawns
 	if map_data.has("native_world"):
-		if not ResourceLoader.exists(map_data.native_world):
-			push_error("Required native world resource is missing: " + str(map_data.native_world))
-			get_tree().quit(1)
+		var path := WorldVariant.path(map_data.native_world, _environment)
+		if path.is_empty() or not ResourceLoader.exists(path):
+			_build_failed("Required seasonal native world resource is missing: " + str(path))
 			return
-		native_data = load(map_data.native_world)
+		native_data = load(path) as NativeWorldData
+		if native_data == null or native_data.scene == null:
+			_build_failed("Native world resource has no valid terrain scene: " + path)
+			return
+		if not Session.dedicated and native_data.minimap_base == null:
+			_build_failed("Missing original minimap terrain raster; regenerate native worlds")
+			return
+		if not WorldVariant.matches_identity(native_data.source.get("identity", {}), WorldVariant.identity(map_data.native_world, _environment)) or not native_data.slabs_captured:
+			_build_failed("Native world season/identity or original accepted structure layers are missing; regenerate native worlds")
+			return
 		active_columns = native_data.columns.duplicate(true)
-		weather_obstacles = native_data.water_profile.get("obstacles", []).duplicate(true)
-		var key: String = map_data.native_world.get_file().get_basename()
-		if not Content.structures.has(key):
-			push_error("Required source structure profile is missing: " + key)
-			get_tree().quit(1)
+		active_roof_platforms = native_data.roof_platforms.duplicate(true)
+		if native_data.supports_captured and (not native_data.structure_pads.get("tower") is Array or not native_data.structure_pads.get("base") is Array):
+			_build_failed("Missing original tower/base platform anchors; regenerate native worlds")
 			return
-		layers.configure(Content.structures[key], native_data.decks, native_data.tunnels)
+		weather_obstacles = native_data.water_profile.get("obstacles", []).duplicate(true)
+		layers.configure(native_data.authority_slabs, native_data.decks, native_data.tunnels)
+		layers.configure_supports(active_columns, active_roof_platforms)
 		if native_data.bounds != bounds:
-			push_error("Native world bounds do not match the selected map")
-			get_tree().quit(1)
+			_build_failed("Native world bounds do not match the selected map")
 			return
 		if native_data.terrain_grid < 2 or native_data.terrain_heights.size() != native_data.terrain_grid * native_data.terrain_grid or native_data.water_profile.is_empty():
-			push_error("Required original terrain/water profile is missing; regenerate native worlds")
-			get_tree().quit(1)
+			_build_failed("Required original terrain/water profile is missing; regenerate native worlds")
 			return
+		if native_data.water_profile.get("borderBands", false) and not EnvironmentRules.valid_border_mask(native_data.water_profile.get("borderMask")):
+			_build_failed("Missing/invalid original border dry mask; regenerate native worlds")
+			return
+		water_y = native_data.water_profile.baseY
 		var source_scene: Node3D = native_data.scene.instantiate()
 		add_child(source_scene)
+		build_progress.emit()
+		if not scenery_view.configure(source_scene, native_data.source_trains if native_data.trains_captured else [],
+				native_data.source_motions if native_data.motions_captured else []):
+			_build_failed("Native scenery animation bindings are invalid")
+			return
+		if native_data.marine_captured:
+			marine_view = MarinePresentation.new()
+			if not marine_view.configure(native_data.source_marine, bounds, func(): return water_y, water_code):
+				_build_failed("Original marine presentation metadata is invalid")
+				return
+			if not marine_view.bind_surfaces(source_scene, native_data.source_marine, native_data.marine_depth_field):
+				_build_failed("Original marine surface bindings are invalid")
+				return
+		if native_data.wildlife_captured:
+			wildlife_view = WildlifePresentation.new()
+			var dry_band := func(x: float, z: float): return EnvironmentRules.in_dry_band(x, z, native_data.water_profile.dryBands)
+			if not wildlife_view.configure(source_scene, native_data.source_wildlife, Controls.low_power(), source_height, water_code, dry_band,
+					func(): return water_y, Visuals.snapshot(), SceneryPresentation.wildlife_activity):
+				_build_failed("Original wildlife presentation bindings are invalid")
+				return
+		if native_data.petals_captured:
+			petal_view = PetalPresentation.new()
+			if not petal_view.configure(source_scene, native_data.source_petals, native_data.source.identity.season, Controls.low_power(), source_height, water_code):
+				_build_failed("Original petal presentation bindings are invalid")
+				return
+		if native_data.aquatics_captured:
+			aquatic_view = AquaticPresentation.new()
+			if not aquatic_view.configure(source_scene, native_data.source_aquatics):
+				_build_failed("Original aquatic presentation bindings are invalid")
+				return
+		if native_data.climbs_captured:
+			climb_index.configure(native_data.climb_routes)
+			if not climb_visuals.configure(source_scene, native_data.climb_routes):
+				_build_failed("Original climbing presentation bindings are invalid")
+				return
 		for mesh: MeshInstance3D in source_scene.find_children("*", "MeshInstance3D", true, false):
-			if mesh.get_meta("source_water", false):
+			if mesh.get_meta("source_tide_water", false):
 				water_meshes.append(mesh)
-		water_y = native_data.water_profile.baseY
+		if not SourceOutlineBinding.install(source_scene):
+			_build_failed("Original world outline bindings are invalid")
+			return
 		authority_height_grid = EnvironmentRules.decode_height_grid(native_data.water_profile.get("heightGrid", {}))
 		if authority_height_grid.is_empty() or not native_data.water_profile.has("obstacles"):
-			push_error("Original weather height/obstacle profile is missing; regenerate native worlds")
-			get_tree().quit(1)
+			_build_failed("Original weather height/obstacle profile is missing; regenerate native worlds")
 			return
 		ceiling = native_data.ceiling
+		build_progress.emit()
 		await get_tree().physics_frame
+		if not is_inside_tree() or is_queued_for_deletion():
+			return
 		await get_tree().physics_frame
+		if not is_inside_tree() or is_queued_for_deletion():
+			return
 	bases = {}
 	for side in map_data.bases:
 		var point: Array = map_data.bases[side]
-		bases[side] = Vector3(point[0], ground_height(point[0], point[1]), point[1])
+		bases[side] = Vector3(point[0], structure_height("base", point[0], point[1]), point[1])
 	var floor_material := StandardMaterial3D.new()
 	floor_material.albedo_color = Color("253c36")
 	floor_material.roughness = 0.95
@@ -285,21 +364,16 @@ func build(map_data: Dictionary, _environment: Dictionary) -> void:
 		add_child(path)
 		if native_data == null:
 			_build_road(lane)
-	if not Session.dedicated and DisplayServer.get_name() != "headless" and ResourceLoader.exists("res://assets/audio/amb/base.ogg"):
-		ambience = AudioStreamPlayer.new()
-		ambience.stream = load("res://assets/audio/amb/base.ogg")
-		ambience.volume_db = -24
-		add_child(ambience)
-		ambience.play()
+	build_complete = true
+	build_progress.emit()
+
+func _build_failed(reason: String) -> void:
+	build_error = reason
+	push_error(reason)
 
 func prepare_lane_surface() -> void:
 	if native_data != null:
 		lane_surface.configure(lane_points, source_height, visual_surface)
-
-func _exit_tree() -> void:
-	if ambience != null:
-		ambience.stop()
-		ambience.stream = null
 
 func _build_road(points: Array) -> void:
 	var surface := SurfaceTool.new()
@@ -353,7 +427,7 @@ func obstruction_hit(start: Vector3, end: Vector3, include_slabs: bool = true) -
 func spawn_position(side: String, slot: int = 0, flying: bool = false) -> Vector3:
 	var source_position: Array = hero_spawns[side][slot].position
 	var point := Vector3(source_position[0], 0, source_position[1])
-	point.y = ground_height(point.x, point.z) + (Content.constants.FLIGHT.HOVER_M if flying else 0.1)
+	point.y = (visual_flight_surface(point.x, point.z) if native_data != null else ground_height(point.x, point.z)) + (Content.constants.FLIGHT.HOVER_M if flying else 0.1)
 	return point
 
 func spawn_heading(side: String, slot: int) -> float:
@@ -362,6 +436,36 @@ func spawn_heading(side: String, slot: int) -> float:
 
 func ground_height(x: float, z: float) -> float:
 	return _height_at(x, z, 8)
+
+func pad_height(kind: String, x: float, z: float) -> Variant:
+	if native_data == null or not native_data.structure_pads.has(kind):
+		return null
+	var tolerance: float = Content.balance.structure.structurePadTolerance
+	for pad: Dictionary in native_data.structure_pads[kind]:
+		if absf(float(pad.x) - x) < tolerance and absf(float(pad.z) - z) < tolerance:
+			return float(pad.y)
+	return null
+
+func structure_height(kind: String, x: float, z: float) -> float:
+	var pad: Variant = pad_height(kind, x, z)
+	return float(pad) if pad != null else ground_height(x, z)
+
+func climb_query() -> Callable:
+	return climb_index.at if native_data != null and native_data.climbs_captured else Callable()
+
+func step_scenery(delta: float, weather: Dictionary) -> void:
+	scenery_view.advance(delta, weather)
+	if wildlife_view != null:
+		wildlife_view.advance(delta, SceneryPresentation.wind_time, {"activity": WeatherRules.wildlife_activity(weather)})
+	if petal_view != null:
+		petal_view.advance(delta, weather)
+	if aquatic_view != null:
+		aquatic_view.advance(delta, SceneryPresentation.wind_time)
+	if marine_view != null:
+		marine_view.advance(delta, SceneryPresentation.wind_time, weather, scenery_view.motions)
+		marine_view.sync_lighting(weather_visuals)
+	if native_data != null and native_data.climbs_captured:
+		climb_visuals.advance(delta)
 
 func flight_reference(x: float, z: float) -> float:
 	return _height_at(x, z, 8 | 16 | 32 | 64)
@@ -380,13 +484,7 @@ func visual_flight_surface(x: float, z: float) -> float:
 	var surface := source_height(x, z)
 	if not is_finite(surface):
 		return NAN
-	var deck: Variant = visual_deck(x, z)
-	if deck != null and float(deck) > surface:
-		surface = float(deck)
-	var tunnel := layers.tunnel_at(Vector2(x, z))
-	if not tunnel.is_empty() and not tunnel.open:
-		surface = maxf(surface, float(tunnel.ceil) + float(Content.balance.structure.tunnelRoofThickness))
-	return surface
+	return layers.projectile_surface(Vector3(x, INF, z), surface)
 
 func visual_deck(x: float, z: float) -> Variant:
 	return layers.deck_height(Vector2(x, z), float(Content.balance.structure.deckMargin))

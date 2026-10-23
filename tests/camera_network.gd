@@ -46,7 +46,7 @@ func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
 		return
-	var pilot: BattleUnit = simulation.pilots.get(multiplayer.get_unique_id())
+	var pilot: BattleUnit = simulation.pilots.get(Session.player_id())
 	if pilot == null:
 		return
 	var spec: Dictionary = Content.balance.cameraProfiles[pilot.character]["air" if pilot.flying else "ground"]
@@ -63,7 +63,7 @@ func _receive_state(state: Dictionary) -> void:
 		air_seen = true
 	else:
 		if ground_seen and air_seen:
-			print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+			print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 			print("NETWORK_CAMERA_PASS ground=true air=true restored=true near=true renderer=true")
 			Session.stop()
 			get_tree().quit()

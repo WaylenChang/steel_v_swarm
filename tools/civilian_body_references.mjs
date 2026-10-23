@@ -1,6 +1,6 @@
 // Offline components use original NPC builders, geometry and surface finishing.
 export function captureCivilianBodies({THREE,d,methods,geo,limbChain,finishUnitSurfaces,sceneryGeometry,
-  generateCivilian,options,kits,outlinify,enableDissolve,makeUnit,graphOf,measure,stepCombatFx,stepLocomotion,disposeTree}) {
+  generateCivilian,options,kits,outlinify,enableDissolve,makeUnit,graphOf,measure,captureOutline,stepCombatFx,stepLocomotion,disposeTree}) {
   const graphs={},profiles={},fixtures=[];
   const palette={skinColor:0xb5816d,hairColor:0x293b57,clothColor:0x689f3c,trouserColor:0xa04c83,accentColor:0xe1b236};
   let appearance={...generateCivilian(0,0),...palette,widthScale:1,shoulderScale:1,headScale:1};
@@ -65,7 +65,8 @@ export function captureCivilianBodies({THREE,d,methods,geo,limbChain,finishUnitS
       if(!node.isMesh||node.userData.isOutline)return;
       const positions=node.geometry.attributes.position,normals=node.geometry.attributes.normal;
       const normalMatrix=new THREE.Matrix3().getNormalMatrix(node.matrixWorld),p=new THREE.Vector3(),n=new THREE.Vector3();
-      rows.push({name:node.name,color:node.material.color.getHex(),points:Array.from({length:positions.count},(_,index)=>
+      const outlines=node.children.filter(child=>child.userData.isOutline).map(shell=>captureOutline(shell.material));
+      rows.push({name:node.name,color:node.material.color.getHex(),outlines,points:Array.from({length:positions.count},(_,index)=>
         p.fromBufferAttribute(positions,index).applyMatrix4(node.matrixWorld).toArray()),
         normals:normals?Array.from({length:normals.count},(_,index)=>n.fromBufferAttribute(normals,index).applyMatrix3(normalMatrix).normalize().toArray()):[]});
     });return rows;

@@ -7,6 +7,8 @@ var decks: Array = []
 var tunnels: Array = []
 var deck_grid: Dictionary = {}
 var tunnel_grid: Dictionary = {}
+var blocker_top_grid: Dictionary = {}
+var roof_grid: Dictionary = {}
 
 func configure(accepted_slabs: Array, deck_data: Array = [], tunnel_data: Array = []) -> void:
 	slabs = accepted_slabs
@@ -15,6 +17,7 @@ func configure(accepted_slabs: Array, deck_data: Array = [], tunnel_data: Array 
 	slab_grid.clear()
 	deck_grid.clear()
 	tunnel_grid.clear()
+	configure_supports([], [])
 	for slab: Array in slabs:
 		_index(slab_grid, slab, slab[0], slab[1], slab[2], slab[3], slab[4], Content.constants.LOS.CELL_M)
 	for deck: Dictionary in decks:
@@ -22,7 +25,75 @@ func configure(accepted_slabs: Array, deck_data: Array = [], tunnel_data: Array 
 	for tunnel: Dictionary in tunnels:
 		_index(tunnel_grid, tunnel, tunnel.x1, tunnel.z1, tunnel.x2, tunnel.z2, tunnel.hw + Content.balance.structure.tunnelPad, Content.balance.structure.tunnelCell)
 
-func _index(grid: Dictionary, entry: Variant, x1: float, z1: float, x2: float, z2: float, pad: float, cell: float) -> void:
+func configure_supports(blockers: Array, platforms: Array) -> void:
+	blocker_top_grid.clear()
+	roof_grid.clear()
+	if blockers.is_empty() and platforms.is_empty():
+		return
+	var rules: Dictionary = Content.balance.structure
+	for blocker: Dictionary in blockers:
+		if not blocker.get("bld", false) and not blocker.get("std", false):
+			continue
+		var radius := sqrt(float(blocker.hw2) * float(blocker.hw2) + float(blocker.hd2) * float(blocker.hd2)) if blocker.has("hw2") else float(blocker.r)
+		_index(blocker_top_grid, blocker, blocker.x, blocker.z, blocker.x, blocker.z,
+			radius + float(rules.blockerTopPad), float(rules.blockerTopCell))
+	for platform: Dictionary in platforms:
+		if not platform.has("bounds") or not platform.get("outer") is Array or not is_finite(float(platform.get("y", NAN))):
+			continue
+		var bounds: Dictionary = platform.bounds
+		_index(roof_grid, platform, bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, 0, float(rules.roofCell))
+
+func blocker_top(point: Vector2, margin: float = 0.0) -> Variant:
+	if blocker_top_grid.is_empty():
+		return null
+	var cell: float = Content.balance.structure.blockerTopCell
+	var best: Variant = null
+	for blocker: Dictionary in blocker_top_grid.get(Vector2i(floori(point.x / cell), floori(point.y / cell)), []):
+		var dx := float(point.x) - float(blocker.x)
+		var dz := float(point.y) - float(blocker.z)
+		if blocker.has("hw2"):
+			var cosine := cos(float(blocker.ry))
+			var sine := sin(float(blocker.ry))
+			# The original top query owns this rotation convention, independently of body collision.
+			var local_x := dx * cosine + dz * sine
+			var local_z := -dx * sine + dz * cosine
+			if absf(local_x) > float(blocker.hw2) + margin or absf(local_z) > float(blocker.hd2) + margin:
+				continue
+		elif sqrt(dx * dx + dz * dz) > float(blocker.r) + margin:
+			continue
+		var top := float(blocker.y) + float(blocker.h)
+		if best == null or top > best:
+			best = top
+	return best
+
+static func inside_roof_ring(point: Vector2, ring: Array) -> bool:
+	# Preserve the source half-open edge rule; native polygon containment includes its boundary.
+	var inside := false
+	var previous := ring.size() - 1
+	for index in range(ring.size()):
+		var a: Array = ring[index]
+		var b: Array = ring[previous]
+		if (float(a[1]) > point.y) != (float(b[1]) > point.y):
+			if point.x < (float(b[0]) - float(a[0])) * (point.y - float(a[1])) / (float(b[1]) - float(a[1])) + float(a[0]):
+				inside = not inside
+		previous = index
+	return inside
+
+func roof_platform_top(point: Vector2) -> Variant:
+	if roof_grid.is_empty():
+		return null
+	var cell: float = Content.balance.structure.roofCell
+	var best: Variant = null
+	for platform: Dictionary in roof_grid.get(Vector2i(floori(point.x / cell), floori(point.y / cell)), []):
+		if platform.get("active", true) == false or not inside_roof_ring(point, platform.outer):
+			continue
+		if platform.get("holes", []).any(func(ring): return inside_roof_ring(point, ring)):
+			continue
+		if best == null or float(platform.y) > best:
+			best = float(platform.y)
+	return best
+
+static func _index(grid: Dictionary, entry: Variant, x1: float, z1: float, x2: float, z2: float, pad: float, cell: float) -> void:
 	for i in range(floori((minf(x1, x2) - pad) / cell), floori((maxf(x1, x2) + pad) / cell) + 1):
 		for j in range(floori((minf(z1, z2) - pad) / cell), floori((maxf(z1, z2) + pad) / cell) + 1):
 			var key := Vector2i(i, j)
@@ -178,6 +249,12 @@ func projectile_surface(point: Vector3, ground: float) -> float:
 		surface = deck
 	if not tunnel.is_empty() and not tunnel.open:
 		surface = maxf(surface, tunnel.ceil + rules.tunnelRoofThickness)
+	var top: Variant = blocker_top(planar, float(rules.blockerTopMargin)) if not blocker_top_grid.is_empty() else null
+	if top != null and top > surface and point.y >= top - rules.deckStep:
+		surface = top
+	var roof: Variant = roof_platform_top(planar)
+	if roof != null and roof > surface and point.y >= roof - rules.deckStep:
+		surface = roof
 	return surface
 
 func player_reference(point: Vector3, surface: float, ground: float) -> float:

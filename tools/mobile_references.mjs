@@ -6,8 +6,8 @@ import { pathToFileURL } from 'node:url';
 // expected gestures and angles come from source methods, never copied equations.
 export async function mobileReferences(gameSource, source) {
   const { grabMethod, grabFn, grabConst } = await import(pathToFileURL(join(source, 'tools/audit_src.mjs')).href);
-  const inputs = ['public/js/mobile.js', 'public/js/ctrlmode.js', 'public/js/lookPrefs.js', 'public/js/movePrefs.js', 'public/index.html', 'public/js/main.js'];
-  const [mobile, control, lookPrefs, movePrefs, html, main] = await Promise.all(inputs.map(async file => (await readFile(join(source, file), 'utf8')).replace(/\r\n?/g, '\n')));
+  const inputs = ['public/js/mobile.js', 'public/js/ctrlmode.js', 'public/js/lookPrefs.js', 'public/js/movePrefs.js', 'public/index.html', 'public/js/main.js', 'public/css/style.css'];
+  const [mobile, control, lookPrefs, movePrefs, html, main, css] = await Promise.all(inputs.map(async file => (await readFile(join(source, file), 'utf8')).replace(/\r\n?/g, '\n')));
   const THREE = await import(pathToFileURL(join(source, 'out/forest_review/three.module.js')).href);
   const compile = (code, scope, result) => new Function(...Object.keys(scope), code + '\nreturn ' + result)(...Object.values(scope));
   const literal = (name, scope = {}) => {
@@ -56,6 +56,79 @@ export async function mobileReferences(gameSource, source) {
     modes: controls.CTRL_MODES, modeKeys: controls.CTRL_MODE_KEYS, defaultMode: controls.DEFAULT_CTRL_MODE,
     schemes: controls.CTRL_SCHEMES, schemeKeys: controls.CTRL_SCHEME_KEYS,
     lookPrefs: lookModule.LOOK_PREFS, movePrefs: moveModule.MOVE_PREFS, buttons };
+  rules.kindPresentation = {};
+  for (const kind of ['', 'mech', 'drone', 'morph', 'robot']) {
+    const nodes = Object.fromEntries(['jump', 'special', 'swap', 'dive', 'fire', 'aim', 'shop', 'lock'].map(action => [action, {textContent: '', hidden: false}]));
+    const selectors = {'.gb-b .gb-f': 'jump', '[data-act="special"] .gb-f': 'special'};
+    const document = {body: {classList: {toggle() {}}}, querySelector: selector => nodes[selectors[selector]],
+      querySelectorAll: selector => selector === '.gb-a, .gb-aim, [data-act="shop"], [data-act="lock"]'
+        ? ['fire', 'aim', 'shop', 'lock'].map(action => nodes[action])
+        : [nodes[/data-act="([^"]+)"/.exec(selector)?.[1]]]};
+    new Function('document', 'MOBIL_LABEL', 'return ({' + grabMethod(mobile, 'setKind') + '});')(document, rules.mobilLabels).setKind(kind);
+    rules.kindPresentation[kind] = {jump: nodes.jump.textContent, special: nodes.special.textContent, swap: nodes.swap.textContent,
+      hidden: Object.fromEntries(Object.entries(nodes).map(([action, node]) => [action, node.hidden]))};
+  }
+
+  const powerLabel=/<span class="set-label">([^<]+)<\/span>\s*<button id="setLowPower"/.exec(html);
+  if(!powerLabel)throw new Error('Missing original low-power setting label');
+  rules.lowPower={label:powerLabel[1]};
+  const mirrorSource=grabFn(main,'padMirror');
+  const threshold=/cd > ([\d.]+)/.exec(mirrorSource);
+  const rotateText=/<div class="tl-rotate" id="tlRotate">([^<]+)<\/div>/.exec(html);
+  const rotateSource=grabMethod(mobile.slice(mobile.indexOf('export class TouchControls')),'_bindRotateHint');
+  const rotateDelay=/setTimeout\([^\n]+, (\d+)\)/.exec(rotateSource);
+  const ok=/--ok:\s*(#[\da-f]+)/i.exec(css),danger=/--danger:\s*(#[\da-f]+)/i.exec(css);
+  if(!threshold||!rotateText||!rotateDelay||!ok||!danger)throw new Error('Missing original touch HUD presentation rules');
+  rules.touchHud={cooldownThreshold:Number(threshold[1]),rotateText:rotateText[1],rotateSeconds:Number(rotateDelay[1])/1000,
+    ok:ok[1],danger:danger[1]};
+  const touchMirrors=[];
+  for(const cd of [0,.049,.05,.050001,.499999,.5,.500001,1.5,2.5,99.5])for(const ready of [false,true])for(const locked of [false,true])for(const charges of ['','0/3','2/3']) {
+    const result={text:'',ready:false,locked:false};
+    const badge={set textContent(value){result.text=value;}};
+    const button={querySelector:()=>badge,classList:{toggle:(key,value)=>{result[key]=value;}}};
+    const original=compile(mirrorSource,{document:{querySelectorAll:()=>[button]}},'padMirror');
+    original('def',cd,ready,locked,charges);
+    touchMirrors.push({cd,ready,locked,charges,result});
+  }
+  const touchRotations=[];
+  for(const initialPortrait of [false,true]) {
+    let portrait=initialPortrait,visible=false,scheduled=0;
+    const listeners={},timers=new Map();let timerId=0;
+    const element={classList:{add:()=>{visible=true;},remove:()=>{visible=false;}},
+      addEventListener:(name,callback)=>{listeners[name]=callback;}};
+    const OriginalRotate=compile('class OriginalRotate {'+rotateSource+'}',{
+      document:{getElementById:()=>element,body:{classList:{contains:()=>portrait}}},
+      window:{addEventListener(){}},setTimeout:(callback,delay)=>{scheduled=delay;timers.set(++timerId,callback);return timerId;},
+      clearTimeout:id=>timers.delete(id)
+    },'OriginalRotate');
+    const original=new OriginalRotate();original._bindRotateHint();
+    const steps=[{kind:'initial',portrait,result:{visible,shown:original._rotShown}}];
+    for(const step of [{kind:'timeout'},{kind:'resize',portrait:true},{kind:'dismiss'},{kind:'resize',portrait:false},
+      {kind:'resize',portrait:true},{kind:'timeout'}]) {
+      if(step.kind==='resize'){portrait=step.portrait;original._onRot();}
+      if(step.kind==='dismiss')listeners.pointerdown({stopPropagation(){}});
+      if(step.kind==='timeout')for(const callback of timers.values())callback();
+      steps.push({...step,portrait,result:{visible,shown:original._rotShown}});
+    }
+    touchRotations.push({initialPortrait,steps,delay:scheduled});
+  }
+  const mobilePower=[];
+  for(const saved of [null,'0','1','true','false','',0,1,false])for(const pad of [false,true]) {
+    let touch=pad;
+    const storage={value:saved};
+    const original=compile(grabFn(mobile,'lowPower')+'\n'+grabFn(mobile,'setLowPower'),{
+      LOWP_KEY:literal('LOWP_KEY'),isTouchUI:()=>touch,
+      localStorage:{getItem:()=>storage.value,setItem:(_key,value)=>{storage.value=value;}}
+    },'{lowPower,setLowPower}');
+    const steps=[];
+    for(const step of [{kind:'read'},{kind:'scheme',pad:!pad},{kind:'set',on:false},
+      {kind:'scheme',pad},{kind:'set',on:true},{kind:'scheme',pad:!pad},{kind:'set',on:true}]) {
+      if(step.kind==='scheme')touch=step.pad;
+      if(step.kind==='set')original.setLowPower(step.on);
+      steps.push({...step,result:original.lowPower(),saved:storage.value});
+    }
+    mobilePower.push({saved,pad,steps});
+  }
 
   const mobileDevice = [];
   for (const touch of [false, true]) for (const coarse of [false, true]) for (const noHover of [false, true]) {
@@ -200,5 +273,5 @@ export async function mobileReferences(gameSource, source) {
     levelMove = level;
     mobileFlight.push({ yaw, pitch, level, motion, result: flight.call({ yaw, pitch }, { f: -motion[1], r: motion[0] }, new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw))) });
   }
-  return { rules, inputs, fixtures: { mobileDevice, mobilePreferences, mobileTouchPreferences, mobileModes, touchPrograms, gyroPrograms, mobileFlight } };
+  return { rules, inputs, fixtures: { mobileDevice, mobilePreferences, mobileTouchPreferences, mobileModes, mobilePower, touchMirrors, touchRotations, touchPrograms, gyroPrograms, mobileFlight } };
 }

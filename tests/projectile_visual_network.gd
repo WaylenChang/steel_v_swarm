@@ -55,7 +55,7 @@ func _physics_process(delta: float) -> void:
 	var presentation := simulation.world.projectile_visuals
 	echo_seen = echo_seen or not presentation.shells.is_empty()
 	if light_seen and heavy_seen and moving_seen and echo_seen and clearing_seen:
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_PROJECTILE_VISUAL_PASS light=true heavy=true source_geometry=true moving_pose=true echo=true clear=true private=true")
 		Session.stop()
 		get_tree().quit()

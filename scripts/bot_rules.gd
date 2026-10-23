@@ -1,6 +1,13 @@
 class_name BotRules
 extends RefCounted
 
+static func tactic_cross(tactics: Dictionary) -> void:
+	var gap := float(Content.constants.BOT_LEARN.GAP)
+	tactics.W_THREAT = maxf(float(tactics.W_THREAT), maxf(float(tactics.W_OUTPUT), float(tactics.W_EXEC)) + gap)
+	tactics.KITE_FAR = minf(1, maxf(float(tactics.KITE_FAR), float(tactics.KITE_NEAR) + gap))
+	tactics.KITE_NEAR = minf(float(tactics.KITE_NEAR), float(tactics.KITE_FAR) - gap)
+	tactics.PULL_HP = maxf(float(tactics.PULL_HP), float(tactics.BASE_HP) + gap)
+
 static func wrap_pi(angle: float) -> float:
 	while angle > PI:
 		angle -= TAU

@@ -21,6 +21,7 @@ func sync(states: Array, now: float) -> void:
 		add_child(visual)
 		visual.position = state.position
 		var body: Node3D = visual.find_child("n_%d" % int(Content.balance.loot_visuals[key].body), true, false)
+		SourceOutlineBinding.install(visual)
 		entries[id] = {"root": visual, "body": body}
 	for id: int in entries.keys():
 		if not seen.has(id):

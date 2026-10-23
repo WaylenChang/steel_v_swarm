@@ -27,10 +27,20 @@ var remote_report: Dictionary = {}
 var remote_verified := false
 var screen_report: Dictionary = {}
 var death_report: Dictionary = {}
+var fixture_ids: Dictionary = {}
 
 func _ready() -> void:
 	super._ready()
 	network_test = false
+
+func _receive_state(packet: Dictionary) -> void:
+	if not Session.dedicated:
+		for record: Dictionary in packet.units:
+			for key: String in ["owner_id", "offset", "definition", "camp_index", "aggro_id", "body_fixture", "npc_body_fixture", "artillery_body_fixture", "static_body_fixture", "companion_body_fixture"]:
+				if record.get("special", {}).has(key):
+					_fail("NETWORK_BODY_PRIVATE_ROLE_FIELD " + key)
+					return
+	super._receive_state(packet)
 
 func _physics_process(delta: float) -> void:
 	elapsed += delta
@@ -43,22 +53,17 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	if simulation == null:
 		return
-	for unit: BattleUnit in simulation.units.values():
-		if unit.special.get("body_fixture", false):
-			actor = unit
-		if unit.special.get("npc_body_fixture", false):
-			npc = unit
-		if unit.special.get("artillery_body_fixture", false):
-			artillery_fixture = unit
-		if unit.special.get("static_body_fixture") == "tower":
-			tower = unit
-		if unit.special.get("static_body_fixture") == "base":
-			base_fixture = unit
-		match unit.special.get("companion_body_fixture"):
-			"clone": clone_fixture = unit
-			"kami": kami_fixture = unit
-			"hyper": hyper_fixture = unit
-			"civilian": civilian_fixture = unit
+	if fixture_ids.is_empty():
+		return
+	actor = simulation.units.get(int(fixture_ids.actor))
+	npc = simulation.units.get(int(fixture_ids.npc))
+	artillery_fixture = simulation.units.get(int(fixture_ids.artillery))
+	tower = simulation.units.get(int(fixture_ids.tower))
+	base_fixture = simulation.units.get(int(fixture_ids.base))
+	clone_fixture = simulation.units.get(int(fixture_ids.clone))
+	kami_fixture = simulation.units.get(int(fixture_ids.kami))
+	hyper_fixture = simulation.units.get(int(fixture_ids.hyper))
+	civilian_fixture = simulation.units.get(int(fixture_ids.civilian))
 	if actor == null or actor.body_presentation == null or not actor.body_presentation.sampled:
 		return
 	if npc == null or npc.body_presentation == null or not npc.body_presentation.sampled:
@@ -190,7 +195,7 @@ func _physics_process(delta: float) -> void:
 		if actor.model != actor.body or actor.body.motion.values.is_empty() or not is_same(actor.body.forms.ground.shield.state, actor.body.forms.air.shield.state):
 			_fail("Live remote hero must bind the captured rig, locomotion and shared shield state")
 			return
-		print("NETWORK_PASS peer=", multiplayer.get_unique_id(), " units=", simulation.units.size())
+		print("NETWORK_PASS peer=", Session.player_id(), " units=", simulation.units.size())
 		print("NETWORK_BODY_PASS body=true npc=true artillery=true tower=true base=true clone=true kami=true hyper=true civilian=true remote=true glass=true hitstop=true events=true replay=true morph=true shield=true resources=true")
 		Session.stop()
 		get_tree().quit()
@@ -214,7 +219,7 @@ func _server_step() -> void:
 		_fail("Body transport fixture requires an original same-faction morph pilot")
 		return
 	actor = simulation.spawn({"character": character, "kind": Content.heroes[character].kind, "side": viewer.side,
-		"peer": 0, "position": viewer.position + Vector3(5, 0, 0), "special": {"body_fixture": true}})
+		"peer": -99071, "position": viewer.position + Vector3(5, 0, 0), "special": {"body_fixture": true}})
 	remote_actor = actor.entity_id
 	npc = simulation.spawn({"kind": "tank", "side": viewer.side, "position": viewer.position + Vector3(-5, 0, 0),
 		"special": {"npc_body_fixture": true}})
@@ -225,7 +230,7 @@ func _server_step() -> void:
 	base_fixture = simulation.spawn({"kind": "base", "side": viewer.side, "position": viewer.position + Vector3(-30, 0, 0),
 		"special": {"static_body_fixture": "base"}})
 	clone_fixture = simulation.spawn({"character": character, "kind": actor.kind, "side": viewer.side,
-		"peer": 0, "position": viewer.position + Vector3(8, 0, 0),
+		"peer": actor.peer_id, "position": viewer.position + Vector3(8, 0, 0),
 		"special": {"role": "clone", "owner_id": actor.entity_id, "companion_body_fixture": "clone"}})
 	kami_fixture = simulation.spawn({"kind": "kami", "side": viewer.side, "yaw": 1.2, "position": viewer.position + Vector3(10, 8, 0),
 		"special": {"role": "carrier", "model_key": "%s_%s_kami" % [viewer.side.to_lower(), character],
@@ -236,12 +241,19 @@ func _server_step() -> void:
 	civilian_fixture = simulation._spawn_civilian(viewer.side, false, 13, {"x": viewer.position.x + 12, "z": viewer.position.z})
 	civilian_fixture.special.companion_body_fixture = "civilian"
 	fixture_peer = viewer.peer_id
+	_fixture_roster.rpc_id(Session.seats.transport_for(fixture_peer), {"actor": actor.entity_id, "npc": npc.entity_id, "artillery": artillery_fixture.entity_id,
+		"tower": tower.entity_id, "base": base_fixture.entity_id, "clone": clone_fixture.entity_id, "kami": kami_fixture.entity_id,
+		"hyper": hyper_fixture.entity_id, "civilian": civilian_fixture.entity_id})
 	simulation.apply_presentation_view(simulation.snapshot(fixture_peer))
 	frozen_resources = _resources()
 
+@rpc("authority", "call_remote", "reliable")
+func _fixture_roster(ids: Dictionary) -> void:
+	fixture_ids = ids
+
 @rpc("any_peer", "call_remote", "reliable")
 func _request_body() -> void:
-	if not Session.dedicated or multiplayer.get_remote_sender_id() != fixture_peer or actor == null:
+	if not Session.dedicated or Session.seats.player_for(multiplayer.get_remote_sender_id()) != fixture_peer or actor == null:
 		return
 	var delivered: Array = []
 	for slot: String in ["light", "light", "heavy"]:
@@ -281,7 +293,7 @@ func _request_body() -> void:
 		return
 	for event: Dictionary in delivered:
 		simulation.events.erase(event)
-	_expect_body.rpc_id(fixture_peer, hero_serial, _indices(actor), delivered,
+	_expect_body.rpc_id(Session.seats.transport_for(fixture_peer), hero_serial, _indices(actor), delivered,
 		npc_serial, npc.body.npc_muzzle_index, _npc_attacks(), statics, companions)
 
 @rpc("authority", "call_remote", "reliable")
@@ -297,7 +309,7 @@ func _expect_body(serial: int, indices: Dictionary, delivered: Array, npc_serial
 
 @rpc("any_peer", "call_remote", "reliable")
 func _expand_body() -> void:
-	if not Session.dedicated or multiplayer.get_remote_sender_id() != fixture_peer or actor == null:
+	if not Session.dedicated or Session.seats.player_for(multiplayer.get_remote_sender_id()) != fixture_peer or actor == null:
 		return
 	var definition := Content.weapon(actor.character, "light", 1)
 	var report := {"type": "shot", "hero_report": true, "actor": actor.entity_id, "slot": "light", "side": actor.side,
@@ -321,7 +333,7 @@ func _expand_body() -> void:
 	if _resources() != frozen_resources:
 		_fail("Death presentation report changed authority resources or combat RNG")
 		return
-	_expect_remote.rpc_id(fixture_peer, report, sprays[0], death)
+	_expect_remote.rpc_id(Session.seats.transport_for(fixture_peer), report, sprays[0], death)
 	actor.position.y += float(Content.constants.MORPH.GROUND_Y) + 1
 	actor.flying = true
 	actor.defending = true

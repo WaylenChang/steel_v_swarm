@@ -1,0 +1,41 @@
+class_name AudioSampleLibrary
+extends RefCounted
+
+const CATALOGUE_PATH := "res://assets/audio/native/catalogue.res"
+
+var catalogue: NativeAudioCatalogue
+var buffers: Dictionary = {}
+var loaded := false
+
+func load_samples(low_power: bool) -> Error:
+	# Low-power startup never loads the PCM catalogue or marks it registered.
+	if low_power or loaded:
+		return OK
+	var candidate := _load_catalogue()
+	if candidate == null or not candidate.valid():
+		push_error("Missing original native audio catalogue; regenerate source audio")
+		return ERR_UNAVAILABLE
+	var decoded := {}
+	for id: String in candidate.sample_paths:
+		var takes: Array[NativeAudioClip] = []
+		for path: String in candidate.sample_paths[id]:
+			var clip := _load_clip(path)
+			if clip == null or not clip.valid():
+				push_error("Missing or invalid imported source audio clip: " + path)
+				return ERR_INVALID_DATA
+			takes.append(clip)
+		if not takes.is_empty():
+			decoded[id] = takes
+	catalogue = candidate
+	buffers = decoded
+	loaded = true
+	return OK
+
+func _load_catalogue() -> NativeAudioCatalogue:
+	return load(CATALOGUE_PATH) as NativeAudioCatalogue if ResourceLoader.exists(CATALOGUE_PATH) else null
+
+func _load_clip(path: String) -> NativeAudioClip:
+	return load(path) as NativeAudioClip if ResourceLoader.exists(path) else null
+
+func has_sample(id: String, low_power: bool) -> bool:
+	return not low_power and not buffers.get(id, []).is_empty()

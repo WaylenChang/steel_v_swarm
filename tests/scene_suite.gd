@@ -225,6 +225,8 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			elif item.kind == "affix":
 				state.affix = "fixture"
 			presentation.sync([state], 0)
+			if presentation.entries.has(1):
+				preload("res://tests/outline_suite.gd").check_deferred(h, presentation.entries[1].root)
 		if not presentation.entries.has(1):
 			h._check(false, "Pack original loot scenes before final presentation verification")
 			continue

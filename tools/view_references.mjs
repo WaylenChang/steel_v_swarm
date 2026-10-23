@@ -61,10 +61,11 @@ export async function viewReferences(d, gameSource, mainSource, source) {
   for (const fire of [-1, 0, .25, .8, 1, 2]) for (const weather of [-1, 0, .3, .9, 1, 2]) {
     viewScope.push({ fire, weather, radius: d.scopeRvminFog(fire, weather), stops: d.weatherFogStops(weather) });
   }
-  const makeBlock = body => new Function(...Object.keys(scope), `return function(dt,shP=0,shY=0,shR=0) {${body}}`)(...Object.values(scope));
+  const makeBlock = body => new Function(...Object.keys(scope), `return function(dt,shP=0,shY=0,shR=0) {\n${body}\n}`)(...Object.values(scope));
   const fov = makeBlock(fovBlock);
   const viewFov = [];
-  for (const kind of ['mech', 'robot', 'drone', 'morph']) for (const air of [false, true]) {
+  const heroKinds=[...new Set(Object.entries(d.CHARACTERS).map(([id,hero])=>d.heroKindOf(id,hero.side)))];
+  for (const kind of heroKinds) for (const air of [false, true]) {
     const base = air ? d.UNITS[kind].fovAir ?? d.UNITS[kind].fov : d.UNITS[kind].fov;
     const camera = new THREE.PerspectiveCamera(base, 1.6, .1, 2000);
     const ctx = { camera, baseFov: base, heroKind: kind, aiming: false }, steps = [];

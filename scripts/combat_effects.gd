@@ -712,8 +712,8 @@ func _take(key: String) -> GeometryInstance3D:
 		material.shader = preload("res://shaders/combat_comic.gdshader") if key == "comic" else preload("res://shaders/combat_spark.gdshader") if key in ["spark", "sprite_fire"] else preload("res://shaders/combat_smoke.gdshader") if key == "sprite_smoke" else preload("res://shaders/combat_ring.gdshader") if key == "shock" else preload("res://shaders/combat_beam.gdshader") if key == "beam6" else preload("res://shaders/missile_smoke.gdshader") if key == "missile_smoke" else preload("res://shaders/combat_energy.gdshader")
 		if key in ["comic", "spark"]:
 			material.render_priority = 126 if key == "comic" else 127
-		material.set_shader_parameter("curve_knee", Content.balance.bodyRules.curve.knee)
-		material.set_shader_parameter("curve_inverse_radius", Content.balance.bodyRules.curve.inverse)
+		material.set_shader_parameter("curve_knee", Content.local_view_curve().knee)
+		material.set_shader_parameter("curve_inverse_radius", Content.local_view_curve().inverse)
 		if key == "spark":
 			material.set_shader_parameter("spark_texture", load("res://assets/ui/shot-spark.png"))
 		elif key in ["sprite_fire", "sprite_smoke"]:

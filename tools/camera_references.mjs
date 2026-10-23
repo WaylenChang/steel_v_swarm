@@ -82,5 +82,5 @@ export async function cameraReferences(d, source, gameSource) {
     cameraClips.push({name:scenario.name,camera:initial,eye:5,blockers,entities:entities.map(e=>({...e,mesh:undefined,position:e.mesh.position.toArray()})),
       onDeck:!!scenario.onDeck,surface:scenario.surface||0,hit:scenario.hit??null,ground:scenario.ground??(scenario.ground===null?null:0),ridge:!!scenario.ridge,result:camera.toArray()});
   }
-  return {profiles,rules,fixtures:{cameraAnchors,cameraClips,superCameraAnchors}};
+  return {profiles,rules,heroView,fixtures:{cameraAnchors,cameraClips,superCameraAnchors}};
 }

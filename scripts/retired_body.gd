@@ -21,6 +21,8 @@ static func capture(unit: BattleUnit, parent: Node3D) -> RetiredBody:
 	view.id = unit.entity_id
 	view.kind = unit.kind
 	view.model = unit.model
+	if is_instance_valid(unit.vital_bar):
+		unit.vital_bar.hide_bar()
 	view.dimensions = (unit.body.profile.dimensions if unit.body != null else unit.geometry_override).duplicate()
 	view.mobile_damage = unit.mobile_damage
 	view.scene_damage = unit.scene_damage

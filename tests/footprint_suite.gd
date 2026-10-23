@@ -79,6 +79,16 @@ static func authority(h: Node) -> void:
 	sim.apply_footprint(footprint)
 	h._check(sim.footprint_glows.active.size() == 2, "Native billboards display every blast victim")
 	var glow: MeshInstance3D = sim.footprint_glows.active[front.entity_id]
+	front.special.siege_locked = true
+	sim.apply_footprint(footprint)
+	h._check(not sim.footprint_glows.active.has(front.entity_id) and sim.footprint_glows.active.has(rear.entity_id),
+		"Siege lock hides only the weapon glow after blast victims have been determined")
+	front.special.siege_locked = false
+	sim.apply_footprint(footprint)
+	h._check(sim.footprint_glows.active.get(front.entity_id) == glow,
+		"Unlocking the structure reuses its pooled native billboard")
+	h._check(sim.rng.state == rng_state and sim.projectile_rng.state == projectile_rng_state and actor.ammo.heavy == ammo and actor.power == power,
+		"Siege glow transitions spend neither resources nor combat/presentation RNG")
 	var dimensions := front.visual_dimensions()
 	var style: Dictionary = Content.balance.footprintGlow
 	h._near(glow.position.y, dimensions.centre, "Glow uses original measured centre")

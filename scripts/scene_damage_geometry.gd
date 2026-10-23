@@ -127,6 +127,9 @@ func _rebuild(binding: Dictionary) -> void:
 		return
 	var node: GeometryInstance3D = binding.node
 	var mesh := ArrayMesh.new()
+	mesh.set_meta("source_custom_attributes", (binding.original as Mesh).get_meta("source_custom_attributes", {}))
+	if (binding.original as Mesh).has_meta("source_cel_geometry"):
+		mesh.set_meta("source_cel_geometry", (binding.original as Mesh).get_meta("source_cel_geometry"))
 	for surface in range(binding.surfaces.size()):
 		var arrays: Array = binding.surfaces[surface].duplicate()
 		if int(binding.part) >= 0:

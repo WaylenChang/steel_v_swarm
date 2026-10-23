@@ -1,0 +1,8 @@
+{
+  "name": "steel-vs-swarm-migration-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "stream-json": "1.9.1"
+  }
+}

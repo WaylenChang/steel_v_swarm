@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import {captureTextureMips} from './texture_mip_references.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { captureBodyReferences } from './body_references.mjs';
@@ -26,9 +27,22 @@ import { captureBodyRemoval } from './body_removal_references.mjs';
 import { captureDissolve } from './dissolve_references.mjs';
 import { captureDeathSequences } from './death_sequence_references.mjs';
 import { captureDeathOverlay, captureDeathOverlayRasters } from './death_overlay_references.mjs';
+import { captureTextureImage, describeSourceTexture, captureTextureUV } from './texture_capture.mjs';
+import { captureOutlineUniforms } from './outline_capture.mjs';
+import { createCelCapture } from './cel_capture.mjs';
+import { captureTextureRasters } from './texture_raster_references.mjs';
+import { captureAquaticPointRasters } from './aquatic_references.mjs';
+import { captureHeadMarks } from './head_mark_references.mjs';
+import { captureVitalBars } from './vital_bar_references.mjs';
+import { captureMinimapFog } from './minimap_fog_capture.mjs';
+import { captureAudioPan } from './audio_pan_capture.mjs';
+import { captureAudioClips, audioCaptureBundles } from './audio_clip_capture.mjs';
+import { captureAudioAmbience } from './audio_ambience_capture.mjs';
+import { captureAudioMusicGain } from './audio_music_gain_capture.mjs';
+import { minimapCanvasSize } from './minimap_references.mjs';
 
 // Measure the actual source model graph offline; native gameplay consumes only saved scalars.
-export async function modelReferences(source, gameSource, cameraProfiles) {
+export async function modelReferences(source, gameSource, cameraProfiles, textureReferences) {
   const { chromiumOrNull, chromePath } = await import(pathToFileURL(join(source, 'tools/pw.mjs')).href);
   const chromium = await chromiumOrNull();
   if (!chromium) throw new Error('Model migration requires the source development Playwright runtime');
@@ -46,7 +60,16 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
   const reflashSource=grabFn(mainUiSource,'_reflash');
   const vfxSource=(await readFile(join(source,'public/js/vfx.js'),'utf8')).replace(/\r\n?/g,'\n');
   const heroShotSource=['energyMat','combatGeometry','combatDischarge'].map(name=>grabFn(vfxSource,name)).join('\n');
-  const shotDefinitions=['UNIT_SHOT_STYLE','UNIT_GUN','UNIT_TOWER','UNIT_BASE'].map(name=>grabConst(vfxSource,name)).join('\n');
+  const shotDefinitions=['UNIT_SHOT_STYLE','UNIT_GUN','UNIT_TOWER','UNIT_BASE'].map(name=>{
+    // The source audit helper accepts bare literals, while these tables are frozen.
+    const declaration=new RegExp(`(?:^|\\n)const ${name} = Object\\.freeze\\(\\s*(?=\\{)`).exec(vfxSource);
+    if(!declaration)throw new Error('Missing original frozen shot definition: '+name);
+    const body=grabBlock(vfxSource,declaration[0]);
+    const start=declaration.index+declaration[0].length;
+    if(!/^\s*\)\s*;/.test(vfxSource.slice(start+body.length)))
+      throw new Error('Unexpected original frozen shot initializer: '+name);
+    return `const ${name} = Object.freeze(${body});`;
+  }).join('\n');
   const shotCaps=/lowPower\(\) \? (\d+) : (\d+)/.exec(vfxSource.slice(vfxSource.indexOf('const crowded ='),vfxSource.indexOf('\n',vfxSource.indexOf('const crowded ='))));
   const shotMaximum=/const FX_MAX = (\d+);/.exec(text);
   if(!shotCaps||!shotMaximum)throw new Error('Missing original transient effect budgets');
@@ -144,10 +167,40 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
     if (begin < 0 || finish < 0) throw new Error(`Missing source model method: ${name}`);
     return `return function ${text.slice(begin + 1, finish + 4).trimStart().slice(name.length)}`;
   };
-  const browser = await chromium.launch({ headless: true, executablePath: chromePath() });
+  // Full source geometry and frame fixtures coexist until Playwright transfers them.
+  const browser = await chromium.launch({ headless: true, executablePath: chromePath(),
+    args: ['--js-flags=--max-old-space-size=8192'] });
   const sourceInputs = new Set(['server/sim.js','public/js/main.js','public/css/style.css']);
+  const graphSections=['cockpitGraphs','projectileGraphs','hazardGraphs','lootGraphs','companionGraphs',
+    'bodyGraphs','civilianGraphs','npcEffectGraphs','weaponEffectGraphs','firstPersonShieldGraphs'];
+  const bodySections = {graphs:{},profiles:{},fixtures:{},...Object.fromEntries(graphSections.map(key=>[key,{}]))};
   try {
     const page = await browser.newPage();
+    await page.exposeFunction('__sourceBodySection', (section, key, payload, offset) => {
+      if (!Object.hasOwn(bodySections, section) || typeof key !== 'string' || typeof payload !== 'string')
+        throw new Error('Invalid source model capture section');
+      // The published source assets/fixtures are JSON. Native JSON codecs avoid
+      // Playwright's recursive object transport amplifying these large arrays.
+      const value=JSON.parse(payload);
+      if (section !== 'fixtures') {
+        if (Object.hasOwn(bodySections[section], key)) throw new Error('Duplicate source body capture key: ' + key);
+        bodySections[section][key] = value;
+        const count=Object.keys(bodySections[section]).length;
+        if (count%16===0) console.log('SOURCE_MODEL_CAPTURE body-'+section+'-received '+count);
+      } else {
+        const rows = bodySections.fixtures[key] ??= [];
+        if (!Array.isArray(value) || offset !== rows.length) throw new Error('Out-of-order source body fixture chunk: ' + key);
+        if (offset===0) console.log('SOURCE_MODEL_CAPTURE body-fixture-receiving '+key);
+        rows.push(...value);
+      }
+    });
+    page.once('crash', () => {
+      console.error('SOURCE_MODEL_CAPTURE renderer-crashed');
+      void browser.close().catch(error => console.error('SOURCE_MODEL_CAPTURE browser-close-failed', error.message));
+    });
+    page.on('console', message => {
+      if (message.text().startsWith('SOURCE_MODEL_CAPTURE ')) console.log(message.text());
+    });
     const origin = 'http://godot-models.invalid';
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
@@ -155,23 +208,30 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         '<html><head><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script></head></html>' });
       if (url.pathname.endsWith('/build/three.module.js')) {
         sourceInputs.add('out/forest_review/three.module.js');
-        return route.fulfill({ contentType: 'text/javascript', body: await readFile(join(source, 'out/forest_review/three.module.js')) });
+        try {
+          return await route.fulfill({ contentType: 'text/javascript', body: await readFile(join(source, 'out/forest_review/three.module.js')) });
+        } catch (error) { console.error('SOURCE_MODEL_ROUTE_ERROR', url.href, error.message); return route.abort(); }
       }
       const addon = /\/examples\/jsm\/(.*\.js)$/.exec(url.pathname);
       if (addon) {
         const file = 'out/forest_review/' + addon[1].replaceAll('/', '_');
         sourceInputs.add(file);
-        return route.fulfill({ contentType: 'text/javascript', body: await readFile(join(source, file)) });
+        try {
+          return await route.fulfill({ contentType: 'text/javascript', body: await readFile(join(source, file)) });
+        } catch (error) { console.error('SOURCE_MODEL_ROUTE_ERROR', url.href, error.message); return route.abort(); }
       }
       if (url.origin === origin && url.pathname.startsWith('/js/')) {
         sourceInputs.add('public' + url.pathname);
-        return route.fulfill({ contentType: 'text/javascript', body: await readFile(join(source, 'public', url.pathname)) });
+        try {
+          return await route.fulfill({ contentType: 'text/javascript', body: await readFile(join(source, 'public', url.pathname)) });
+        } catch (error) { console.error('SOURCE_MODEL_ROUTE_ERROR', url.href, error.message); return route.abort(); }
       }
       return route.abort();
     });
     await page.goto(origin);
-    const result = await page.evaluate(async ({ dimensionBody, aimBody, poseBody, kickDecay, elevationBody, flashBody, flashRules, cameraProfiles, beamColors, bodyCaptureSource, anatomyCaptureSource, frameCaptureSource, npcCaptureSource, cloneCaptureSource, carrierCaptureSource, civilianCaptureSource, viewCaptureSource, shotCaptureSource, heroShotCaptureSource, heroShotSource, remoteShotCaptureSource, fanFallbackCaptureSource, spriteCaptureSource, destructionCaptureSource, deathSequenceCaptureSource, deathOverlayCaptureSource, firstPersonShieldCaptureSource, firstPersonShieldSetup, hurtCaptureSource, hurtCss, reflashSource, bloodCaptureSource, splatPaintCaptureSource, mainUiSource, shotDefinitions, shotLimits, civilianMethods, npcTargetYExpression, npcCompanionYExpression, npcShotPointDeclaration, morphSource, gaitSource, combatRules, castRules, castRemote }) => {
+    const result = await page.evaluate(async ({ dimensionBody, aimBody, poseBody, kickDecay, elevationBody, flashBody, flashRules, cameraProfiles, beamColors, bodyCaptureSource, anatomyCaptureSource, frameCaptureSource, npcCaptureSource, cloneCaptureSource, carrierCaptureSource, civilianCaptureSource, viewCaptureSource, shotCaptureSource, heroShotCaptureSource, heroShotSource, remoteShotCaptureSource, fanFallbackCaptureSource, spriteCaptureSource, destructionCaptureSource, deathSequenceCaptureSource, deathOverlayCaptureSource, firstPersonShieldCaptureSource, firstPersonShieldSetup, hurtCaptureSource, hurtCss, reflashSource, bloodCaptureSource, splatPaintCaptureSource, mainUiSource, shotDefinitions, shotLimits, civilianMethods, npcTargetYExpression, npcCompanionYExpression, npcShotPointDeclaration, morphSource, gaitSource, combatRules, castRules, castRemote, textureImageCaptureSource, textureDescriptionSource, textureUVSource, outlineCaptureSource, celCaptureSource }) => {
       const THREE = await import('three');
+      console.debug('SOURCE_MODEL_CAPTURE three-loaded');
       const d = await import('/js/data.js');
       const { makeUnit } = await import('/js/models.js');
       const { NPC_MODEL_KINDS,CIVILIAN_PROFESSION_KITS } = await import('/js/npcModels.js');
@@ -205,6 +265,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
       const combatAsset = await import('/js/forge/combatAsset.js');
       const {COMBAT_ASSETS}=await import('/js/forge/combatAssets.js');
       const lod = await import('/js/lod.js');
+      console.debug('SOURCE_MODEL_CAPTURE modules-loaded');
       const bodyPresentationLod = [];
       for(const lowPower of [false,true])for(const distance of [-1,0,149.999999,150,299.999999,300,599.999999,600,1200]) {
         const squared=distance<0?distance:distance*distance,stride=lod.lodStrideByD2(squared,lowPower);
@@ -321,26 +382,27 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         flashTick.call(state,dt,math);
         cockpitFlash.push({heavy,dt,sample,visible:state.flash.visible,scale:state.flash.scale.toArray()});
       }
+      const encodeTextureImage = new Function('return (' + textureImageCaptureSource + ');')();
+      const describeTexture = new Function('return (' + textureDescriptionSource + ');')();
+      const captureUV = new Function('return (' + textureUVSource + ');')();
+      const captureOutline = new Function('return (' + outlineCaptureSource + ');')();
+      const createCel = new Function('return (' + celCaptureSource + ');')();
       const graphOf = (root, omitOutlines = false) => {
-        const all = [], ids = new Map(), meshes = [], materials = [], textures = [];
+        const all = [], ids = new Map(), meshes = [], materials = [], textures = [], textureImages = [];
         const meshIds = new Map(), materialIds = new Map(), textureIds = new Map();
+        const outlineOf = captureOutline;
         root.traverse(node => { if (omitOutlines && node.userData.isOutline) return; ids.set(node, all.length); all.push(node); });
         const textureOf = texture => {
           if (!texture) return -1;
           if (textureIds.has(texture)) return textureIds.get(texture);
-          const image = texture.image, canvas = document.createElement('canvas');
-          canvas.width = image.width; canvas.height = image.height;
-          const context = canvas.getContext('2d');
-          if (image.data) {
-            if (!(image.data instanceof Uint8Array) || image.data.length !== image.width * image.height * 4)
-              throw new Error('Unsupported cockpit data texture');
-            context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-          } else context.drawImage(image, 0, 0);
           const index = textures.length;
           textureIds.set(texture, index);
-          textures.push(canvas.toDataURL('image/png').split(',')[1]);
+          const encoded = encodeTextureImage(texture);
+          textures.push(encoded.png);
+          textureImages.push(texture.image.data ? encodeTextureImage(texture,true) : encoded);
           return index;
         };
+        const cel = createCel(THREE,texture=>({...describeTexture(texture,THREE),image:textureOf(texture)}),texture=>describeTexture(texture,THREE,true));
         const materialOf = material => {
           if (materialIds.has(material)) return materialIds.get(material);
           if (material.isShaderMaterial) {
@@ -359,11 +421,14 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           if (!material.color || material.isShaderMaterial) throw new Error(`Unsupported cockpit material: ${material.type}`);
           const index = materials.length;
           materialIds.set(material, index);
+          const celMaterial=cel.capture(material);
           materials.push({ color: material.color.getHex(), opacity: material.opacity, transparent: material.transparent,
+            ...(celMaterial?{cel:celMaterial}:{}),
             blending: material.blending, depthTest: material.depthTest, depthWrite: material.depthWrite,
-            side: material.side, unshaded: !!material.isMeshBasicMaterial, roughness: material.roughness ?? 1,
+            side: material.side, unshaded: !!material.isMeshBasicMaterial,vertexColors:!!material.vertexColors, roughness: material.roughness ?? 1,
             metalness: material.metalness ?? 0, emission: material.emissive?.getHex() || 0,
             emissionIntensity: material.emissiveIntensity ?? 0, texture: textureOf(material.map),
+            ...(material.map ? {sourceTexture:{...describeTexture(material.map,THREE),image:textureOf(material.map)}} : {}),
             flipY: material.map?.flipY ?? false, repeat: material.map?.repeat.toArray() || [1, 1],
             offset: material.map?.offset.toArray() || [0, 0], dissolve:!!material.userData?.celDisU,
             alphaTest:material.alphaTest||0 });
@@ -373,10 +438,12 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           if (meshIds.has(geometry)) return meshIds.get(geometry);
           const index = meshes.length;
           meshIds.set(geometry, index);
-          meshes.push({ position: Array.from(geometry.attributes.position.array),
-            color: geometry.attributes.color ? Array.from(geometry.attributes.color.array) : [],
+          meshes.push({ position: Array.from(geometry.attributes.position.array),attributes:cel.attributes(geometry),
+            color: geometry.attributes.color ? Array.from({length:geometry.attributes.color.count},(_,vertex)=>
+              ['getX','getY','getZ','getW'].slice(0,geometry.attributes.color.itemSize).map(key=>geometry.attributes.color[key](vertex))).flat() : [],
+            colorSize:geometry.attributes.color?.itemSize??3,
             normal: geometry.attributes.normal ? Array.from(geometry.attributes.normal.array) : [],
-            uv: geometry.attributes.uv ? Array.from(geometry.attributes.uv.array) : [],
+            uv:captureUV(geometry),uv1:captureUV(geometry,1),uv2:captureUV(geometry,2),uv3:captureUV(geometry,3),
             indices: geometry.index ? Array.from(geometry.index.array) : [], groups: geometry.groups });
           return index;
         };
@@ -389,13 +456,23 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           const result = { id, parent: ids.get(node.parent) ?? -1, name: node.name,
             matrix: node.matrix.toArray(), visible: node.visible, rotationOrder: node.rotation.order };
           result.trs = { p: node.position.toArray(), q: node.quaternion.toArray(), s: node.scale.toArray(), r: [node.rotation.x, node.rotation.y, node.rotation.z] };
-          result.flags = Object.fromEntries(['teamRing', 'isOutline', 'noOutline', 'noPaint', 'weatherScorch', 'noViewOcclusion', 'presentationEffect'].map(key => [key, !!node.userData[key]]));
+          result.flags = Object.fromEntries(['teamRing', 'isOutline', 'noOutline', 'noPaint', 'weatherScorch', 'noViewOcclusion', 'presentationEffect', 'geoDetail', 'geoKeep'].map(key => [key, !!node.userData[key]]));
           result.flags.materialArray=Array.isArray(node.material);
           result.flags.skinned=!!node.isSkinnedMesh;
           if (node.isMesh) {
             result.mesh = meshOf(node.geometry);
             result.castShadow = !!node.castShadow;
             result.materials = (Array.isArray(node.material) ? node.material : [node.material]).map(materialOf);
+            if (node.userData.isOutline) {
+              result.outlineUniforms = outlineOf(node.material);
+              result.outlineFrustumCulled = node.frustumCulled;
+            }
+            if (omitOutlines) result.outlines = node.children.filter(child=>child.isMesh && child.userData.isOutline).map(shell=>{
+              shell.updateMatrix();
+              return {mesh:meshOf(shell.geometry),material:materialOf(shell.material),uniforms:outlineOf(shell.material),
+                matrix:shell.matrix.toArray(),sameGeometry:shell.geometry===node.geometry,childIndex:node.children.indexOf(shell),
+                visible:shell.visible,frustumCulled:shell.frustumCulled,geoKeep:!!shell.userData.geoKeep};
+            });
             if (node.isInstancedMesh) {
               result.instances = instancesOf(node);
               if (node.instanceColor) {
@@ -407,10 +484,16 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
             if (node.isInstancedMesh) node.computeBoundingBox();
             const box = (node.isInstancedMesh ? node.boundingBox : node.geometry.boundingBox).clone().applyMatrix4(node.matrixWorld);
             result.worldBounds = [box.min.toArray(), box.max.toArray()];
+          } else if (node.isSkeletonHelper) {
+            if (node.visible || node.children.length || !ids.has(node.root))
+              throw new Error('Visible or external skeleton helpers require native rig-preview support');
+            // Preserve IDs/transforms of the source's disabled preview guide.
+            // Its optional line visualization remains explicitly unavailable.
+            result.helper = {type:'SkeletonHelper',root:ids.get(node.root),visualizationAvailable:false};
           } else if (!node.isGroup && !node.isBone && node.type !== 'Object3D') throw new Error(`Unsupported cockpit node: ${node.type}`);
           return result;
         });
-        return { data: { nodes, meshes, materials, textures }, ids, materialIds, materialOf, instancesOf };
+        return { data: { nodes, meshes, materials, textures, textureImages, celPrograms:cel.programs,celSamplers:cel.samplers }, ids, materialIds, materialOf, instancesOf };
       };
       const captureBodies = new Function('return ' + bodyCaptureSource)();
       const captureAnatomy = new Function('return ' + anatomyCaptureSource)();
@@ -422,8 +505,36 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         fireUnitMotion, stepUnitMotion, stepCombatFx, morphMethods, morphHelpers, gaitMethods, castRules, captureAnatomy, anatomyHelpers,
         captureFrames, captureNpc, captureClone, captureCarrier, NPC_MODEL_KINDS, SUMMON_BUILDERS, measure, unitShotStyle, unitMotion, combatAsset, stepLocomotion, BattleClient, castRemote, cameraProfiles, disposeTree });
       const captureCivilian=new Function('return '+civilianCaptureSource)();
+      console.debug('SOURCE_MODEL_CAPTURE bodies-captured');
+      const transferCounts={records:{},fixtures:{}};
+      // Retain every source case, releasing browser-owned arrays before building
+      // the remaining weapons/effects. Playwright supplies the transport codec.
+      for (const section of ['graphs','profiles']) {
+        transferCounts.records[section]=Object.keys(bodies[section]).length;
+        for (const key of Object.keys(bodies[section])) {
+          await window.__sourceBodySection(section,key,JSON.stringify(bodies[section][key]),0);
+          delete bodies[section][key];
+        }
+      }
+      const transferFixtures=async fixtures=>{
+        for (const key of Object.keys(fixtures)) {
+          const rows=fixtures[key];
+          if (!Array.isArray(rows)) throw new Error('Original model fixture section is not an array: '+key);
+          if (Object.hasOwn(transferCounts.fixtures,key)) throw new Error('Duplicate original fixture section: '+key);
+          transferCounts.fixtures[key]=rows.length;
+          for (let offset=0;offset<rows.length;offset+=8) {
+            const count=Math.min(8,rows.length-offset);
+            await window.__sourceBodySection('fixtures',key,JSON.stringify(rows.slice(offset,offset+count)),offset);
+            rows.fill(null,offset,offset+count);
+          }
+          if (!rows.length) await window.__sourceBodySection('fixtures',key,'[]',0);
+          delete fixtures[key];
+        }
+      };
+      await transferFixtures(bodies.fixtures);
+      console.debug('SOURCE_MODEL_CAPTURE bodies-transferred');
       const civilians=captureCivilian({THREE,d,methods:civilianMethods,geo,limbChain,finishUnitSurfaces,sceneryGeometry,
-        generateCivilian,options:CIVILIAN_OPTIONS,kits:CIVILIAN_PROFESSION_KITS,outlinify,enableDissolve:toon.enableDissolve,makeUnit,graphOf,measure,
+        generateCivilian,options:CIVILIAN_OPTIONS,kits:CIVILIAN_PROFESSION_KITS,outlinify,enableDissolve:toon.enableDissolve,makeUnit,graphOf,measure,captureOutline,
         stepCombatFx,stepLocomotion,disposeTree});
       const captureBodyView=new Function('return '+viewCaptureSource)();
       const bodyView=captureBodyView({THREE,d,BattleClient,lod});
@@ -453,6 +564,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
       Object.assign(npcShots.graphs,destruction.graphs);
       Object.assign(projectileGraphs,destruction.projectileGraphs);
       Object.assign(projectileProfiles,destruction.projectileProfiles);
+      console.debug('SOURCE_MODEL_CAPTURE destruction-captured');
       const deathSequences=new Function('return '+deathSequenceCaptureSource)()({THREE,d,BattleClient});
       const deathOverlay=new Function('return '+deathOverlayCaptureSource)()({css:hurtCss});
       const firstPersonShields=new Function('return '+firstPersonShieldCaptureSource)()({THREE,d,BattleClient,fx,
@@ -460,6 +572,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
       const hurt=new Function('return '+hurtCaptureSource)()({css:hurtCss,reflashSource});
       const blood=new Function('return '+bloodCaptureSource)()({THREE,d,BattleClient});
       const splatPaint=new Function('return '+splatPaintCaptureSource)()({css:hurtCss,mainSource:mainUiSource});
+      console.debug('SOURCE_MODEL_CAPTURE overlays-shields-captured');
       const shotColors = Object.fromEntries(['STEEL','SWARM','SUPER'].map(side=>[side,BattleClient.prototype._shotCols(side)]));
       for (const [character,hero] of Object.entries(d.CHARACTERS)) for (const slot of ['light','heavy']) {
         for (const side of ['STEEL','SWARM','SUPER']) {
@@ -481,6 +594,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         }
       }
       const capture = (character, kind, side, key) => {
+        console.debug('SOURCE_MODEL_CAPTURE model-dimensions '+key+'/'+character+'/'+side);
         const group = makeUnit(key, side, { ch: character || null, ring: true, dissolve: true }).group;
         const dims = measure(THREE, group, key, { k: kind, s: side, ch: character || null }, false, new Map());
         if (![dims.dimTop, dims.dimH, dims.dimR].every(Number.isFinite)) throw new Error(`Invalid model bounds: ${key}/${character}/${side}`);
@@ -495,6 +609,7 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         return result;
       };
       for (const [character, hero] of Object.entries(d.CHARACTERS)) {
+        console.debug('SOURCE_MODEL_CAPTURE cockpit '+character);
         const sides = hero.side === 'MERC' ? ['STEEL', 'SWARM'] : [hero.side];
         for (const side of sides) {
           const dimensions = capture(character, hero.kind, side, `hero:${hero.kind}`);
@@ -945,7 +1060,8 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
           airdropVisuals.push({size,landing,born,steps});disposeTree(mesh);
         }
       }
-      return { geometry, cockpits, cockpitGraphs, projectileGraphs, projectileVisual: {profiles:projectileProfiles,colors:shotColors,beamColors,
+      console.debug('SOURCE_MODEL_CAPTURE graphs-prepared');
+      const captured = { geometry, cockpits, cockpitGraphs, projectileGraphs, projectileVisual: {profiles:projectileProfiles,colors:shotColors,beamColors,
         relayDistance:sourceNumber(BattleClient.prototype._tryFire.toString(),/muzzle\.x \+ dir\.x \* ([\d.]+)/,'remote physical launch tracer distance')}, cockpitRules: { ...COCKPIT, kickDecay, flash:flashRules },
         hazardGraphs,hazardProfiles,
         lootGraphs,lootProfiles,
@@ -959,6 +1075,18 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
         hurtPresentation:hurt.rules,
         splatPaint:splatPaint.rules,
         fixtures: { ...bodies.fixtures, ...npcShots.fixtures, ...heroShots.fixtures, ...remoteShots, ...fanFallbacks, ...sprites.fixtures, ...destruction.fixtures, ...deathSequences, ...deathOverlay.fixtures, ...firstPersonShields.fixtures, ...hurt.fixtures, ...blood, ...splatPaint.fixtures, bodyViewFrames:bodyView.frames, laneSurfaceProfiles:bodyView.laneProfiles, civilianBodyGeometry:civilians.fixtures, bodyShield, bodyPresentationLod, bodyCastDirection, bodyTpsMuzzleFallback, npcShotPoints, modelCentres, cockpitMuzzles, cockpitPoses, cockpitVisibility, cockpitElevation, weaponPresentation, cockpitFlash, authorityWeaponPoses, burstWeaponPoses, muzzleLaunches, projectileGeometry, projectileFx, companionGeometry,fireVisuals,lootVisuals,mineVisuals,sceneCollapsePoses,airdropVisuals }, glowPng: glowTexture().image.toDataURL('image/png').split(',')[1] };
+      for (const [section,graphs] of Object.entries(captured)) {
+        if (!section.endsWith('Graphs')) continue;
+        transferCounts.records[section]=Object.keys(graphs).length;
+        for (const key of Object.keys(graphs)) {
+          await window.__sourceBodySection(section,key,JSON.stringify(graphs[key]),0);
+          delete graphs[key];
+        }
+      }
+      await transferFixtures(captured.fixtures);
+      captured.transferCounts=transferCounts;
+      console.debug('SOURCE_MODEL_CAPTURE graphs-transferred');
+      return captured;
     }, { dimensionBody, aimBody: method('_entAimPoint'), poseBody, kickDecay: Number(kickDecay[1]), elevationBody, flashBody, flashRules, cameraProfiles, beamColors,
       bodyCaptureSource: captureBodyReferences.toString(), anatomyCaptureSource:captureAnatomicalReferences.toString(),
       frameCaptureSource:captureBodyFrames.toString(), npcCaptureSource:captureNpcBodyReferences.toString(),
@@ -976,9 +1104,57 @@ export async function modelReferences(source, gameSource, cameraProfiles) {
       bloodCaptureSource:captureBloodSplats.toString(),
       splatPaintCaptureSource:captureSplatPaint.toString(),mainUiSource,
       remoteShotCaptureSource:captureRemoteShotReferences.toString(),
-      npcTargetYExpression, npcCompanionYExpression, npcShotPointDeclaration, morphSource, gaitSource, combatRules, castRules, castRemote });
+      npcTargetYExpression, npcCompanionYExpression, npcShotPointDeclaration, morphSource, gaitSource, combatRules, castRules, castRemote, textureImageCaptureSource: captureTextureImage.toString(), textureDescriptionSource: describeSourceTexture.toString(), textureUVSource: captureTextureUV.toString(), outlineCaptureSource: captureOutlineUniforms.toString(), celCaptureSource: createCelCapture.toString() });
+    console.log('SOURCE_MODEL_CAPTURE graphs-captured');
+    for (const [section,count] of Object.entries(result.transferCounts.records)) {
+      if (Object.keys(bodySections[section]).length!==count) throw new Error('Incomplete source model section: '+section);
+    }
+    for (const [key,count] of Object.entries(result.transferCounts.fixtures)) {
+      if (bodySections.fixtures[key]?.length!==count) throw new Error('Incomplete source fixture section: '+key);
+    }
+    console.log('SOURCE_MODEL_CAPTURE transfer-counts '+JSON.stringify(result.transferCounts));
+    for (const section of graphSections) {
+      if (Object.keys(result[section]).length) throw new Error('Undelivered source model graph section: '+section);
+      result[section]=bodySections[section];
+    }
+    result.bodyGraphs=bodySections.graphs;
+    result.bodyProfiles=bodySections.profiles;
+    for (const key of Object.keys(bodySections.fixtures)) {
+      if (Object.hasOwn(result.fixtures,key)) throw new Error('Duplicate source fixture section: '+key);
+    }
+    result.fixtures={...bodySections.fixtures,...result.fixtures};
+    result.fixtures.textureRasters=await captureTextureRasters(page,textureReferences);
+    result.fixtures.textureMipCases=await captureTextureMips(page);
     result.fixtures.splatPaintRasters=await captureSplatRasters(page,mainUiSource,hurtCss);
     result.fixtures.deathOverlayRasters=await captureDeathOverlayRasters(page,hurtCss);
+    const aquaticSource=(await readFile(join(source,'public/js/aquatics.js'),'utf8')).replace(/\r\n?/g,'\n');
+    sourceInputs.add('public/js/aquatics.js');
+    result.fixtures.aquaticPointRasters=await captureAquaticPointRasters(page,grabFn(aquaticSource,'createSuspendedDetritus'));
+    const headMarks=await captureHeadMarks(page,
+      Object.fromEntries([['enemy','_enemyMark'],['ally','_allyMark'],['civilian','_civMark']].map(([key,name])=>[key,grabMethod(text,name)])),
+      ['factionMarkTex','allyMarkTex'].map(name=>grabFn(text,name)).join('\n'),captureTextureImage.toString(),describeSourceTexture.toString());
+    result.headMarks={rules:headMarks.rules,images:headMarks.images,textures:headMarks.textures};
+    result.fixtures.headMarks=headMarks.cases;
+    const vitalBars=await captureVitalBars(page,['_updateHpBar','_updateSceneHpBar'].map(name=>grabMethod(text,name)));
+    result.vitalBars={templates:vitalBars.templates,minimum:vitalBars.minimum,sceneDefault:vitalBars.sceneDefault,
+      parallelPerturbation:vitalBars.parallelPerturbation,ally:vitalBars.ally,foe:vitalBars.foe};
+    result.fixtures.vitalBars=vitalBars.programs;
+    result.fixtures.vitalBarPoses=vitalBars.poses;
+    result.minimapContext=await page.evaluate(()=>{
+      const context=document.createElement('canvas').getContext('2d');
+      return {miterLimit:context.miterLimit,lineCap:context.lineCap,lineJoin:context.lineJoin};
+    });
+    result.fixtures.minimapFog=await captureMinimapFog(page,
+      ['_drawMinimap','_world2mm','_world2mmFull','_mmShadows','_buildBlockGrid','_blockersNear'].map(name=>grabMethod(text,name)),
+      await minimapCanvasSize(source));
+    result.fixtures.audioPan=await captureAudioPan(page,source);
+    result.fixtures.audioAmbienceEnvelope=await captureAudioAmbience(page,source);
+    result.fixtures.audioMusicGain=await captureAudioMusicGain(page,source);
+    const audio=await captureAudioClips(page,source);
+    Object.assign(result,audioCaptureBundles(audio));
+    result.fixtures.audioFilters=audio.synth.filters;
+    for(const input of audio.inputs)sourceInputs.add(input);
+    sourceInputs.add('public/js/audio.js');
     return { ...result, inputs: [...sourceInputs].sort() };
   } finally {
     await browser.close();

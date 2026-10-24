@@ -62,6 +62,14 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   WASAPI `tests/audio_loop_loading.tscn` for shared-drain regression coverage.
   Held decoder resources isolate lifecycle contracts; they do not certify actual
   seasonal scene content, populated-world retention or the transport barrier.
+  Prebuild detachment also retires unfinished staging viewports, invalidates
+  readiness and resolves pending transfers as cancellation. Reattachment requires
+  a fresh request. Resource/build continuations and transfer waiters retain only
+  weak owner references; destination loss must leave a valid ready tree reusable.
+  Seal transfer ownership before native reparent callbacks, so a callback's fresh
+  request cannot be cleared by the preceding transfer. Run
+  `tests/prebuild_retirement.tscn` alongside existing room lifecycle checks.
+  Held build signals exercise retirement without qualifying seasonal geometry.
 
 World workflow, from the repository root:
 

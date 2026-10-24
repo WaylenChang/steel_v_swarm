@@ -76,7 +76,7 @@ static func run(h: Node) -> void:
 	var retired := Node3D.new()
 	h.add_child(retired)
 	retired.queue_free()
-	var abandoned := await cache.take(changed, retired)
+	var abandoned: BattleWorld = await cache.take(changed, retired)
 	h._check(abandoned == null and cache.prepared == world,
 		"An obsolete loading scene cannot consume the world intended for a replacement scene")
 	var viewport := SubViewport.new()
@@ -88,7 +88,7 @@ static func run(h: Node) -> void:
 	h._check(world.get_world_3d() != destination.get_world_3d(), "Prepared collisions live in an isolated native World3D")
 	h._check(_ray(destination).is_empty(), "Room preparation does not inject collision bodies into the battle physics space")
 	var previous_key: Dictionary = world.get_meta("room_prebuild_identity")
-	var transferred := await cache.take(changed, destination)
+	var transferred: BattleWorld = await cache.take(changed, destination)
 	await h.get_tree().physics_frame
 	await h.get_tree().physics_frame
 	h._check(transferred == world and world.get_parent() == destination and world.build_count == 1,
@@ -120,7 +120,7 @@ static func run(h: Node) -> void:
 		await h.get_tree().physics_frame
 	h._check(not cache.failure.is_empty() and notifications.back().failed,
 		"An asynchronous scene failure publishes a room status change without requiring another roster packet")
-	var retried := await cache.take(settings, destination)
+	var retried: BattleWorld = await cache.take(settings, destination)
 	h._check(retried != null and cache.failure.is_empty(), "Loading retries a failed native scene build before consuming the replacement")
 	h._check(notifications.any(func(item): return item.ready) and not notifications.back().selected,
 		"Ready and consumed notifications let the independent room preload indicator update and clear")

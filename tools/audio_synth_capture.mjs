@@ -1,5 +1,5 @@
 // Runs only in the offline source importer, inside its reference browser.
-export async function captureSynthStems(api,probes,noise,sampleRate,moveGraphs) {
+export async function captureSynthStems(api,probes,noise,sampleRate,moveGraphs,captureFilters) {
   const result=[];
   const encode=values=>{
     const bytes=new Uint8Array(values.length*4),view=new DataView(bytes.buffer),chunks=[];
@@ -96,9 +96,13 @@ export async function captureSynthStems(api,probes,noise,sampleRate,moveGraphs) 
     });
     result.push({id,sampleRate,frames,reservationSeconds:base.reservationSeconds,maximumGain:Math.max(...references.map(reference=>reference.gain)),stems});
   }
-  const filters=[],seen=new Set();
   const filterNodes=[...result.flatMap(sound=>sound.stems.flatMap(stem=>stem.effects)),
     ...Object.values(moveGraphs).flatMap(graph=>graph.nodes.filter(node=>node.kind==='createBiquadFilter'))];
+  return {sounds:result,filters:await captureFilters(filterNodes)};
+}
+
+export async function captureFilterImpulses(filterNodes) {
+  const filters=[],seen=new Set();
   for(const effect of filterNodes){
     const key=JSON.stringify({type:effect.type,parameters:effect.parameters});
     if(seen.has(key))continue;
@@ -118,5 +122,5 @@ export async function captureSynthStems(api,probes,noise,sampleRate,moveGraphs) 
     }
     filters.push({effect,responses});
   }
-  return {sounds:result,filters};
+  return filters;
 }

@@ -29,7 +29,8 @@ static func _case(h: Node, program: Dictionary, sample: Dictionary, low: bool) -
 	var dry := func(_x: float, z: float): return absf(z) < 4
 	var code := func(x: float, z: float): return EnvironmentRules.ground_code(height.call(x, z), water.value, [], dry.call(x, z))
 	var view := WildlifePresentation.new()
-	h._check(view.configure(root, program.source, low, height, code, dry, func(): return water.value, sample.densities),
+	h._check(view.configure(root, program.source, low, height, code, dry, func(): return water.value, sample.densities,
+		float(program.get("initialActivity", 1))),
 		"Construct original density-specific private wildlife batches from route capacity records")
 	for expected: Dictionary in sample.initial:
 		if bool(expected.low) == low:

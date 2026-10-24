@@ -42,6 +42,28 @@ static func run(h: Node) -> void:
 	h._check(result != null and result.resource_path == second, "An older completed resource load cannot replace the latest room resource")
 	h._check(loader.request({"path": second}) == changed and loader.resource == result,
 		"Room-to-loading transition retains the native resource and its dependency cache")
+	var retained_first := load(first) as NativeWorldData
+	var retained_second := result
+	loader.clear()
+	var replace_ready := func(path: String, fraction: float):
+		if path == first and fraction == 1.0:
+			loader.request({"path": second})
+	loader.progress.connect(replace_ready)
+	var superseded: NativeWorldData = await loader.prepare({"path": first})
+	h._check(superseded == null and loader.resource == retained_second and loader.desired == second,
+		"A synchronous readiness callback cannot give a superseded consumer the replacement resource")
+	h._check(retained_first != null and ResourceLoader.has_cached(first),
+		"Readiness reentry exercises the synchronous cached-resource branch")
+	loader.progress.disconnect(replace_ready)
+	loader.clear()
+	var cancel_ready := func(_path: String, fraction: float):
+		if fraction == 1.0:
+			loader.clear()
+	loader.progress.connect(cancel_ready)
+	var cancelled := loader.request({"path": first})
+	h._check(cancelled < loader.generation and loader.resource == null and loader.desired.is_empty(),
+		"Synchronous readiness cancellation invalidates the ticket returned to the original caller")
+	loader.progress.disconnect(cancel_ready)
 	loader.clear()
 	h._check(loader.resource == null and loader.desired.is_empty(), "Leaving releases room resource ownership")
 	loader.request({"path": first})
@@ -57,6 +79,8 @@ static func run(h: Node) -> void:
 	loader.clear()
 	loader.free()
 	result = null
+	retained_first = null
+	retained_second = null
 	for path: String in [first, second, missing]:
 		h._check(DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) == OK, "Remove only this native loader test's temporary resource")
 

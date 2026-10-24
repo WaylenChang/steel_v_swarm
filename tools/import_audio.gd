@@ -1,9 +1,16 @@
 extends Node
 
+const ResourcePublisher = preload("res://tools/source_resource_publisher.gd")
+const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
+
 func _ready() -> void:
 	_import.call_deferred()
 
 func _import() -> void:
+	for argument: String in OS.get_cmdline_user_args():
+		if argument != "--samples-only":
+			_fail("Unsupported audio import argument: " + argument)
+			return
 	var data: Dictionary = Content.read_json("res://data/audio_clips.json")
 	if data.get("formatVersion") != 1 or not data.get("samples") is Dictionary or not data.get("source") is Dictionary or not data.get("failures") is Dictionary:
 		_fail("Regenerate original decoded source audio")
@@ -20,18 +27,30 @@ func _import() -> void:
 			_fail("Unsupported source sound identifier: " + id)
 			return
 		var paths: Array[String] = []
+		var hashes: Array[String] = []
 		for index in range(data.samples[id].size()):
 			var sample: Dictionary = data.samples[id][index]
 			var clip := _clip(id, sample)
 			if clip == null:
 				return
-			var path := "res://assets/audio/native/%s_%03d.res" % [id, index]
-			if ResourceSaver.save(clip, path, ResourceSaver.FLAG_COMPRESS) != OK:
+			var hash := ClipIdentity.digest(clip)
+			var path := "res://assets/audio/native/%s_%s.res" % [id, hash]
+			if ResourceLoader.exists(path):
+				var existing := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as NativeAudioClip
+				if ClipIdentity.digest(existing) != hash:
+					_fail("Existing content-addressed source clip is invalid: " + path)
+					return
+			elif await ResourcePublisher.publish(clip, path, get_tree()) != OK:
 				_fail("Cannot save native source audio: " + path)
 				return
 			paths.append(path)
+			hashes.append(hash)
 			count += 1
 		catalogue.sample_paths[id] = paths
+		catalogue.sample_hashes[id] = hashes
+	if OS.get_cmdline_user_args().has("--samples-only"):
+		await _publish_catalogue(catalogue, count)
+		return
 	var synth_data: Dictionary = Content.read_json("res://data/audio_synth.json")
 	if synth_data.get("formatVersion") != 1 or not synth_data.get("sounds") is Array or synth_data.get("source") != data.source:
 		_fail("Regenerate original independent synthesis stems")
@@ -62,7 +81,7 @@ func _import() -> void:
 					return
 			synthesis.stems.append(stem)
 		var path := "res://assets/audio/native/%s_synth.res" % sound.id
-		if not synthesis.valid() or ResourceSaver.save(synthesis, path, ResourceSaver.FLAG_COMPRESS) != OK:
+		if not synthesis.valid() or await ResourcePublisher.publish(synthesis, path, get_tree()) != OK:
 			_fail("Cannot save original synthesis stems: " + path)
 			return
 	var music_data: Dictionary = Content.read_json("res://data/audio_music.json")
@@ -99,12 +118,15 @@ func _import() -> void:
 			_fail("Invalid original procedural music loop: " + str(music.mood))
 			return
 		var path := "res://assets/audio/native/%s_fallback.res" % music.mood
-		if ResourceSaver.save(clip, path, ResourceSaver.FLAG_COMPRESS) != OK:
+		if await ResourcePublisher.publish(clip, path, get_tree()) != OK:
 			_fail("Cannot save original procedural music loop: " + path)
 			return
-	if not _movement(data.source):
+	if not await _movement(data.source):
 		return
-	if not catalogue.valid() or ResourceSaver.save(catalogue, AudioSampleLibrary.CATALOGUE_PATH, ResourceSaver.FLAG_COMPRESS) != OK:
+	await _publish_catalogue(catalogue, count)
+
+func _publish_catalogue(catalogue: NativeAudioCatalogue, count: int) -> void:
+	if not catalogue.valid() or await ResourcePublisher.publish(catalogue, AudioSampleLibrary.CATALOGUE_PATH, get_tree()) != OK:
 		_fail("Cannot save native source audio catalogue")
 		return
 	print("Imported original audio takes: ", count, " synthesisProbesRemainReferenceOnly=true")
@@ -142,7 +164,7 @@ func _movement(provenance: Dictionary) -> bool:
 		if not bank.oscillators.has(captured.category):
 			bank.oscillators[captured.category] = {}
 		bank.oscillators[captured.category][str(int(captured.node))] = values.to_float32_array()
-	if not bank.valid() or ResourceSaver.save(bank, NativeAudioMoveBank.PATH, ResourceSaver.FLAG_COMPRESS) != OK:
+	if not bank.valid() or await ResourcePublisher.publish(bank, NativeAudioMoveBank.PATH, get_tree()) != OK:
 		_fail("Cannot save original native movement audio bank")
 		return false
 	return true

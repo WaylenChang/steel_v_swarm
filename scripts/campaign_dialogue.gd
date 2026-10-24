@@ -15,8 +15,16 @@ var total := 0
 var timers: Array[Timer] = []
 var generation := 0
 var fade: Tween
+var entrance: Tween
+var radio_group: Sprite2D
+var motion_rules: Dictionary
+var clock_msec := Callable()
+
+func _now_msec() -> float:
+	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
 
 func _ready() -> void:
+	motion_rules = Content.read_json("res://data/dialogue_motion.json").rules
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	track_label = NativeUi.label("", 16)
@@ -26,6 +34,11 @@ func _ready() -> void:
 	track_label.size = Vector2(520, 30)
 	add_child(track_label)
 	track_label.hide()
+	resized.connect(_layout_radio)
+
+func _layout_radio() -> void:
+	if is_instance_valid(radio_group):
+		radio_group.layout_radio(size)
 
 func track(stage: int = -1) -> void:
 	track_label.visible = stage >= 0
@@ -46,8 +59,12 @@ func clear() -> void:
 	timers.clear()
 	if fade != null and fade.is_valid():
 		fade.kill()
-	if is_instance_valid(bar):
-		bar.queue_free()
+	if entrance != null and entrance.is_valid():
+		entrance.kill()
+	if is_instance_valid(radio_group):
+		radio_group.retire()
+		radio_group.queue_free()
+	radio_group = null
 	bar = null
 	portraits.clear()
 	portrait_ids.clear()
@@ -60,17 +77,28 @@ func dispose() -> void:
 	track(-1)
 
 func _after(seconds: float, callback: Callable) -> void:
+	_after_msec(seconds * 1000, callback)
+
+func _after_msec(delay: float, callback: Callable) -> void:
 	var token := generation
+	var deadline := _now_msec() + delay
 	var timer := Timer.new()
 	timer.one_shot = true
-	timer.wait_time = maxf(0.001, seconds)
+	timer.ignore_time_scale = true
+	timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	timer.wait_time = maxf(0.001, delay / 1000)
 	add_child(timer)
 	timers.append(timer)
 	timer.timeout.connect(func():
+		if token != generation or not timers.has(timer):
+			return
+		var remaining := deadline - _now_msec()
+		if remaining > 0:
+			timer.start(remaining / 1000)
+			return
 		timers.erase(timer)
 		timer.queue_free()
-		if token == generation:
-			callback.call())
+		callback.call())
 	timer.start()
 
 func radio(scene: Dictionary) -> void:
@@ -79,9 +107,13 @@ func radio(scene: Dictionary) -> void:
 	clear()
 	lines = scene.lines.duplicate(true)
 	total = lines.size()
+	radio_group = preload("res://scripts/dialogue_radio_layer.gd").new()
+	radio_group.name = "RadioPresentation"
+	add_child(radio_group)
+	_layout_radio()
 	bar = NativeUi.panel(Vector2(860, 152))
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bar)
+	radio_group.content.add_child(bar)
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	bar.position = Vector2(-430, -260)
 	bar.size = Vector2(860, 152)
@@ -115,18 +147,33 @@ func radio(scene: Dictionary) -> void:
 	line_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_column.add_child(line_label)
 	row.add_child(portraits[1])
+	entrance = _animate_radio("enter")
 	_step()
+
+func _animate_radio(phase: String) -> Tween:
+	var rule: Dictionary = motion_rules[phase]
+	radio_group.opacity = rule.from
+	radio_group.position.y = rule.fromY
+	var animation := create_tween().set_ignore_time_scale(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS).set_parallel(true)
+	var curve: Array = rule.curve
+	var ease := func(value: float): return HurtFlashState.bezier_values(value, curve[0], curve[1], curve[2], curve[3])
+	animation.tween_property(radio_group, "opacity", float(rule.to), float(rule.duration)).set_custom_interpolator(ease)
+	animation.tween_property(radio_group, "position:y", float(rule.toY), float(rule.duration)).set_custom_interpolator(ease)
+	return animation
 
 func _step() -> void:
 	if not is_instance_valid(bar):
 		return
 	if at >= lines.size():
 		var seconds: float = Content.campaign.presentation.radioFade
-		fade = create_tween()
-		fade.tween_property(bar, "modulate:a", 0.0, seconds)
+		if entrance != null and entrance.is_valid():
+			entrance.kill()
+		fade = _animate_radio("exit")
 		_after(seconds, func():
-			if is_instance_valid(bar):
-				bar.queue_free()
+			if is_instance_valid(radio_group):
+				radio_group.retire()
+				radio_group.queue_free()
+			radio_group = null
 			bar = null)
 		return
 	var line: Dictionary = lines[at]
@@ -134,7 +181,6 @@ func _step() -> void:
 	var hero: Dictionary = Content.heroes[line.ch]
 	var foe := "SWARM" if side == "STEEL" else "STEEL"
 	var index := 1 if hero.side == foe else 0
-	portraits[index].show()
 	if portrait_ids[index] != line.ch:
 		portraits[index].texture = Content.campaign_art(line.ch, "avatar", art_mode)
 		portrait_ids[index] = line.ch
@@ -150,21 +196,18 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		return
 	host.add_child(NativeUi.label(scene.title, 24))
 	host.add_child(NativeUi.prose(scene.note, 16))
-	var lead_row := HBoxContainer.new()
-	host.add_child(lead_row)
-	for id: String in CampaignRules.leaders(scene.lines, side, true):
-		var art := TextureRect.new()
-		art.texture = Content.campaign_art(id, "portrait", art_mode)
-		art.custom_minimum_size = Vector2(200, 180)
-		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lead_row.add_child(art)
+	var body = preload("res://scripts/dialogue_transcript_body.gd").new()
+	host.add_child(body)
+	var leaders := CampaignRules.leaders(scene.lines, side, true)
+	for index in range(leaders.size()):
+		body.add_portrait(Content.campaign_art(leaders[index], "portrait", art_mode), index > 0)
+	var delay := float(Content.campaign.presentation.transcript.delay) * 1000
+	var interval := float(Content.campaign.presentation.transcript.step) * 1000
 	for index in range(scene.lines.size()):
 		var line: Dictionary = scene.lines[index]
 		var hero: Dictionary = Content.heroes[line.ch]
-		var row := HBoxContainer.new()
-		row.modulate.a = 0
+		var row = preload("res://scripts/dialogue_transcript_row.gd").new()
+		body.rows.add_child(row)
 		var portrait := TextureRect.new()
 		portrait.texture = Content.campaign_art(line.ch, "avatar", art_mode)
 		portrait.custom_minimum_size = Vector2(52, 52)
@@ -175,9 +218,8 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		column.add_child(NativeUi.label(Content.label("story_speaker") % [hero.code, hero.name], 16))
 		column.add_child(NativeUi.prose(line.t))
 		var foe := "SWARM" if side == "STEEL" else "STEEL"
-		row.add_child(column if hero.side == foe else portrait)
-		row.add_child(portrait if hero.side == foe else column)
-		host.add_child(row)
-		_after(float(Content.campaign.presentation.transcript.delay) + index * float(Content.campaign.presentation.transcript.step), func():
+		row.content.add_child(column if hero.side == foe else portrait)
+		row.content.add_child(portrait if hero.side == foe else column)
+		_after_msec(delay + index * interval, func():
 			if is_instance_valid(row):
-				row.modulate.a = 1.0)
+				row.reveal())

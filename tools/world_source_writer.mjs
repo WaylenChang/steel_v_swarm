@@ -1,5 +1,5 @@
-import {mkdir,open,readFile,stat,rm} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
+import {mkdir,open,stat,rm} from 'node:fs/promises';
+import {createHash,randomUUID} from 'node:crypto';
 import {endianness} from 'node:os';
 import {join} from 'node:path';
 import {gzipSync,createGzip} from 'node:zlib';
@@ -7,22 +7,31 @@ import {createReadStream,createWriteStream} from 'node:fs';
 import {pipeline} from 'node:stream/promises';
 import {writeSourceFile,publishSourceFile} from './fixture_json.mjs';
 
+async function bufferDigest(path) {
+  const hash=createHash('sha256');
+  await pipeline(createReadStream(path),hash);
+  return hash.digest('hex');
+}
+
 // Offline storage only. Native Godot resources remain the runtime delivery format.
 export class WorldSourceWriter {
   constructor(directory,resourceDirectory='res://data/worlds',compressNumeric=true) {
     if(endianness()!=='LE')throw new Error('Source numeric packing requires a little-endian build host');
     this.directory=directory;this.resourceDirectory=resourceDirectory;
     this.compressNumeric=compressNumeric;
+    this.disposed=false;this.temporary=new Set();
     this.count=0;this.chunks=[];this.rows=[];this.rowBytes=0;this.pending=null;this.verified=new Set();
     this.ready=Promise.all(['buffers','mesh_chunks'].map(folder=>mkdir(join(directory,folder),{recursive:true})));
   }
   async begin(index,header,lengths) {
+    if(this.disposed)throw new Error('Source writer is disposed');
     await this.ready;
     if(this.pending||index!==this.count||!header||typeof header!=='object'||!Array.isArray(lengths)
       ||lengths.some(length=>!Number.isInteger(length)||length<=0))throw new Error('Invalid source mesh boundary');
     this.pending={header,parts:lengths.map(length=>({length,rows:0,width:0,hash:createHash('sha256'),handle:null}))};
   }
   async part(index,offset,values) {
+    if(this.disposed)throw new Error('Source writer is disposed');
     const part=this.pending?.parts[index];
     if(!part||!Array.isArray(values)||!values.length||offset!==part.rows||offset+values.length>part.length)
       throw new Error('Out-of-order source numeric part');
@@ -34,8 +43,9 @@ export class WorldSourceWriter {
       throw new Error('Unsupported nonnumeric source mesh array');
     if(!part.handle) {
       part.width=width;part.matrix=Array.isArray(values[0]);
-      part.temporary=join(this.directory,'buffers',`capture-${process.pid}-${Date.now()}-${this.count}-${index}.partial`);
+      part.temporary=join(this.directory,'buffers',`capture-${process.pid}-${randomUUID()}-${this.count}-${index}.partial`);
       part.handle=await open(part.temporary,'wx');
+      this.temporary.add(part.temporary);
     }
     if(part.matrix!==Array.isArray(values[0]))throw new Error('Source numeric array rank changed');
     const numbers=new Float64Array(flat),bytes=Buffer.from(numbers.buffer,numbers.byteOffset,numbers.byteLength);
@@ -49,26 +59,31 @@ export class WorldSourceWriter {
     part.rows+=values.length;
   }
   async end(index) {
+    if(this.disposed)throw new Error('Source writer is disposed');
     const pending=this.pending;
     if(!pending||index!==this.count||pending.parts.some(part=>part.rows!==part.length))throw new Error('Incomplete source mesh');
     const descriptors=[];
     for(const part of pending.parts) {
       await part.handle.close();
+      part.handle=null;
       let sha256=part.hash.digest('hex'),bytes=part.length*part.width*8,extension='.f64',encoding='float64le';
       let candidate=part.temporary;
       if(this.compressNumeric) {
         const compressed=part.temporary+'.gz';
-        await pipeline(createReadStream(part.temporary),createGzip(),createWriteStream(compressed,{flags:'wx'}));
-        const packed=await readFile(compressed);
-        if(packed.length<bytes) {
+        const output=createWriteStream(compressed,{flags:'wx'});
+        output.once('open',()=>this.temporary.add(compressed));
+        await pipeline(createReadStream(part.temporary),createGzip(),output);
+        const packedBytes=(await stat(compressed)).size;
+        if(packedBytes<bytes) {
           candidate=compressed;extension='.f64.gz';encoding='float64le-gzip';
-          sha256=createHash('sha256').update(packed).digest('hex');bytes=packed.length;
-        } else await rm(compressed);
+          sha256=await bufferDigest(compressed);bytes=packedBytes;
+        } else {await rm(compressed);this.temporary.delete(compressed);}
       }
       const name=sha256+extension,target=join(this.directory,'buffers',name);
       if(await this._exists(target,sha256,bytes))await rm(candidate);
       else {await publishSourceFile(candidate,target);this.verified.add(sha256);}
-      if(candidate!==part.temporary)await rm(part.temporary);
+      this.temporary.delete(candidate);
+      if(candidate!==part.temporary){await rm(part.temporary);this.temporary.delete(part.temporary);}
       descriptors.push({$sourceNumericArray:{path:this.resourceDirectory+'/buffers/'+name,sha256,bytes,
         encoding,shape:part.matrix?[part.length,part.width]:[part.length]}});
     }
@@ -106,7 +121,7 @@ export class WorldSourceWriter {
     if(this.verified.has(sha256))return true;
     try {
       if((await stat(path)).size!==bytes)throw new Error('Corrupt source buffer length: '+path);
-      if(createHash('sha256').update(await readFile(path)).digest('hex')!==sha256)throw new Error('Corrupt source buffer hash: '+path);
+      if(await bufferDigest(path)!==sha256)throw new Error('Corrupt source buffer hash: '+path);
       this.verified.add(sha256);return true;
     } catch(error) {if(error.code==='ENOENT')return false;throw error;}
   }
@@ -121,8 +136,21 @@ export class WorldSourceWriter {
     this.rows=[];this.rowBytes=0;
   }
   async finish() {
+    if(this.disposed)throw new Error('Source writer is disposed');
     if(this.pending)throw new Error('Unfinished original source mesh');
     await this._flush();
     return {worldSourceVersion:2,meshCount:this.count,meshChunks:this.chunks};
+  }
+  // The producer must stop sending mesh parts before disposing its writer.
+  async dispose() {
+    this.disposed=true;
+    for(const part of this.pending?.parts??[]) {
+      if(part.handle){await part.handle.close();part.handle=null;}
+    }
+    for(const path of this.temporary) {
+      await rm(path,{force:true});
+      this.temporary.delete(path);
+    }
+    this.pending=null;this.rows=[];this.rowBytes=0;
   }
 }

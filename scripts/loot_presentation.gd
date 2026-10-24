@@ -3,9 +3,10 @@ extends Node3D
 
 var entries: Dictionary = {}
 var clock := 0.0
+var wall_clock := Callable()
 
 func sync(states: Array, now: float) -> void:
-	clock = now
+	clock = float(wall_clock.call()) if wall_clock.is_valid() else now
 	var seen := {}
 	for state: Dictionary in states:
 		var id := int(state.id)
@@ -22,15 +23,16 @@ func sync(states: Array, now: float) -> void:
 		visual.position = state.position
 		var body: Node3D = visual.find_child("n_%d" % int(Content.balance.loot_visuals[key].body), true, false)
 		SourceOutlineBinding.install(visual)
-		entries[id] = {"root": visual, "body": body}
+		entries[id] = {"root": visual, "body": body, "yaw": float(visual.rotation.y)}
 	for id: int in entries.keys():
 		if not seen.has(id):
 			entries[id].root.queue_free()
 			entries.erase(id)
 
 func _process(delta: float) -> void:
-	clock += delta
+	clock = float(wall_clock.call()) if wall_clock.is_valid() else clock + delta
 	for entry: Dictionary in entries.values():
 		var root: Node3D = entry.root
-		root.rotation.y += delta * 1.6
+		entry.yaw += delta * 1.6
+		root.quaternion = SourceQuaternion.axis_angle(Vector3.UP, float(entry.yaw))
 		entry.body.position.y = 1.0 + sin(clock * 2.2 + root.position.x) * 0.18

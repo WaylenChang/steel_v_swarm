@@ -3,7 +3,8 @@ import {pathToFileURL} from 'node:url';
 import {instrumentWildlifeCapture,captureWildlifeBundle} from './wildlife_capture.mjs';
 import {wildlifeDensityReferences} from './wildlife_density_references.mjs';
 
-export async function wildlifeReferences(source) {
+export async function wildlifeReferences(source, {initialActivity=1,modes=['dry','wet','split','missing'],
+  selections=['all','bird','fish','pets','small','stress','empty','no_anchors']}={}) {
   const load = file=>import(pathToFileURL(join(source,file)).href);
   const {readSrc,grabFn} = await load('tools/audit_src.mjs');
   const THREE = await load('out/forest_review/three.module.js');
@@ -18,7 +19,7 @@ export async function wildlifeReferences(source) {
     +'\nreturn {makeFootprintIndex,blockerFoot};')();
   const terrainCode = new Function('WATER',grabFn(biomes,'terrainEnvCode')+'\nreturn terrainEnvCode;')(data.WATER);
   const programs = [],densityPrograms=[];
-  for (const mode of ['dry','wet','split','missing']) for (const selection of ['all','bird','fish','pets','small','stress','empty','no_anchors']) {
+  for (const mode of modes) for (const selection of selections) {
     const group = new THREE.Group(), calls = [];
     const height = (x,z)=>mode==='missing'&&x>0?NaN:mode==='wet'?-4:mode==='split'?(x<0?-4:4):10+x*.01-z*.005;
     const terrain = {minX:-180,maxX:180,minZ:-180,maxZ:180,waterY:0,heightAt:height,inDryBand:(_x,z)=>Math.abs(z)<4};
@@ -28,7 +29,7 @@ export async function wildlifeReferences(source) {
       'celWindTime','getWeatherDynamics',...['wildlifeInit','wildlifeStep','wildlifeHeading','animalParts','wingAngle','tailAngle','specSpringPS'],
       'unitScale',grabFn(instrumented.render,'buildWildlifeBatches')+'\nreturn buildWildlifeBatches;')(
       THREE,()=>new THREE.BoxGeometry(),()=>new THREE.BoxGeometry(),geos=>geos[0],lodSlot,()=>new THREE.MeshBasicMaterial(),
-      ()=>0,()=>({activity:1}),...['wildlifeInit','wildlifeStep','wildlifeHeading','animalParts','wingAngle','tailAngle','specSpringPS'].map(key=>wildlife[key]),new THREE.Vector3(1,1,1));
+      ()=>0,()=>({activity:initialActivity}),...['wildlifeInit','wildlifeStep','wildlifeHeading','animalParts','wingAngle','tailAngle','specSpringPS'].map(key=>wildlife[key]),new THREE.Vector3(1,1,1));
     const builders = ['planFlockRoutes','planFishRoutes','planCatRoutes','planDogRoutes','planSmallAnimalRoutes'];
     const buildOf = (program,rosters,preferences) => new Function('THREE','edgeWallInsetM','terrainEnvCode','makeFootprintIndex','blockerFoot','visualPref',
       'BIRDS_OFF','FISH_OFF','CATS_OFF','DOGS_OFF','SMALL_ANIMALS',...builders,'objHeightMax','buildWildlifeBatches',
@@ -69,10 +70,13 @@ export async function wildlifeReferences(source) {
       habitat.push({x,z,height:Number.isFinite(height(x,z))?height(x,z):null,code:terrainCode(terrain,x,z),
         dry:terrain.inDryBand(x,z),valid:calls[0].options.validAt(x,z),wet:calls[0].options.wetAt(x,z),
         occupied:calls[0].root.userData.nativeWildlife.occupied.near({x,z,r:.5})});
-    programs.push({mode,source:bundle,initial,frames,habitat});
-    if(mode==='split'&&['all','stress','no_anchors'].includes(selection))densityPrograms.push(wildlifeDensityReferences({
-      THREE,catalogProgram:catalogInstrumented.biomes,originalProgram:instrumented.biomes,buildOf,terrain,
-      anchors:selection==='no_anchors'?{}:anchors,blockers,mode}));
+    programs.push({mode,initialActivity,source:bundle,initial,frames,habitat});
+    if(mode==='split'&&['all','stress','no_anchors'].includes(selection)) {
+      const density=wildlifeDensityReferences({THREE,catalogProgram:catalogInstrumented.biomes,
+        originalProgram:instrumented.biomes,buildOf,terrain,anchors:selection==='no_anchors'?{}:anchors,blockers,mode});
+      density.initialActivity=initialActivity;
+      densityPrograms.push(density);
+    }
   }
   const activity = [];
   for(const wind of [0,50,100,150])for(const effectiveRain of [0,.3,1])for(const effectiveSnow of [0,1]) {

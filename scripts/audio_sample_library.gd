@@ -2,6 +2,7 @@ class_name AudioSampleLibrary
 extends RefCounted
 
 const CATALOGUE_PATH := "res://assets/audio/native/catalogue.res"
+const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 
 var catalogue: NativeAudioCatalogue
 var buffers: Dictionary = {}
@@ -18,9 +19,10 @@ func load_samples(low_power: bool) -> Error:
 	var decoded := {}
 	for id: String in candidate.sample_paths:
 		var takes: Array[NativeAudioClip] = []
-		for path: String in candidate.sample_paths[id]:
+		for index in range(candidate.sample_paths[id].size()):
+			var path: String = candidate.sample_paths[id][index]
 			var clip := _load_clip(path)
-			if clip == null or not clip.valid():
+			if not ClipIdentity.matches(clip, id, candidate.sample_hashes[id][index]):
 				push_error("Missing or invalid imported source audio clip: " + path)
 				return ERR_INVALID_DATA
 			takes.append(clip)
@@ -32,7 +34,7 @@ func load_samples(low_power: bool) -> Error:
 	return OK
 
 func _load_catalogue() -> NativeAudioCatalogue:
-	return load(CATALOGUE_PATH) as NativeAudioCatalogue if ResourceLoader.exists(CATALOGUE_PATH) else null
+	return ResourceLoader.load(CATALOGUE_PATH, "", ResourceLoader.CACHE_MODE_IGNORE) as NativeAudioCatalogue if ResourceLoader.exists(CATALOGUE_PATH) else null
 
 func _load_clip(path: String) -> NativeAudioClip:
 	return load(path) as NativeAudioClip if ResourceLoader.exists(path) else null

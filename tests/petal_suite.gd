@@ -49,13 +49,13 @@ static func _run_variant(h: Node, program: Dictionary, low: bool) -> void:
 		for entry: Dictionary in variant.matrices:
 			h._check(view.meshes[int(entry.id)].visible == (bool(variant.low) == low), "Only the accepted original petal power mode is visible")
 		if bool(variant.low) == low:
-			_compare(h, view, variant)
+			_compare(h, view, variant, program.has("groundedSpin"))
 	for frame: Dictionary in program.frames:
 		var delta: float = float(frame.delta) if frame.delta != null else INF if frame.deltaKind == "infinity" else NAN
 		view.advance(delta, frame.weather)
 		for variant: Dictionary in frame.variants:
 			if bool(variant.low) == low:
-				_compare(h, view, variant)
+				_compare(h, view, variant, program.has("groundedSpin"))
 	for variant: Dictionary in program.initial:
 		for entry: Dictionary in variant.matrices:
 			var original: MultiMesh = saved[int(entry.id)]
@@ -74,7 +74,7 @@ static func _height(mode: String, x: float, z: float) -> float:
 static func _matrix(values: Array) -> Transform3D:
 	return preload("res://tests/quaternion_suite.gd").frame(values)
 
-static func _compare(h: Node, view: PetalPresentation, expected: Dictionary) -> void:
+static func _compare(h: Node, view: PetalPresentation, expected: Dictionary, precise_orientation: bool = false) -> void:
 	h._check(absf(view.time - float(expected.time)) < .00001, "Original petal local clock clamps zero, negative, nonfinite and hitched deltas")
 	h._check(view.parts.size() == expected.parts.size(), "Original accepted/prewarmed petal roster count")
 	for index in range(view.parts.size()):
@@ -100,3 +100,6 @@ static func _compare(h: Node, view: PetalPresentation, expected: Dictionary) -> 
 			for axis in range(3):
 				h._check(actual.basis[axis].distance_to(frame.basis[axis]) < .001,
 					"Original per-particle spin axis, grounded Euler orientation, aspect and fade-scaled visibility")
+				if precise_orientation and frame.basis[axis].length_squared() > 0:
+					h._check(actual.basis[axis].normalized().distance_to(frame.basis[axis].normalized()) < .000001,
+						"Large source angles retain native orientation precision independently of petal scale")

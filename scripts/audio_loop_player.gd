@@ -37,6 +37,7 @@ func _process(_delta: float) -> void:
 	var path := pending_path
 	pending_path = ""
 	if status != ResourceLoader.THREAD_LOAD_LOADED:
+		_drain_request(get_tree(), path)
 		_fail(ERR_FILE_CANT_READ)
 		return
 	var candidate := ResourceLoader.load_threaded_get(path) as AudioStream
@@ -55,9 +56,13 @@ func _fail(error: Error) -> Error:
 	load_failed.emit(error)
 	return error
 
+static func _drain_request(tree: SceneTree, path: String) -> void:
+	await preload("res://scripts/native_resource_drain.gd").finish(tree, path)
+
 func _exit_tree() -> void:
 	stop()
 	# Native threaded requests have no cancellation API; collect their results.
 	if not pending_path.is_empty():
-		ResourceLoader.load_threaded_get(pending_path)
+		var path := pending_path
 		pending_path = ""
+		_drain_request(get_tree(), path)

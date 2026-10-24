@@ -70,6 +70,6 @@ func update_vessels(motions: Array[SceneryMotion], frozen: bool) -> void:
 		if not motion.spec.has("wave") or not is_instance_valid(motion.pivot):
 			continue
 		var position := motion.pivot.position
-		records.append({"x": position.x, "z": position.z, "dx": sin(motion.angles.y), "dz": cos(motion.angles.y),
+		records.append({"x": position.x, "z": position.z, "dx": sin(motion.angles[1]), "dz": cos(motion.angles[1]),
 			"length": motion.spec.wave.length, "beam": motion.spec.wave.beam, "speed": motion.spec.wave.speed})
 	set_sources(records)

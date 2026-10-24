@@ -7,14 +7,18 @@ var mutex := Mutex.new()
 var pending: Array[AudioMoveMixer] = []
 var quitting := false
 
-func add(mixer: AudioMoveMixer) -> void:
+func add(mixer: AudioMoveMixer) -> bool:
 	mutex.lock()
-	pending.append(mixer)
+	var accepted := not quitting
+	if accepted:
+		pending.append(mixer)
 	mutex.unlock()
+	return accepted
 
 func stop() -> void:
 	mutex.lock()
 	quitting = true
+	pending.clear()
 	mutex.unlock()
 
 func run() -> void:

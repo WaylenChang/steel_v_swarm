@@ -11,51 +11,56 @@ var closing := false
 var scroll: ScrollContainer
 var column: VBoxContainer
 var sections: Array[Control] = []
-var background: TextureRect
-var previous_background: TextureRect
-var frame: Control
-var image: TextureRect
-var previous_image: TextureRect
+var art_host: Control
+var art_layers: Array[Control] = []
+var shade: ColorRect
 var card: PanelContainer
 var heading: Label
 var tag: Label
 var finish_button: Button
 var caption: Label
+var hold_indicator: Control
+var presentation_group: CanvasGroup
+var transition_rules: Dictionary
+var fade_opacity := 1.0:
+	set(value):
+		fade_opacity = value
+		if presentation_group != null:
+			presentation_group.self_modulate.a = value
 var scroll_offset := 0.0
+var last_frame_at := 0.0
 var paused_until := 0.0
 var held_at := -1.0
-var last_tap := -1.0
+var last_tap := 0.0
+var finish_touches: Dictionary = {}
 var writing_scroll := false
-var change_tween: Tween
 var exit_tween: Tween
+var exit_timer: Timer
+var exit_deadline := 0.0
 var generation := 0
+var clock_msec := Callable()
+
+func _now_msec() -> float:
+	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var shade := ColorRect.new()
+	transition_rules = Content.read_json("res://data/campaign_transition.json").rules
+	presentation_group = CanvasGroup.new()
+	presentation_group.name = "Presentation"
+	add_child(presentation_group)
+	shade = ColorRect.new()
 	shade.color = Color("#05070a")
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(shade)
-	previous_background = _image()
-	background = _image()
-	add_child(previous_background)
-	add_child(background)
-	for item: TextureRect in [previous_background, background]:
-		var material := ShaderMaterial.new()
-		material.shader = load("res://shaders/cinematic_blur.gdshader")
-		item.material = material
-	frame = Control.new()
-	frame.clip_contents = true
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(frame)
-	previous_image = _image()
-	image = _image()
-	frame.add_child(previous_image)
-	frame.add_child(image)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	presentation_group.add_child(shade)
+	art_host = Control.new()
+	art_host.clip_contents = true
+	art_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	presentation_group.add_child(art_host)
 	card = NativeUi.panel(Vector2(560, 340))
-	add_child(card)
+	presentation_group.add_child(card)
 	var body := VBoxContainer.new()
 	card.add_child(body)
 	tag = NativeUi.label("", 14)
@@ -65,6 +70,7 @@ func _ready() -> void:
 	body.add_child(heading)
 	scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.get_v_scroll_bar().step = 1
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.custom_minimum_size.y = 180
 	body.add_child(scroll)
@@ -79,27 +85,33 @@ func _ready() -> void:
 			scroll_offset = value
 		_update_scene())
 	scroll.gui_input.connect(_scroll_input)
+	hold_indicator = preload("res://scripts/campaign_hold.gd").new()
+	presentation_group.add_child(hold_indicator)
 	resized.connect(_layout)
 	hide()
 	set_process(false)
 	set_process_input(false)
 
-func _image() -> TextureRect:
-	var result := TextureRect.new()
-	result.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	result.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	result.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	result.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	return result
+func _make_art_layer() -> Control:
+	return preload("res://scripts/campaign_art_layer.gd").new()
 
 func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	if sequence.is_empty():
+		if playing or closing:
+			dispose()
 		finished.emit()
 		return
 	dispose()
+	_write_scroll()
 	var token := generation
 	scenes = sequence.duplicate(true)
+	start_index = clampi(start_index, 0, scenes.size() - 1)
 	for scene: Dictionary in scenes:
+		var layer := _make_art_layer()
+		layer.name = "prologueSceneItem-%d" % art_layers.size()
+		art_host.add_child(layer)
+		layer.scene = scene
+		art_layers.append(layer)
 		var section := VBoxContainer.new()
 		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		section.add_child(NativeUi.label(scene.badge + " · " + scene.title, 19))
@@ -108,81 +120,115 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		sections.append(section)
 	finish_button = NativeUi.button(finish_text, finish)
 	column.add_child(finish_button)
-	playing = true
 	closing = false
 	modulate.a = 1.0
+	fade_opacity = 1.0
 	show()
 	set_process(true)
 	set_process_input(true)
 	_layout()
-	_set_scene(clampi(start_index, 0, scenes.size() - 1))
+	playing = true
+	_set_scene(start_index)
+	last_frame_at = _now_msec()
 	await get_tree().process_frame
 	if token != generation or not playing or closing:
 		return
-	if start_index > 0 and start_index < sections.size():
+	if start_index > 0:
 		var section: Control = sections[start_index]
 		scroll_offset = maxf(0, section.position.y + section.size.y * float(Content.campaign.presentation.crawl.start) - scroll.size.y * float(Content.campaign.presentation.crawl.focus))
-	_write_scroll()
-	_update_scene()
+		_write_scroll()
+		_update_scene()
+		_set_scene(start_index)
 
 func _layout() -> void:
-	if not is_instance_valid(frame):
+	if not is_instance_valid(card):
 		return
 	var landscape := size.x >= size.y
-	frame.size = Vector2(minf(size.y, size.x * 0.94), size.y) if landscape else size
-	frame.position = Vector2((size.x - frame.size.x) / 2, 0)
-	var scale_factor: float = Content.campaign.get("presentation", {}).get("art", {}).get("backgroundScale", 1.0)
-	for item: TextureRect in [previous_background, background]:
-		item.size = size * scale_factor
-		item.position = (size - item.size) / 2
+	shade.size = size
+	art_host.size = size
+	for layer: Control in art_layers:
+		layer.layout_art(size)
 	card.size = Vector2(minf(560, size.x - 32), minf(360, size.y * (0.46 if landscape else 0.40)))
 	card.position = Vector2(28 if landscape else (size.x - card.size.x) / 2, size.y - card.size.y - 32)
 	card.custom_minimum_size = Vector2.ZERO
 	_update_scene()
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if not playing or closing:
 		return
-	var now := float(Time.get_ticks_msec()) / 1000.0
-	if held_at >= 0 and now - held_at >= float(Content.campaign.presentation.skip.hold):
+	var now := _now_msec()
+	var rules: Dictionary = Content.campaign.presentation.crawl
+	var delta := minf((now - last_frame_at) / 1000, float(rules.maximumFrame))
+	last_frame_at = now
+	if held_at >= 0:
+		hold_indicator.advance((now - held_at) / (float(Content.campaign.presentation.skip.hold) * 1000))
+	if held_at >= 0 and now - held_at >= float(Content.campaign.presentation.skip.hold) * 1000:
 		held_at = -1
 		finish()
 		return
 	if now > paused_until:
-		var rules: Dictionary = Content.campaign.presentation.crawl
 		var maximum := maxf(0, scroll.get_v_scroll_bar().max_value - scroll.get_v_scroll_bar().page)
-		scroll_offset = minf(maximum, scroll_offset + float(rules.speed) * minf(delta, float(rules.maximumFrame)))
-		_write_scroll()
-	_update_scene()
+		if scroll.get_v_scroll_bar().value < maximum:
+			scroll_offset = scroll.get_v_scroll_bar().value + float(rules.speed) * delta
+			_write_scroll()
+			_update_scene()
 
 func _write_scroll() -> void:
 	writing_scroll = true
-	scroll.scroll_vertical = int(scroll_offset)
+	scroll.get_v_scroll_bar().value = scroll_offset
+	scroll_offset = scroll.get_v_scroll_bar().value
 	writing_scroll = false
 
 func _scroll_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-		paused_until = float(Time.get_ticks_msec()) / 1000.0 + float(Content.campaign.presentation.crawl.pause)
+	if (event is InputEventScreenTouch and event.pressed and not event.canceled) or event is InputEventScreenDrag \
+			or (event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]):
+		paused_until = _now_msec() + float(Content.campaign.presentation.crawl.pause) * 1000
+
+func _finish_target(point: Vector2) -> bool:
+	return is_instance_valid(finish_button) and finish_button.is_visible_in_tree() \
+		and scroll.get_global_rect().has_point(point) and finish_button.get_global_rect().has_point(point)
 
 func _input(event: InputEvent) -> void:
 	if not playing or closing:
 		return
-	var now := float(Time.get_ticks_msec()) / 1000.0
+	var now := _now_msec()
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			if _finish_target(event.position):
+				return
 			held_at = now
+			hold_indicator.begin(event.position, get_viewport_rect().size)
 			if event.double_click:
 				finish()
 		else:
 			held_at = -1
+			hold_indicator.cancel()
 	elif event is InputEventScreenTouch:
+		if event.canceled:
+			held_at = -1
+			hold_indicator.cancel()
+			finish_touches.erase(event.index)
+			return
 		if event.pressed:
-			held_at = now
+			var button_target := _finish_target(event.position)
+			finish_touches[event.index] = button_target
+			if not button_target:
+				held_at = now
+				hold_indicator.begin(event.position, get_viewport_rect().size)
 		else:
 			held_at = -1
-			if last_tap >= 0 and now - last_tap < float(Content.campaign.presentation.skip.doubleTap):
+			hold_indicator.cancel()
+			if not finish_touches.has(event.index):
+				return
+			var button_target: bool = finish_touches[event.index]
+			finish_touches.erase(event.index)
+			if button_target:
+				return
+			var token := generation
+			if now - last_tap < float(Content.campaign.presentation.skip.doubleTap) * 1000:
 				finish()
-			last_tap = now
+			if token == generation:
+				last_tap = now
 
 func _update_scene() -> void:
 	if not playing or scenes.is_empty() or sections.is_empty():
@@ -195,78 +241,101 @@ func _update_scene() -> void:
 	var pose := CampaignRules.camera_pose(scenes[active].camera, focus.progress, size.x >= size.y)
 	if pose.is_empty():
 		return
-	var inset: float = Content.campaign.presentation.art.inset
-	image.size = frame.size * (1 + inset * 2)
-	image.pivot_offset = image.size / 2
-	image.scale = Vector2.ONE * float(pose.scale)
-	image.position = -frame.size * inset + image.size * Vector2(pose.x, pose.y) / 100
+	art_layers[active].set_pose(pose)
 
 func _set_scene(index: int) -> void:
 	if index == active or index < 0 or index >= scenes.size():
 		return
-	if change_tween != null and change_tween.is_valid():
-		change_tween.kill()
-	previous_image.texture = image.texture
-	previous_image.size = image.size
-	previous_image.position = image.position
-	previous_image.pivot_offset = image.pivot_offset
-	previous_image.scale = image.scale
-	previous_background.texture = background.texture
-	previous_image.modulate.a = 1
-	previous_background.modulate.a = 1
 	active = index
 	var scene: Dictionary = scenes[index]
-	var path: String = scene.img
-	if Content.story_texture(path) == null:
-		path = scene.get("fallbackImg", "")
-	image.texture = Content.story_texture(path)
-	background.texture = Content.story_texture(path, true)
-	var style: Dictionary = Content.campaign.presentation.art
-	for item: TextureRect in [previous_background, background]:
-		item.material.set_shader_parameter("brightness", style.brightness)
-		item.material.set_shader_parameter("saturation", style.saturation)
-		item.material.set_shader_parameter("mip_level", log(float(style.blur)) / log(2.0))
-	image.modulate.a = 0
-	background.modulate.a = 0
+	for layer_index in range(art_layers.size()):
+		art_layers[layer_index].select(layer_index == index)
 	heading.text = scene.badge + " · " + scene.title
 	tag.text = scene.tag
-	change_tween = create_tween().set_parallel(true)
-	change_tween.tween_property(image, "modulate:a", 1.0, style.fade)
-	change_tween.tween_property(background, "modulate:a", 1.0, style.fade)
-	change_tween.tween_property(previous_image, "modulate:a", 0.0, style.fade)
-	change_tween.tween_property(previous_background, "modulate:a", 0.0, style.fade)
 
 func finish() -> void:
 	if not playing or closing:
 		return
+	var token := generation
 	closing = true
-	finishing.emit()
 	held_at = -1
+	hold_indicator.cancel()
+	finish_touches.clear()
+	finishing.emit()
+	if not is_instance_valid(self) or is_queued_for_deletion() or not is_inside_tree() or token != generation or not playing or not closing:
+		return
 	set_process(false)
 	set_process_input(false)
-	exit_tween = create_tween()
-	exit_tween.tween_property(self, "modulate:a", 0.0, float(Content.campaign.presentation.skip.fade))
-	exit_tween.tween_callback(func():
-		dispose()
-		finished.emit())
+	exit_tween = create_tween().set_ignore_time_scale(true)
+	exit_tween.tween_property(self, "fade_opacity", 0.0, float(Content.campaign.presentation.skip.fade)).set_custom_interpolator(_exit_curve)
+	exit_deadline = _now_msec() + float(Content.campaign.presentation.skip.fade) * 1000
+	exit_timer = Timer.new()
+	exit_timer.one_shot = true
+	exit_timer.ignore_time_scale = true
+	exit_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(exit_timer)
+	exit_timer.timeout.connect(_complete_exit.bind(token))
+	exit_timer.start(float(Content.campaign.presentation.skip.fade))
+
+func _complete_exit(token: int) -> void:
+	if token != generation or not playing or not closing or not is_inside_tree() or is_queued_for_deletion():
+		return
+	var remaining := exit_deadline - _now_msec()
+	if remaining > 0:
+		exit_timer.start(remaining / 1000)
+		return
+	dispose()
+	finished.emit()
+
+func _exit_curve(value: float) -> float:
+	var curve: Array = transition_rules.exit.curve
+	return HurtFlashState.bezier(value, Vector2(curve[0], curve[1]), Vector2(curve[2], curve[3]))
 
 func dispose() -> void:
 	generation += 1
 	playing = false
 	held_at = -1
-	last_tap = -1
+	hold_indicator.reset()
+	last_tap = 0
+	finish_touches.clear()
 	active = -1
 	scroll_offset = 0
+	last_frame_at = 0
 	paused_until = 0
 	set_process(false)
 	set_process_input(false)
-	if change_tween != null and change_tween.is_valid():
-		change_tween.kill()
-	if exit_tween != null and exit_tween.is_valid():
-		exit_tween.kill()
+	_cancel_transitions()
 	for child in column.get_children():
 		column.remove_child(child)
 		child.queue_free()
 	sections.clear()
+	for layer: Control in art_layers:
+		art_host.remove_child(layer)
+		layer.queue_free()
+	art_layers.clear()
 	scenes.clear()
+	hide()
+
+func _cancel_transitions() -> void:
+	for layer: Control in art_layers:
+		layer.cancel()
+	if exit_tween != null and exit_tween.is_valid():
+		exit_tween.kill()
+	if exit_timer != null:
+		exit_timer.stop()
+		exit_timer.queue_free()
+		exit_timer = null
+	exit_deadline = 0
+
+func _exit_tree() -> void:
+	generation += 1
+	playing = false
+	closing = false
+	held_at = -1
+	finish_touches.clear()
+	_cancel_transitions()
+	if is_instance_valid(hold_indicator):
+		hold_indicator.reset()
+	set_process(false)
+	set_process_input(false)
 	hide()

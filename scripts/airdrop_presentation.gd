@@ -3,9 +3,10 @@ extends Node3D
 
 var entries: Dictionary = {}
 var clock := 0.0
+var wall_clock := Callable()
 
 func sync(states: Array, now: float) -> void:
-	clock = now
+	clock = float(wall_clock.call()) if wall_clock.is_valid() else now
 	var seen := {}
 	for state: Dictionary in states:
 		var id := int(state.id)
@@ -20,9 +21,11 @@ func sync(states: Array, now: float) -> void:
 		var root: Node3D = load(path).instantiate()
 		add_child(root)
 		root.position = state.position
-		var entry := {"root": root, "ground": float(state.position.y), "born": now, "landing": state.landing}
+		var entry := {"root": root, "ground": float(state.position.y), "born": clock, "landing": state.landing,
+			"root_yaw": float(root.rotation.y)}
 		for name: String in ["crate", "chute", "groundChute", "halo"]:
 			entry[name] = root.find_child("n_%d" % int(Content.balance.loot_visuals[key][name]), true, false)
+		entry.crate_yaw = float(entry.crate.rotation.y)
 		SourceOutlineBinding.install(root)
 		entries[id] = entry
 	for id: int in entries.keys():
@@ -31,7 +34,7 @@ func sync(states: Array, now: float) -> void:
 			entries.erase(id)
 
 func _process(delta: float) -> void:
-	clock += delta
+	clock = float(wall_clock.call()) if wall_clock.is_valid() else clock + delta
 	var cfg: Dictionary = Content.constants.AIRDROP
 	for entry: Dictionary in entries.values():
 		var root: Node3D = entry.root
@@ -44,7 +47,9 @@ func _process(delta: float) -> void:
 		entry.groundChute.visible = landed
 		entry.halo.visible = landed
 		if landed:
-			entry.crate.rotation.y += delta * 0.6
+			entry.crate_yaw += delta * 0.6
+			entry.crate.quaternion = SourceQuaternion.axis_angle(Vector3.UP, float(entry.crate_yaw))
 			entry.crate.position.y = sin(clock * 2 + root.position.x) * 0.14
 		else:
-			root.rotation.y += delta * 0.3
+			entry.root_yaw += delta * 0.3
+			root.quaternion = SourceQuaternion.axis_angle(Vector3.UP, float(entry.root_yaw))

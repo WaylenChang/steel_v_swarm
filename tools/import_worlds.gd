@@ -193,6 +193,7 @@ func _run() -> void:
 					return
 			var mesh := _mesh(entry)
 			if mesh == null:
+				scene_root.free()
 				get_tree().quit(1)
 				return
 			var instance: GeometryInstance3D
@@ -547,6 +548,18 @@ func _end_caps(segment: Dictionary, tolerance: float) -> Array:
 		{"x1": b.x, "z1": b.y, "x2": finish.x, "z2": finish.y, "hw": segment.hw, "start": false}]
 
 func _mesh(entry: Dictionary) -> ArrayMesh:
+	if entry.has("sourceWorldText"):
+		var text: Variant = entry.sourceWorldText
+		if not text is Dictionary or not text.get("glow") is Array or text.glow.size() * 3 != entry.positions.size():
+			push_error("Invalid original world-text glow layout")
+			return null
+		for value: Variant in text.glow:
+			if not (value is int or value is float) or not is_finite(float(value)):
+				push_error("Invalid original world-text glow value")
+				return null
+			if float(value) > 0:
+				push_error("Original world-text glow requires the accepted shared cel sign shader contract")
+				return null
 	var color_size := int(entry.get("colorSize", 3))
 	if color_size not in [3, 4] or entry.positions.size() % 3 != 0 or entry.normals.size() % 3 != 0 or entry.colors.size() % color_size != 0 or entry.get("uv", []).size() % 2 != 0:
 		push_error("Invalid original world vertex attribute layout")
@@ -558,8 +571,17 @@ func _mesh(entry: Dictionary) -> ArrayMesh:
 	for i in range(0, entry.normals.size(), 3):
 		normals.append(Vector3(entry.normals[i], entry.normals[i + 1], entry.normals[i + 2]))
 	var colors := PackedColorArray()
+	var uses_vertex_colors := false
+	for surface: Dictionary in entry.get("surfaces", [entry]):
+		if surface.get("vertexColors", false):
+			uses_vertex_colors = true
+			break
 	for i in range(0, entry.colors.size(), color_size):
-		colors.append(Color(entry.colors[i], entry.colors[i + 1], entry.colors[i + 2], entry.colors[i + 3] if color_size == 4 else 1.0))
+		var color := Color(entry.colors[i], entry.colors[i + 1], entry.colors[i + 2], entry.colors[i + 3] if color_size == 4 else 1.0)
+		if uses_vertex_colors and color != color.clamp():
+			push_error("Original world vertex colors outside [0, 1] require accepted float-color shader storage")
+			return null
+		colors.append(color)
 	var uv := PackedVector2Array()
 	var coordinates: Array = entry.get("uv", [])
 	for i in range(0, coordinates.size(), 2):
@@ -594,6 +616,8 @@ func _mesh(entry: Dictionary) -> ArrayMesh:
 		arrays[Mesh.ARRAY_CUSTOM1] = PackedFloat32Array(local_positions)
 		flags |= Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT
 	var mesh := ArrayMesh.new()
+	if entry.has("sourceWorldText"):
+		mesh.set_meta("source_world_text", entry.sourceWorldText.duplicate(true))
 	mesh.set_meta("source_custom_attributes", entry.get("attributes", {}))
 	if entry.has("celGeometry"):
 		mesh.set_meta("source_cel_geometry", entry.celGeometry)

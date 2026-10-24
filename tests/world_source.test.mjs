@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,mkdtemp,readFile,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,readdir,writeFile} from 'node:fs/promises';
 import {join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gunzipSync} from 'node:zlib';
@@ -93,4 +93,143 @@ test('source numeric transfer rejects gaps and unsupported arrays',async()=>{
   await assert.rejects(writer.part(0,1,[1]),/Out-of-order/);
   await assert.rejects(writer.part(0,0,[{x:1},{x:2}]),/nonnumeric/);
   await assert.rejects(writer.end(0),/Incomplete/);
+});
+
+for(const compressed of [false,true])test(`existing numeric sidecars are verified before reuse (gzip=${compressed})`,async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'reuse-'));
+  const mesh={positions:Array.from({length:8193},(_,index)=>index/7)};
+  const capture=async()=>{
+    const writer=new WorldSourceWriter(directory,'res://fixture',compressed);
+    await writer.append(mesh);
+    return writer.finish();
+  };
+  const first=await capture();
+  const names=await readdir(join(directory,'buffers'));
+  assert.equal(names.length,1);
+  const path=join(directory,'buffers',names[0]);
+  const original=await readFile(path);
+  assert.deepEqual(await capture(),first);
+  assert.deepEqual(await readdir(join(directory,'buffers')),names);
+  assert.deepEqual(await readFile(path),original);
+
+  const corrupt=Buffer.from(original);
+  corrupt[Math.floor(corrupt.length/2)]^=1;
+  await writeFile(path,corrupt);
+  await assert.rejects(capture(),/Corrupt source buffer hash/);
+  assert.deepEqual(await readFile(path),corrupt);
+  await writeFile(path,original.subarray(1));
+  await assert.rejects(capture(),/Corrupt source buffer length/);
+  await writeFile(path,original);
+  assert.deepEqual(await capture(),first);
+});
+
+test('compression that increases numeric storage retains the original float64 bytes',async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'raw-fallback-'));
+  const writer=new WorldSourceWriter(directory,'res://fixture');
+  await writer.begin(0,{positions:{$sourceArray:0}},[2]);
+  await writer.part(0,0,[-0,Number.MIN_VALUE]);
+  await writer.end(0);
+  const manifest=await writer.finish();
+  const chunk=manifest.meshChunks[0];
+  const rows=JSON.parse(gunzipSync(await readFile(join(directory,'mesh_chunks',chunk.path.split('/').at(-1)))));
+  const spec=rows[0].positions.$sourceNumericArray;
+  assert.equal(spec.encoding,'float64le');
+  assert.deepEqual(spec.shape,[2]);
+  const stored=await readFile(join(directory,'buffers',spec.path.split('/').at(-1)));
+  assert.equal(stored.length,spec.bytes);
+  assert.equal(digest(stored),spec.sha256);
+  assert.ok(Object.is(stored.readDoubleLE(0),-0));
+  assert.equal(stored.readDoubleLE(8),Number.MIN_VALUE);
+  assert.deepEqual(await readdir(join(directory,'buffers')),[spec.path.split('/').at(-1)]);
+});
+
+test('mesh chunk boundaries retain contiguous starts and complete traversal order',async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'chunks-'));
+  const writer=new WorldSourceWriter(directory,'res://fixture');
+  for(let id=0;id<513;id++)await writer.append({id});
+  const manifest=await writer.finish();
+  assert.equal(manifest.meshCount,513);
+  assert.deepEqual(manifest.meshChunks.map(({start,count})=>({start,count})),
+    [{start:0,count:256},{start:256,count:256},{start:512,count:1}]);
+  const ids=[];
+  for(const chunk of manifest.meshChunks) {
+    const stored=await readFile(join(directory,'mesh_chunks',chunk.path.split('/').at(-1)));
+    assert.equal(stored.length,chunk.bytes);
+    assert.equal(digest(stored),chunk.sha256);
+    const plain=gunzipSync(stored);
+    assert.equal(plain.length,chunk.plainBytes);
+    ids.push(...JSON.parse(plain).map(row=>row.id));
+  }
+  assert.deepEqual(ids,Array.from({length:513},(_,id)=>id));
+});
+
+for(const compressed of [false,true])test(`disposing an interrupted capture releases only its owned temporary files (gzip=${compressed})`,async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'dispose-'));
+  const published=new WorldSourceWriter(directory,'res://fixture',compressed);
+  await published.append({positions:Array.from({length:8193},(_,index)=>index/7)});
+  const manifest=await published.finish();
+  const names=await readdir(join(directory,'buffers'));
+  const bytes=await readFile(join(directory,'buffers',names[0]));
+  const interrupted=new WorldSourceWriter(directory,'res://fixture',compressed);
+  const other=new WorldSourceWriter(directory,'res://fixture',compressed);
+  for(const writer of [interrupted,other]) {
+    await writer.begin(0,{positions:{$sourceArray:0}},[4]);
+    await writer.part(0,0,[1,2]);
+  }
+  const own=interrupted.pending.parts[0].temporary;
+  const foreign=other.pending.parts[0].temporary;
+  assert.notEqual(own,foreign);
+  await interrupted.dispose();
+  await interrupted.dispose();
+  assert.deepEqual((await readdir(join(directory,'buffers'))).sort(),[names[0],foreign.split(/[\\/]/).at(-1)].sort());
+  assert.deepEqual(await readFile(join(directory,'buffers',names[0])),bytes);
+  await assert.rejects(interrupted.finish(),/disposed/);
+  await assert.rejects(interrupted.begin(0,{},[]),/disposed/);
+  await assert.rejects(interrupted.part(0,2,[3,4]),/disposed/);
+  await assert.rejects(interrupted.end(0),/disposed/);
+  await other.part(0,2,[3,4]);
+  await other.end(0);
+  await other.finish();
+  await other.dispose();
+  await published.dispose();
+  assert.equal(manifest.meshCount,1);
+  assert.ok((await readdir(join(directory,'buffers'))).every(name=>!name.includes('.partial')));
+});
+
+test('failed sidecar verification can be disposed without altering the rejected output',async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'dispose-rejected-'));
+  const mesh={positions:Array.from({length:8193},(_,index)=>index/7)};
+  const first=new WorldSourceWriter(directory,'res://fixture');
+  await first.append(mesh);
+  await first.finish();
+  const names=await readdir(join(directory,'buffers'));
+  const path=join(directory,'buffers',names[0]);
+  const corrupt=Buffer.from(await readFile(path));
+  corrupt[10]^=1;
+  await writeFile(path,corrupt);
+  const rejected=new WorldSourceWriter(directory,'res://fixture');
+  await assert.rejects(rejected.append(mesh),/Corrupt source buffer hash/);
+  await rejected.dispose();
+  assert.deepEqual(await readdir(join(directory,'buffers')),names);
+  assert.deepEqual(await readFile(path),corrupt);
+});
+
+test('a failed exclusive gzip open never makes the existing file disposal-owned',async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'dispose-exclusive-'));
+  const writer=new WorldSourceWriter(directory,'res://fixture');
+  await writer.begin(0,{positions:{$sourceArray:0}},[2]);
+  await writer.part(0,0,[1,2]);
+  const foreign=writer.pending.parts[0].temporary+'.gz';
+  const sentinel=Buffer.from('Owned by another capture');
+  await writeFile(foreign,sentinel,{flag:'wx'});
+  await assert.rejects(writer.end(0),{code:'EEXIST'});
+  await writer.dispose();
+  assert.deepEqual(await readFile(foreign),sentinel);
+  assert.deepEqual(await readdir(join(directory,'buffers')),[foreign.split(/[\\/]/).at(-1)]);
 });

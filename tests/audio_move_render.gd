@@ -105,7 +105,7 @@ func _ready() -> void:
 func _wait_rendered() -> bool:
 	var deadline := Time.get_ticks_msec() + 5000
 	while Time.get_ticks_msec() < deadline and failures.is_empty():
-		var complete := movement.voices.size() == Content.balance.audio.scene.categories.size()
+		var complete: bool = movement.voices.size() == Content.balance.audio.scene.categories.size()
 		for row: Dictionary in _snapshots().values():
 			complete = complete and int(row.get("frames", 0)) > AudioServer.get_mix_rate() * .3
 		if complete:

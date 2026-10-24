@@ -10,7 +10,7 @@ func _run() -> void:
 		push_error("Death overlay raster certification requires a rendered Godot session")
 		get_tree().quit(1)
 		return
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+	var fixtures: Dictionary = _captured_fixtures() if OS.get_cmdline_user_args().has("--source-capture") else Content.read_json("res://data/fixtures.json")
 	if not fixtures.has("deathOverlayRasters") or not Content.balance.has("deathOverlay"):
 		push_error("Regenerate original browser death rim/whiteout rasters")
 		get_tree().quit(1)
@@ -27,6 +27,7 @@ func _run() -> void:
 		add_child(viewport)
 		var overlay := DeathOverlay.new()
 		viewport.add_child(overlay)
+		overlay.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 		overlay.size = Vector2(viewport.size)
 		overlay.set_process(false)
 		if item.kind == "rim":
@@ -53,3 +54,27 @@ func _run() -> void:
 		viewport.free()
 	print("DEATH_RENDER_PASS" if failures == 0 else "DEATH_RENDER_FAIL", " cases=", fixtures.deathOverlayRasters.size(), " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
+
+func _captured_fixtures() -> Dictionary:
+	var capture: Dictionary = Content.read_json("res://tests/fixtures/death_overlay.json")
+	if capture.get("formatVersion") != 1 or not capture.get("source") is Dictionary or not capture.get("fixtures") is Dictionary:
+		push_error("Capture original death overlay references before native verification")
+		return {}
+	var source: Dictionary = capture.source
+	if not source.get("inputs") is Dictionary or source.inputs.is_empty() or not source.get("sourceInputs") is Dictionary or source.sourceInputs.is_empty():
+		push_error("Missing death overlay source/generator identities")
+		return {}
+	for path: String in source.inputs:
+		var text := FileAccess.get_file_as_string("res://" + path).replace("\r\n", "\n").replace("\r", "\n")
+		if text.sha256_text() != source.inputs[path]:
+			push_error("Stale death overlay generator: " + path)
+			return {}
+	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
+	for path: String in source.sourceInputs:
+		if provenance.get("inputs", {}).get(path) != source.sourceInputs[path]:
+			push_error("Death overlay source differs from imported metadata: " + path)
+			return {}
+	if capture.get("metadata") != Content.balance.get("deathOverlay"):
+		push_error("Original death overlay CSS differs from native metadata")
+		return {}
+	return capture.fixtures

@@ -15,6 +15,10 @@ func _ready() -> void:
 	RenderingServer.frame_pre_draw.connect(_begin_frame)
 	RenderingServer.frame_post_draw.connect(_end_frame)
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
+		clear()
+
 func update_view(battle: BattleSimulation, pilot: BattleUnit, side: String, render_scale: float = 1.0) -> void:
 	var rules: Dictionary = Content.balance.get("pip", {})
 	if rules.is_empty() or battle == null or battle.world == null or pilot == null or not is_visible_in_tree():
@@ -127,5 +131,4 @@ func clear() -> void:
 	_restore_unused({})
 
 func _exit_tree() -> void:
-	pending_tags.clear()
-	_restore_unused({})
+	clear()

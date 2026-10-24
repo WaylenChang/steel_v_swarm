@@ -8,8 +8,13 @@ var traces: Array[Dictionary] = []
 var free_traces: Array[MeshInstance3D] = []
 var retired_rounds: Dictionary = {}
 var missile_collision := Callable()
+var rounds_clock := -INF
 
 func sync_rounds(states: Array, clock: float = NAN) -> void:
+	if is_finite(clock):
+		if clock <= rounds_clock:
+			return
+		rounds_clock = clock
 	var seen := {}
 	for state: Dictionary in states:
 		if retired_rounds.has(state.id):
@@ -29,7 +34,7 @@ func sync_rounds(states: Array, clock: float = NAN) -> void:
 			retired_rounds.erase(id)
 
 func retire_round(id: String, clock: float) -> void:
-	retired_rounds[id] = clock
+	retired_rounds[id] = maxf(float(retired_rounds.get(id, -INF)), clock)
 	if rounds.has(id):
 		_drop(rounds[id].model, rounds[id].key)
 		rounds.erase(id)

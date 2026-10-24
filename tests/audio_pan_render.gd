@@ -7,10 +7,20 @@ var results: Array = []
 var retiring: Array[StringName] = []
 
 func _ready() -> void:
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
-	if not fixtures.has("audioPan") or not fixtures.has("audioFilters"):
-		_fail("Regenerate original audio panner impulses")
+	var fixtures: Dictionary = Content.read_json("res://data/audio_mixer.json")
+	if fixtures.get("formatVersion") != 1 or not fixtures.get("audioPan") is Array or fixtures.audioPan.is_empty() or not fixtures.get("audioFilters") is Array or fixtures.audioFilters.is_empty():
+		_fail("Regenerate original mixer impulses with tools/audio_mixer_references.mjs")
 		return
+	var synthesis: Dictionary = Content.read_json("res://data/audio_synth.json")
+	var source: Dictionary = fixtures.get("source", {})
+	if not source.get("inputs") is Dictionary or source.get("audioSha256") != synthesis.get("source", {}).get("audioSha256") or source.get("synthesisSha256") != FileAccess.get_sha256("res://data/audio_synth.json"):
+		_fail("AUDIO_PAN_STALE_SOURCE")
+		return
+	for path: String in ["tools/audio_mixer_references.mjs", "tools/audio_pan_capture.mjs", "tools/audio_synth_capture.mjs", "tools/audio_move_references.mjs"]:
+		var text := FileAccess.get_file_as_string("res://" + path).replace("\r\n", "\n").replace("\r", "\n")
+		if text.sha256_text() != source.inputs.get(path):
+			_fail("AUDIO_PAN_STALE_GENERATOR " + path)
+			return
 	# Capture before a private muted sink; test pulses must not reach the device.
 	sink = StringName("AudioPanSink_%d" % get_instance_id())
 	AudioServer.add_bus()

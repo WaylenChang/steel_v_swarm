@@ -123,21 +123,37 @@ export function missileDefenseReferences(d, BattleSim, config, makeRng) {
     missileDefenses.push({ name: scenario.name, delta: 0.05, now: 10,
       decoys: decoys.map(e => e.id), blocked: !!scenario.blocked, steps });
   }
-  const missileReportGates = [];
+  const missileReportGates = [],missileReportRanges=[];
+  const reportCase=(character,slot,level,gate,friendly,point={})=>{
+    const h={...hero(1,'STEEL'),ch:character,kind:d.CHARACTERS[character].kind,z:0,
+      aiming:gate!=='aim_release',blindUntil:gate==='blind'?11:gate==='expired'?10:0,
+      empUntil:gate==='emp'?11:gate==='expired'?10:0,phaseUntil:gate==='phase'?11:0,dead:gate==='dead'};
+    h.abil[slot]=level;
+    const sim=context([h]),m=missile({side:friendly?h.side:'SWARM',z:10,hp:1,...point});
+    sim.missiles=[m];sim.over=gate==='over';
+    // Isolate the report's own faction, status, aim and range gates after the
+    // shared weapon budget has been accepted; cadence is covered separately.
+    sim._gateFire=()=>true;
+    const before=state(m),draws=counted(()=>sim.hitMissile(1,9,slot));
+    if(!Number.isFinite(m.hp)||!Number.isFinite(h.money))throw new Error('Non-finite original missile report result');
+    return {character,slot,level,gate,friendly,precheckedWeaponGate:true,input:input(h),missile:before,aiming:h.aiming,
+      over:sim.over,damage:1-m.hp,alive:!!sim.missiles.length,bounty:h.money,draws};
+  };
   for (const character of Object.keys(d.CHARACTERS)) for (const slot of ['light', 'heavy']) for (let level = 1; level <= 4; level++) {
-    for (const gate of ['blind', 'emp', 'expired', 'dead', 'over', 'aim_release', 'phase']) {
-      const h = { ...hero(1, 'STEEL'), ch: character, kind: d.CHARACTERS[character].kind,
-        z: 0, aiming: gate !== 'aim_release', blindUntil: gate === 'blind' ? 11 : gate === 'expired' ? 10 : 0,
-        empUntil: gate === 'emp' ? 11 : gate === 'expired' ? 10 : 0,
-        phaseUntil: gate === 'phase' ? 11 : 0, dead: gate === 'dead' };
-      h.abil[slot] = level;
-      const sim = context([h]), m = missile({ z: 10, hp: 1 });
-      sim.missiles = [m]; sim.over = gate === 'over'; sim._gateFire = () => true;
-      const draws = counted(() => sim.hitMissile(1, 9, slot));
-      missileReportGates.push({ character, slot, level, gate, input: input(h), aiming: h.aiming,
-        over: sim.over, damage: 1 - m.hp, alive: !!sim.missiles.length, bounty: h.money, draws });
+    for (const gate of ['plain','blind', 'emp', 'expired', 'dead', 'over', 'aim_release', 'phase'])
+      for(const friendly of [false,true])missileReportGates.push(reportCase(character,slot,level,gate,friendly));
+    const maximum=d.heroWeapon(character,slot,level,true).range*d.RANGE_TOL;
+    for(const axis of ['planar','vertical','diagonal'])for(const factor of [1-2e-7,1,1+2e-7]) {
+      const distance=maximum*factor;
+      // Identical representable coordinates separate range math from the
+      // native scene boundary; the original API still decides every outcome.
+      const point={x:axis==='vertical'?0:Math.fround(distance*(axis==='diagonal'?.6:1)),
+        y:axis==='vertical'?Math.fround(20+distance):20,z:axis==='diagonal'?Math.fround(distance*.8):0};
+      missileReportRanges.push(reportCase(character,slot,level,'range_'+axis+'_'+factor,false,point));
     }
   }
+  if(!missileReportGates.some(row=>row.damage>0&&!row.friendly)||missileReportGates.some(row=>row.friendly&&row.damage!==0))
+    throw new Error('Original missile gate references must cover accepted enemy hits and rejected friendly hits');
   const missileSkillIntercepts = [];
   for (const character of Object.keys(d.CHARACTERS)) for (const slot of ['def', 'atk']) for (let level = 1; level <= 4; level++) {
     const ability = d.heroAbility(character, slot, level);
@@ -157,5 +173,5 @@ export function missileDefenseReferences(d, BattleSim, config, makeRng) {
         vision: sim.visionUntil.STEEL, bounty: h.money, draws });
     }
   }
-  return { missileDefenses, missileReportGates, missileSkillIntercepts };
+  return { missileDefenses, missileReportGates,missileReportRanges, missileSkillIntercepts };
 }

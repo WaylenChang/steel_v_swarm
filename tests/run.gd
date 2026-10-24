@@ -5,12 +5,16 @@ const CameraTests = preload("res://tests/camera_suite.gd")
 const BurstTests = preload("res://tests/burst_suite.gd")
 const ProjectileVisualTests = preload("res://tests/projectile_visual_suite.gd")
 const StatusTests = preload("res://tests/status_suite.gd")
+const HealAuraTests = preload("res://tests/heal_aura_suite.gd")
+const SimulationFrameTests = preload("res://tests/simulation_frame_suite.gd")
+const DeathLifecycleTests = preload("res://tests/death_lifecycle_suite.gd")
 const MovementTests = preload("res://tests/movement_suite.gd")
 const TraversalTests = preload("res://tests/traversal_suite.gd")
 const ClimbTests = preload("res://tests/climb_suite.gd")
 const FieldTests = preload("res://tests/field_suite.gd")
 const CompanionTests = preload("res://tests/companion_suite.gd")
 const CarrierTests = preload("res://tests/carrier_suite.gd")
+const CarrierControllerTests = preload("res://tests/carrier_controller_suite.gd")
 const AbilityRouteTests = preload("res://tests/ability_route_suite.gd")
 const NpcTests = preload("res://tests/npc_suite.gd")
 const WaveTests = preload("res://tests/wave_suite.gd")
@@ -69,7 +73,18 @@ const MinimapTests = preload("res://tests/minimap_suite.gd")
 const MinimapVisionTests = preload("res://tests/minimap_vision_suite.gd")
 const MinimapMaskTests = preload("res://tests/minimap_mask_suite.gd")
 
-var failures: Array[String] = []
+class VisibilityUnit extends BattleUnit:
+	# The original planar-vision oracle has dimensions and sight bands, but no
+	# renderer or terrain. Model construction belongs to its separate fixtures.
+	func _build_model() -> void:
+		pass
+
+var failures := 0
+var failure_report: FileAccess
+var failure_scope := "core"
+var scope_failures := {}
+const FAILURE_REPORT = "user://source-fixture-failures.jsonl"
+const CONSOLE_FAILURES_PER_SCOPE = 12
 var assertions := 0
 var maximum_fan_error := 0.0
 var maximum_projectile_error := 0.0
@@ -83,36 +98,68 @@ func _ready() -> void:
 func _check(condition: bool, description: String) -> void:
 	assertions += 1
 	if not condition:
-		failures.append(description)
-		push_error(description)
+		failures += 1
+		var count := int(scope_failures.get(failure_scope, 0)) + 1
+		scope_failures[failure_scope] = count
+		if failure_report != null:
+			failure_report.store_line(JSON.stringify({"scope": failure_scope, "assertion": assertions, "description": description}))
+		if count <= CONSOLE_FAILURES_PER_SCOPE:
+			push_error(description)
+		elif count == CONSOLE_FAILURES_PER_SCOPE + 1:
+			print("SOURCE_FAILURE_LOG_CONTINUES ", failure_scope, " report=", ProjectSettings.globalize_path(FAILURE_REPORT))
 
 func _near(actual: float, expected: float, description: String) -> void:
 	_check(absf(actual - expected) < 0.000001, description + " actual=" + str(actual) + " expected=" + str(expected))
 
+func _require_prepared_match(simulation: BattleSimulation, label: String) -> bool:
+	var ready := simulation.setup_complete and simulation.match_initialized
+	_check(ready, label + ": authored match preparation required: " + simulation.setup_error)
+	if not ready:
+		simulation.free()
+	return ready
+
 func _run() -> void:
+	failure_report = FileAccess.open(FAILURE_REPORT, FileAccess.WRITE)
+	if failure_report == null:
+		push_error("Cannot preserve the complete source-fixture failure report")
+		get_tree().quit(1)
+		return
 	await get_tree().process_frame
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
-	RoomTests.run(self, fixtures)
-	RoomMemberTests.run(self, fixtures)
-	RoomAdmissionTests.run(self, fixtures)
-	RoomRematchTests.run(self, fixtures)
-	RoomRecoveryTests.run(self, fixtures)
-	RoomMetadataTests.run(self, fixtures)
-	DeploymentTests.run(self, fixtures)
-	BalancePreferenceTests.run(self, fixtures)
-	await AudioTests.run(self, fixtures)
-	QuickRestartTests.run(self, fixtures)
-	await FatalTests.run(self, fixtures)
-	PipTests.run(self, fixtures)
-	HeadMarkTests.run(self, fixtures)
-	VitalBarTests.run(self, fixtures)
-	MinimapTests.run(self, fixtures)
-	MinimapVisionTests.run(self, fixtures)
-	MinimapMaskTests.run(self, fixtures)
-	SpectatorTests.run(self, fixtures)
-	SnapshotTests.run(self, fixtures)
-	await RoomRosterTests.run(self, fixtures)
-	await RoomLoadingTests.run(self, fixtures)
+	var selected: Array[String] = []
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("--fixture-suite="):
+			selected.append(argument.trim_prefix("--fixture-suite="))
+	if not selected.is_empty():
+		Content.read_json("res://data/fixtures.json", [])
+		for path: String in selected:
+			if not Content.fixture_registry.consumers.has(path) or not path.ends_with("_suite.gd"):
+				_check(false, "Unknown registered source fixture suite: " + path)
+				continue
+			await _run_fixture_suite(load("res://" + path))
+		_finish()
+		return
+	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", Content.fixture_sections_for(get_script(), false))
+	await _run_fixture_suite(RoomTests)
+	await _run_fixture_suite(RoomMemberTests)
+	await _run_fixture_suite(RoomAdmissionTests)
+	await _run_fixture_suite(RoomRematchTests)
+	await _run_fixture_suite(RoomRecoveryTests)
+	await _run_fixture_suite(RoomMetadataTests)
+	await _run_fixture_suite(DeploymentTests)
+	await _run_fixture_suite(BalancePreferenceTests)
+	await _run_fixture_suite(AudioTests)
+	await _run_fixture_suite(QuickRestartTests)
+	await _run_fixture_suite(FatalTests)
+	await _run_fixture_suite(PipTests)
+	await _run_fixture_suite(HeadMarkTests)
+	await _run_fixture_suite(VitalBarTests)
+	await _run_fixture_suite(MinimapTests)
+	await _run_fixture_suite(MinimapVisionTests)
+	await _run_fixture_suite(MinimapMaskTests)
+	await _run_fixture_suite(SpectatorTests)
+	await _run_fixture_suite(SnapshotTests)
+	await _run_fixture_suite(RoomRosterTests)
+	await _run_fixture_suite(RoomLoadingTests)
 	await RoomWorldResourceTests.run(self)
 	await RoomWorldPrebuildTests.run(self)
 	for fixture in fixtures.volumes:
@@ -211,57 +258,61 @@ func _run() -> void:
 	await _missile_reference_tests(fixtures)
 	await _base_target_tests(fixtures.baseTargets)
 	await _missile_authority_tests(fixtures.baseLaunches)
-	await StructureSuite.run(self, fixtures)
+	await _run_fixture_suite(StructureSuite)
 	await ReachabilitySuite.run(self, fixtures.reachability)
 	await ModelSuite.run(self, fixtures.modelCentres)
 	await FootprintSuite.run(self, fixtures.shotFootprints)
-	await CockpitSuite.run(self, fixtures)
+	await _run_fixture_suite(CockpitSuite)
 	await MuzzleTests.run(self, fixtures.muzzleLaunches)
-	await CameraTests.run(self, fixtures)
-	await BurstTests.run(self, fixtures)
-	await ProjectileVisualTests.run(self, fixtures)
-	StatusTests.run(self, fixtures)
-	MissileDefenseTests.run(self, fixtures)
-	AimingPresentationTests.run(self, fixtures)
-	await BotTests.run(self, fixtures)
-	BossTests.run(self, fixtures)
-	await CampaignTests.run(self, fixtures)
-	SuperTests.run(self, fixtures)
-	ControlsTests.run(self, fixtures)
-	MobileTests.run(self, fixtures)
-	ViewTests.run(self, fixtures)
-	PlayerViewTests.run(self, fixtures)
-	BodyTests.run(self, fixtures)
-	await MovementTests.run(self, fixtures)
-	await TraversalTests.run(self, fixtures)
-	await ClimbTests.run(self, fixtures)
-	FieldTests.run(self, fixtures)
-	CompanionTests.run(self, fixtures)
-	CarrierTests.run(self, fixtures)
-	AbilityRouteTests.run(self, fixtures)
-	NpcTests.run(self, fixtures)
-	WaveTests.run(self, fixtures)
-	WeatherTests.run(self, fixtures)
-	EnvironmentTests.run(self, fixtures)
-	TextureTests.run(self, fixtures)
-	CelUniformTests.run(self, fixtures)
-	TrainTests.run(self, fixtures)
-	SceneryMotionTests.run(self, fixtures)
-	WildlifeTests.run(self, fixtures)
-	WildlifeDensityTests.run(self, fixtures)
-	PetalTests.run(self, fixtures)
-	AquaticTests.run(self, fixtures)
-	MarineTests.run(self, fixtures)
-	VisualTests.run(self, fixtures)
-	OutlineTests.run(self, fixtures)
-	GeometryLodTests.run(self, fixtures)
-	SceneryTests.run(self, fixtures)
-	SceneTests.run(self, fixtures)
-	SupplyTests.run(self, fixtures)
-	ThirdTests.run(self, fixtures)
-	MatchTests.run(self, fixtures)
-	CombatFeedTests.run(self, fixtures)
-	if failures.is_empty():
+	await _run_fixture_suite(CameraTests)
+	await _run_fixture_suite(BurstTests)
+	await _run_fixture_suite(ProjectileVisualTests)
+	await _run_fixture_suite(StatusTests)
+	await _run_fixture_suite(HealAuraTests)
+	await _run_fixture_suite(SimulationFrameTests)
+	await _run_fixture_suite(DeathLifecycleTests)
+	await _run_fixture_suite(MissileDefenseTests)
+	await _run_fixture_suite(AimingPresentationTests)
+	await _run_fixture_suite(BotTests)
+	await _run_fixture_suite(BossTests)
+	await _run_fixture_suite(CampaignTests)
+	await _run_fixture_suite(SuperTests)
+	await _run_fixture_suite(ControlsTests)
+	await _run_fixture_suite(MobileTests)
+	await _run_fixture_suite(ViewTests)
+	await _run_fixture_suite(PlayerViewTests)
+	await _run_fixture_suite(BodyTests)
+	await _run_fixture_suite(MovementTests)
+	await _run_fixture_suite(TraversalTests)
+	await _run_fixture_suite(ClimbTests)
+	await _run_fixture_suite(FieldTests)
+	await _run_fixture_suite(CompanionTests)
+	await _run_fixture_suite(CarrierTests)
+	await _run_fixture_suite(CarrierControllerTests)
+	await _run_fixture_suite(AbilityRouteTests)
+	await _run_fixture_suite(NpcTests)
+	await _run_fixture_suite(WaveTests)
+	await _run_fixture_suite(WeatherTests)
+	await _run_fixture_suite(EnvironmentTests)
+	await _run_fixture_suite(TextureTests)
+	await _run_fixture_suite(CelUniformTests)
+	await _run_fixture_suite(TrainTests)
+	await _run_fixture_suite(SceneryMotionTests)
+	await _run_fixture_suite(WildlifeTests)
+	await _run_fixture_suite(WildlifeDensityTests)
+	await _run_fixture_suite(PetalTests)
+	await _run_fixture_suite(AquaticTests)
+	await _run_fixture_suite(MarineTests)
+	await _run_fixture_suite(VisualTests)
+	await _run_fixture_suite(OutlineTests)
+	await _run_fixture_suite(GeometryLodTests)
+	await _run_fixture_suite(SceneryTests)
+	await _run_fixture_suite(SceneTests)
+	await _run_fixture_suite(SupplyTests)
+	await _run_fixture_suite(ThirdTests)
+	await _run_fixture_suite(MatchTests)
+	await _run_fixture_suite(CombatFeedTests)
+	if failures == 0:
 		print("TEST_PASS assertions=", assertions)
 		print("FAN_REFERENCE_PASS cases=", fixtures.fanHits.size(), " maximumDamageError=", maximum_fan_error)
 		print("PROJECTILE_REFERENCE_PASS launches=", fixtures.projectileLaunches.size(), " flights=", fixtures.projectileFlight.size(), " maximumVectorError=", maximum_projectile_error)
@@ -275,9 +326,39 @@ func _run() -> void:
 		print("MODEL_CENTRE_REFERENCE_PASS cases=", fixtures.modelCentres.size())
 		print("FOOTPRINT_REFERENCE_PASS cases=", fixtures.shotFootprints.size())
 		print("COCKPIT_REFERENCE_PASS poses=", fixtures.cockpitPoses.size(), " ports=", fixtures.cockpitMuzzles.size())
+	_finish()
+
+func _finish() -> void:
+	if failures > 0:
+		print("TEST_FAIL count=", failures, " scopes=", JSON.stringify(scope_failures), " report=", ProjectSettings.globalize_path(FAILURE_REPORT))
 	else:
-		print("TEST_FAIL count=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+		print("SOURCE_FIXTURE_PASS assertions=", assertions)
+	failure_report.close()
+	get_tree().quit(0 if failures == 0 else 1)
+
+func _run_fixture_suite(suite: Variant) -> void:
+	failure_scope = suite.resource_path
+	var previous_assertions := assertions
+	var previous_failures := failures
+	var keys := Content.fixture_sections_for(suite)
+	var encoded_bytes := 0
+	for key: String in keys:
+		encoded_bytes += int(Content.fixture_registry.sections[key].bytes)
+	var budget := 256 * 1024 * 1024
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("--fixture-budget-mib="):
+			budget = maxi(1, argument.trim_prefix("--fixture-budget-mib=").to_int()) * 1024 * 1024
+	if encoded_bytes > budget:
+		_check(false, "Unverified source suite requires incremental case consumption: " + suite.resource_path + " bytes=" + str(encoded_bytes))
+		failure_scope = "core"
+		return
+	var data: Dictionary = Content.read_json("res://data/fixtures.json", keys)
+	print("SOURCE_SUITE_BEGIN ", suite.resource_path)
+	await suite.run(self, data)
+	data.clear()
+	await get_tree().process_frame
+	print("SOURCE_SUITE_END ", suite.resource_path, " assertions=", assertions - previous_assertions, " failures=", failures - previous_failures)
+	failure_scope = "core"
 
 func _missile_flight_tests(fixtures: Array) -> void:
 	for fixture in fixtures:
@@ -301,9 +382,10 @@ func _missile_reference_tests(fixtures: Dictionary) -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 701, "side": "STEEL", "character": "t09", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_missile_reference_tests"):
+		return
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[701]
 	actor.position = Vector3(0, 1, 0)
@@ -359,8 +441,9 @@ func _base_target_tests(fixtures: Array) -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_base_target_tests"):
+		return
 	sim.set_physics_process(false)
 	var base: BattleUnit
 	for unit: BattleUnit in sim.units.values():
@@ -391,10 +474,11 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 801, "side": "STEEL", "character": "t08", "bot": false},
 		{"peer": 802, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_missile_authority_tests"):
+		return
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[801]
 	var target: BattleUnit = sim.pilots[802]
@@ -582,10 +666,11 @@ func _targeting_settlement_tests() -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 501, "side": "STEEL", "character": "t09", "bot": false},
 		{"peer": 502, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_targeting_settlement_tests"):
+		return
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[501]
 	var target: BattleUnit = sim.pilots[502]
@@ -687,10 +772,11 @@ func _lock_confirmation_tests(fixtures: Array) -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 601, "side": "STEEL", "character": "t09", "bot": false},
 		{"peer": 602, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_lock_confirmation_tests"):
+		return
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[601]
 	var target: BattleUnit = sim.pilots[602]
@@ -820,10 +906,11 @@ func _lob_settlement_tests(fixtures: Array) -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 1, "side": "STEEL", "character": "t03", "bot": false},
 		{"peer": 2, "side": "SWARM", "character": "s06", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_lob_settlement_tests"):
+		return
 	sim.set_physics_process(false)
 	for actor: BattleUnit in sim.units.values():
 		if not actor.is_hero():
@@ -1024,10 +1111,11 @@ func _kinetic_settlement_tests() -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 1, "side": "STEEL", "character": "t04", "bot": false},
 		{"peer": 2, "side": "SWARM", "character": "s06", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_kinetic_settlement_tests"):
+		return
 	sim.set_physics_process(false)
 	for unit: BattleUnit in sim.units.values():
 		if not unit.is_hero():
@@ -1216,10 +1304,11 @@ func _projectile_settlement_tests() -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 1, "side": "STEEL", "character": "t09", "bot": false},
 		{"peer": 2, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_projectile_settlement_tests"):
+		return
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[1]
 	var target: BattleUnit = sim.pilots[2]
@@ -1373,10 +1462,10 @@ func _visibility_tests(fixtures: Array) -> void:
 				if Content.heroes[id].kind == kind:
 					character = id
 					break
-		var observer := BattleUnit.new()
+		var observer := VisibilityUnit.new()
 		sim.add_child(observer)
 		observer.configure({"id": 1, "side": "STEEL", "kind": kind, "character": character, "position": Vector3.ZERO})
-		var target := BattleUnit.new()
+		var target := VisibilityUnit.new()
 		sim.add_child(target)
 		target.configure({"id": 2, "side": "SWARM", "kind": "heli", "position": Vector3.ZERO})
 		sim.units = {1: observer, 2: target}
@@ -1442,8 +1531,9 @@ func _combat_visibility_tests() -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [{"peer": 1, "side": "SWARM", "character": "s04", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_combat_visibility_tests"):
+		return
 	sim.set_physics_process(false)
 	sim.next_wave = INF
 	var player: BattleUnit = sim.pilots[1]
@@ -1518,10 +1608,11 @@ func _settlement_tests() -> void:
 	var sim := BattleSimulation.new()
 	add_child(sim)
 	var fixture_map := Content.map_variant(0, 1)
-	fixture_map.erase("native_world")
 	await sim.setup(fixture_map, [
 		{"peer": 1, "side": "STEEL", "character": "t01", "bot": false},
 		{"peer": 2, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not _require_prepared_match(sim, "_settlement_tests"):
+		return
 	sim.set_physics_process(false)
 	var player: BattleUnit = sim.pilots[1]
 	var enemy: BattleUnit = sim.pilots[2]

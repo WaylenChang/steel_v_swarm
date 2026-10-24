@@ -9,12 +9,34 @@ class SettlementSimulation extends BattleSimulation:
 			return 0.0
 		return float(first.get_meta("absolute_eye", 0)) - float(second.get_meta("absolute_eye", 0))
 
+class FloorSimulation extends SettlementSimulation:
+	var siege_floor := 0.0
+	var terminal_order: Array = []
+
+	func _siege_hp_floor(_unit: BattleUnit) -> float:
+		return siege_floor
+
+	func _kill_unit(unit: BattleUnit, _attacker: BattleUnit) -> void:
+		terminal_order.append("kill")
+		unit.hp = 0
+		unit.upgrade_survivor = false
+
+	func _boss_sync(unit: BattleUnit) -> void:
+		if unit.special.get("boss", false):
+			terminal_order.append("boss_sync")
+
 class ReferenceSimulation extends BattleSimulation:
 	var hits: Array = []
 	var blasts: Array = []
 	var controls: Array = []
 	var capture_interrupt := false
 	var interrupted_fraction := -1.0
+
+	func _ready() -> void:
+		# Original status contexts disable the weather surface. A flat test world
+		# supplies the same zero terrain anchor for event/audio publication.
+		world = BattleWorld.new()
+		add_child(world)
 
 	func acquire_target(_unit: BattleUnit, _reach: float, _fov: bool = false) -> BattleUnit:
 		return units.get(2)
@@ -57,7 +79,7 @@ class ReferenceSimulation extends BattleSimulation:
 			super._cast_effect(unit, definition, center, fraction, once, count_override)
 
 static func run(h: Node, fixtures: Dictionary) -> void:
-	for key: String in ["statusMath", "statusCritical", "statusDodge", "statusElements", "statusCharges", "statusAbilities", "statusInterruptions", "statusSettlement", "statusPhase", "statusBash", "statusNpcFire"]:
+	for key: String in ["statusMath", "statusCritical", "statusDodge", "statusElements", "statusCharges", "statusAbilities", "statusInterruptions", "statusSettlement", "statusPhase", "statusBash", "statusNpcFire", "statusFloors"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original status references with tools/import_source.mjs before final verification: " + key)
 			return
@@ -222,8 +244,25 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		h._check(simulation.events.any(func(event): return event.type == "shot") == item.shot, "Original EMP weapon gate still emits no accepted fire")
 		check_draws(h, simulation, int(item.draws))
 		simulation.free()
+	for item: Dictionary in fixtures.statusFloors:
+		var simulation := FloorSimulation.new()
+		h.add_child(simulation)
+		simulation.set_physics_process(false)
+		simulation.clock = 10
+		simulation.siege_floor = item.siegeFloor
+		var attacker := actor(simulation, item.inputs[0])
+		var target := actor(simulation, item.inputs[1])
+		target.special.boss = item.kind == "boss"
+		simulation.damage(attacker, target, item.definition if item.definition != null else {}, item.amount, false,
+			{"floor_hp": item.floor, "weather_weapon": item.definition != null}, false)
+		compare(h, {"hp": target.hp, "shield": target.shield, "dead": not target.alive(), "attacker_hp": attacker.hp,
+			"damage_out": attacker.damage_out, "assisted": target.assists.has(attacker.peer_id),
+			"focus": attacker.last_hit_target == target.entity_id, "order": simulation.terminal_order},
+			item.result, "Original damage floors never heal and preserve shield/vamp/credit/terminal order: " + item.kind)
+		check_draws(h, simulation, int(item.draws))
+		simulation.free()
 	print("STATUS_REFERENCE_PASS math=", fixtures.statusMath.size(), " dodge=", fixtures.statusDodge.size(), " elements=", fixtures.statusElements.size(),
-		" charges=", fixtures.statusCharges.size(), " abilities=", fixtures.statusAbilities.size(), " interruptions=", fixtures.statusInterruptions.size())
+		" charges=", fixtures.statusCharges.size(), " abilities=", fixtures.statusAbilities.size(), " interruptions=", fixtures.statusInterruptions.size(), " floors=", fixtures.statusFloors.size())
 
 static func actor(simulation: BattleSimulation, input: Dictionary) -> BattleUnit:
 	var unit := BattleUnit.new()

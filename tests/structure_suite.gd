@@ -1,6 +1,8 @@
 class_name StructureSuite
 extends RefCounted
 
+const SupportRay = preload("res://scripts/source_support_ray.gd")
+
 static func run(h: Node, fixtures: Dictionary) -> void:
 	references(h, fixtures)
 	scenery_references(h, fixtures)
@@ -98,6 +100,13 @@ static func support_physics(h: Node, fixtures: Dictionary) -> void:
 		var body := StaticBody3D.new()
 		body.collision_layer = 1024
 		root.add_child(body)
+		# Query-only context: original fixture shapes supply all physical support.
+		var simulation := BattleSimulation.new()
+		h.add_child(simulation)
+		simulation.set_physics_process(false)
+		simulation.world = BattleWorld.new()
+		simulation.world.native_data = NativeWorldData.new()
+		simulation.add_child(simulation.world)
 		for platform: Dictionary in fixture.captured.roofPlatforms:
 			var vertices := PackedVector3Array()
 			for offset in range(0, platform.faces.size(), 3):
@@ -114,10 +123,32 @@ static func support_physics(h: Node, fixtures: Dictionary) -> void:
 		for probe: Dictionary in fixture.probes:
 			var query := PhysicsRayQueryParameters3D.create(root.global_position + Vector3(probe.point[0], 100, probe.point[1]),
 				root.global_position + Vector3(probe.point[0], -100, probe.point[1]), 1024)
-			var hit := root.get_world_3d().direct_space_state.intersect_ray(query)
+			var space := root.get_world_3d().direct_space_state
+			var native := space.intersect_ray(query)
+			var original := native.duplicate()
+			var original_from := query.from
+			var original_to := query.to
+			var hit := SupportRay.refine(space, query, native)
+			h._check(native == original and query.from == original_from and query.to == original_to,
+				"Support refinement cannot mutate the original ray or native hit buffer")
 			h._check(hit.is_empty() == (probe.result == null), "Original roof courtyard and native concave support presence: " + fixture.name)
 			if not hit.is_empty() and probe.result != null:
 				h._near(hit.position.y, probe.result, "Original highest active roof survives source triangulation and native physics")
+				h._check(hit.rid == native.rid and hit.shape == native.shape and hit.collider == native.collider
+					and hit.normal == native.normal and hit.get("face_index", -1) == native.get("face_index", -1)
+					and hit.position.x == native.position.x and hit.position.z == native.position.z,
+					"Local support refinement preserves the original native hit identity, face and normal")
+			var surface := simulation._projectile_surface(root.global_position + Vector3(probe.point[0], 99.99, probe.point[1]))
+			h._check(is_finite(surface) == (probe.result != null), "Authority support query preserves original roof/hole/active presence")
+			if is_finite(surface) and probe.result != null:
+				h._near(surface, probe.result, "Authority launch support retains original roof height within the unchanged tolerance")
+				for offset: float in [-.005, 0.0, .1, 1.0]:
+					var near_point := root.global_position + Vector3(probe.point[0], float(probe.result) + offset, probe.point[1])
+					h._near(simulation._projectile_surface(near_point), probe.result,
+						"Authority refinement retains the original segment limit near roof contact")
+			query.exclude = [body.get_rid()]
+			h._check(SupportRay.intersect(space, query).is_empty(), "Support refinement retains native excluded-body filtering")
+		simulation.free()
 		root.free()
 		await h.get_tree().physics_frame
 
@@ -163,8 +194,9 @@ static func blasts(h: Node, fixtures: Array) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [], {"time": "day", "weather": "clear"}, true)
+	if not h._require_prepared_match(sim, "Structure layered blast"):
+		return
 	sim.set_physics_process(false)
 	for unit: BattleUnit in sim.units.values():
 		unit.side = "STEEL"
@@ -196,10 +228,11 @@ static func physics(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 901, "side": "STEEL", "character": "t03", "bot": false},
 		{"peer": 902, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not h._require_prepared_match(sim, "Structure bridge physics"):
+		return
 	sim.set_physics_process(false)
 	var owner: BattleUnit = sim.pilots[901]
 	var target: BattleUnit = sim.pilots[902]
@@ -268,10 +301,11 @@ static func tunnel_impacts(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
 	var map_data := Content.map_variant(0, 1)
-	map_data.erase("native_world")
 	await sim.setup(map_data, [
 		{"peer": 911, "side": "STEEL", "character": "t03", "bot": false},
 		{"peer": 912, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	if not h._require_prepared_match(sim, "Structure tunnel impacts"):
+		return
 	sim.set_physics_process(false)
 	var owner: BattleUnit = sim.pilots[911]
 	var target: BattleUnit = sim.pilots[912]

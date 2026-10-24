@@ -5,21 +5,6 @@ runtime acceptance remain incomplete. Component results do not certify the build
 
 ## Live blockers and high-risk fidelity
 
-- [ ] **O1 — Current source publication:** reconcile required runtime metadata,
-  source hashes and fixture generators with the current code. Regenerate missing
-  or stale controls/visual/deployment/HUD/mode references through the canonical
-  importer; audit current availability rather than preserving obsolete missing-
-  metadata lists. Publish complete fixtures/manifests atomically and register
-  owner-provided suites without concurrent writers.
-- [ ] **O2 — Procedural music envelopes:** resolve the full-suite music gain
-  failure with sample-level source/native comparison. The unresolved interaction
-  is pending exponential ramp endpoints, `setTargetAtTime` and cancellation;
-  54 mismatches were reported and no proven root cause is established. Primary
-  edit surface: `scripts/audio_music_envelope.gd`,
-  `tools/audio_music_gain_capture.mjs`,
-  `tests/audio_music_envelope_suite.gd`. Keep gain-before-filter ordering and
-  source timing; do not substitute a generic fade or relax tolerances. Playback,
-  resampling and audible integration remain separate Sol acceptance.
 - [ ] **O3 — Full native surface shaders:** translate and mount original toon/
   built-in/School B programs, curve/ink/shadow hooks, material-style/light finish,
   custom vertex/instance attributes and typed uniforms. Compose alpha, shield,
@@ -56,12 +41,39 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Finish weather/projectile/visibility/aiming/scenery interactions, source
   carrier/clone/summon/hologram lifetimes and complete entity targeting. Cube
   planes and tactical fog need combined LOS, barrier, poison and protection cases.
-- [ ] **O8 — Carrier/companion settlement:** certify launch origins, fractional
-  SUPER counts, bomber drops, kamikaze/hypersonic tracking/scatter, arrival order,
-  interception and owner-dead versus owner-absent behavior. Zero budgets must not
+  Finish populated frame comparison for moving humans/bots, mixed carriers with
+  live interception/terrain, lethal environmental paths and room recovery around respawn.
+  Preserve bot decisions before advancing the clock, wave anchors based on the
+  previous engagement state before recovery, environmental producers between
+  carriers and persistent abilities,
+  and final missile/history/index cleanup order. Shared combat settlement uses
+  the source tick cadence while native movement and kinetic reports retain the
+  physics cadence; an isolated scalar frame cannot certify a populated match.
+  Preserve the complete dead-snapshot tick barrier, elemental-owner fire credit,
+  timed loot affixes through respawn and the early stop when a bot ends a match.
+  Populated healing acceptance must retain aura-source BOSS rejection, separate
+  hero/entity visits, neutral and radius gates, and once-only start/end reports
+  through replacement, owner death and inclusive expiry on both transports.
+- [ ] **O8 — Carrier/companion settlement:** certify populated launch origins,
+  fractional SUPER counts, bomber drops, kamikaze/hypersonic tracking/scatter,
+  interception and owner changes with real terrain and targets. Zero budgets must not
   invent effects. Source companions retain distinct body/sight height bands,
   expiry/lethal swaps, assist/focus/credit rules and no invented summon lifetime.
   Missing generated model content must reject before spending.
+  Preserve absent non-helicopter drone altitude through the original consuming
+  zero conversion; never fabricate a generated constant. Keep explicit zero
+  count overrides and their RNG budgets distinct from fractional defaults.
+  Keep private flight/observer altitude, damage-body bands and published visual
+  lift separate. Certify native hit areas and visual acquisition on terrain,
+  decks and water against those distinct original coordinate frames.
+  Populated carrier acceptance must retain separate bomber/kamikaze body rosters
+  and the hypersonic hero roster, including dead, absent and restored owners,
+  reverse traversal, shared scatter RNG and per-impact reports before settlement.
+  Preserve source scalar launch rounding at the hypersonic dive apex; native
+  single-precision scene coordinates must not feed back into the trajectory.
+  Populated cast acceptance must retain the single captured launch origin and
+  its public `carrier`, `origin` and `cast_duration` event contract across both
+  transports; missing launch terrain must leave resources and stealth intact.
 - [ ] **O9 — Traversal and visibility:** finish complete support/slope/climb/
   collision order on terrain, roofs, bridges, tunnels, galleries, scenery and
   frozen fluids. Preserve source planar progress, per-layer blast separation,
@@ -115,12 +127,18 @@ runtime acceptance remain incomplete. Component results do not certify the build
   third-faction stats, auto shop and mode-specific recovery/observer behavior.
   Require generated source resources; missing chapters or SUPER metadata stay
   unavailable. Full transitions, source frame order and chapter lifecycles remain open.
+  Populated mode acceptance must retain non-healing HP floors below the authored
+  building floor, floor-hit credit/vamp budgets and the source return before BOSS
+  synchronization when a shield absorbs all HP damage or an HP floor is active.
 - [ ] **O18 — Membership/readiness/loading:** certify logical-seat/physical-
   route separation, bot capacity/selection, ready cancellation, source loaded
   barrier and deferred authority population. Verify live ordinary seat/side edits,
   fixed join mode, unseated vision/input restrictions and no implicit actor
   replacement. Prebuild consumption and progress/error wiring must use Sol's
   actual resource state rather than starting simulation early.
+  Positive populated-match acceptance still requires complete authored seasonal
+  resources. Certify valid prebuild consumption, structure anchors and exactly-once
+  population after all seats load; rejection coverage alone cannot establish this.
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role
@@ -151,7 +169,52 @@ runtime acceptance remain incomplete. Component results do not certify the build
   populated runtime/render/lifecycle checks and both transports. Audit true
   source event/frame order and platform behavior; focused math or storage checks
   cannot substitute for complete match comparison. Resolve new failures before
-  calling a path verified.
+  calling a path verified. Current `tests/run.tscn` cannot complete cleanly with
+  failed world setup and owner-specific geometry/audio/scenery differences;
+  engine errors remain failed acceptance even when a component's assertions pass.
+  Native fixture consumers must use the generated
+  section plan and exact numeric tapes, preserving source order and tolerances.
+  Populated core fixtures in `tests/run.gd` and layered blast/bridge/tunnel cases
+  in `tests/structure_suite.gd` require the selected authored world;
+  missing preparation is an explicit failed acceptance case. Rerun all retained
+  combat assertions on real geometry once the seasonal resources are available.
+  Campaign deployment still requires authored chapter terrain. Isolated climb
+  failures are in `scripts/climb_presentation.gd` MultiMesh buffers/matrices;
+  isolated field failures are in `scripts/skill_field_presentation.gd` fog
+  vertices. Sol owns those consumers. Preserve every authority assertion when
+  rerunning them after those corrections; presentation failures cannot certify
+  populated traversal or field interactions.
+  Sol handoff: `scripts/scenery_presentation.gd` must preserve source instance
+  transforms and duplicate the imported MultiMesh before camp clearance.
+  `tests/structure_suite.gd` reproduces buffer-size errors and source matrix/
+  shared-resource mutation differences without world setup; retain every
+  rotated, mirrored, zero-scale, overlap and repeated-clearance assertion.
+  Sol handoff: `scripts/room_world_resources.gd`, `scripts/world.gd` and the
+  generated `assets/worlds/*_{spring,summer,autumn,winter}.res` must agree
+  on available authored seasonal resources. The ordinary smoke and both baseline
+  transport cases must pass world preparation without early simulation or a
+  fabricated replacement map.
+  Sol handoff: the original `public/assets/story/*.png` includes JPEG/JFIF
+  bytes under PNG names. `assets/story/` native imports must decode the actual
+  source media and retain provenance; the offline copier must preserve authored
+  bytes and exclude source-editor `.import` descriptors. Verify story image
+  imports without treating a filename suffix as proof of the encoded format.
+  Models handoff: `tests/body_suite.gd` and `tests/civilian_body_suite.gd` need
+  incremental case consumption through `Content.read_fixture_part(key, index)`.
+  Their combined fixture dependencies exceed the runner's default encoded-byte
+  budget. Retain every original row, nested frame sequence, rig reset and
+  cross-frame state; verify the same complete assertions with bounded memory.
+  The explicit unverified-suite failure remains until that owner integrates the
+  reader. Increasing the budget does not establish memory or delivery acceptance.
+  Models handoff: `assets/companions/guer_tank.scn` nodes 61/62 and
+  `assets/companions/{steel,swarm,super}_main_battle_tank.scn` nodes 81/82 must
+  match the captured `companionGeometry` world bounds and hierarchy within the
+  existing tolerance. Validate with `tests/companion_suite.gd`; authority spawn,
+  height and lifecycle fixtures must retain their complete scope.
+  Models handoff: `tests/burst_suite.gd` must parent cockpit fixture units under
+  a `BattleSimulation` before `CockpitRig.update_view` consumes their authority
+  context. Retain all original burst frames and serial/kick/muzzle assertions;
+  a parent-type script error cannot establish a presentation difference.
 - [ ] **O24 — Delivery:** certify native exports, mobile sensors/safe areas,
   Compatibility rendering, memory/performance, threaded audio on Web, browser
   single-player, Pages artifact contents and production native hosting. Complete
@@ -165,10 +228,69 @@ godot --headless --path . -- --smoke
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe
 ```
 
+Source publication is serialized. Capture into a separate directory, then use
+the canonical importer to validate original hashes, the captured generator and
+offline runtime, native world inputs, required fixture keys and complete outputs
+before publication. Keep that producer identity on every fixture section. Do not
+relabel an older capture after editing the generator or copy source-editor
+`.import` descriptors into the native project:
+
+```powershell
+node tools/import_source.mjs C:/path/to/steel_vs_swarm --output-root artifacts/source-capture
+node tools/import_source.mjs C:/path/to/steel_vs_swarm --publish-stage artifacts/source-capture
+godot --headless --path . res://tests/fixture_registry.tscn
+```
+
+`data/fixtures.json` is a section registry; its content-addressed JSON parts retain
+the complete captured bytes and its numeric tapes preserve the JavaScript parser's
+IEEE-754 values across Godot decimal decoding. Never edit either representation
+by hand. A native suite change requires regenerating its consumer plan with
+`node tools/import_source.mjs --refresh-fixture-consumers`. Isolate an existing
+suite using `res://tests/run.tscn -- --fixture-suite=tests/snapshot_suite.gd`;
+the full default run is still required. Console samples are bounded per suite;
+every assertion failure is retained in `user://source-fixture-failures.jsonl`.
+
+Generated captures use binary Git diffs and preserve their exact bytes. Producer
+tools and native test consumers also retain their captured line endings; do not
+normalize them independently of their SHA manifests. After staging, validate the
+actual commit contents before pushing:
+
+```powershell
+node tools/check_git_storage.mjs --staged --verify-fixtures
+```
+
+The check rejects regular Git blobs above 100 MiB, raw blobs that bypass an LFS
+filter, omitted fixture parts and staged-byte changes to pinned inputs. Keep the
+existing oversized world files in LFS; changing diff attributes does not exempt a
+file from GitHub's object-size limit.
+
+Use `--status-references`, `--bot-references`, `--companion-references`,
+`--missile-defense-references`, `--ability-route-references`, `--tick-references`
+or `--death-references` with the source path for focused authority-oracle
+publication. Each seals its
+producer, rechecks all published original input
+hashes and rejects a changed destination without replacing unrelated sections.
+
+For the isolated procedural-envelope source comparison:
+
+```powershell
+node tools/import_source.mjs C:/path/to/steel_vs_swarm --audio-music-gain
+godot --headless --path . res://tests/audio_music_envelope.tscn
+```
+
+The focused importer accepts `--playwright-module C:/path/to/playwright/index.mjs`
+and `--chrome C:/path/to/chrome.exe` when the source development browser helper
+is unavailable. It verifies the existing audio-source provenance before atomic
+publication and rejects source or destination changes during capture. The scene
+checks only the envelope; playback, resampling and audible integration require
+the Sol consumer's acceptance.
+
 Select relevant existing case switches in `tools/test_network.ps1` one per run
 for membership/loading/roster, observers, recovery/rematch/restart/fatal, balance,
 controls, weapons, bots, BOSS, campaign and SUPER. The wrapper runs ENet and
-WebSocket. Add world/model/render/export checks only as required by the change.
+WebSocket. Use `-Transport enet` and `-Transport websocket` separately when a
+failure in the first transport would prevent the second from running. Add
+world/model/render/export checks only as required by the change.
 
 ## Unsupported source paths
 

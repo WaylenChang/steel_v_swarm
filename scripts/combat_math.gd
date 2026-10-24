@@ -181,7 +181,7 @@ static func altitude_range(definition: Dictionary, height_gap: float) -> float:
 
 static func altitude_strength(height_gap: float) -> float:
 	var tier: float = Content.constants.TARGET_H.tower
-	return clampf((height_gap - tier) / (tier * (Content.constants.ALTITUDE.TIERS - 1)), 0, 1)
+	return clampf((absf(height_gap) - tier) / (tier * (Content.constants.ALTITUDE.TIERS - 1)), 0, 1)
 
 static func lance_zones(offset: Vector2, radius: float, beam_radius: float) -> Array[int]:
 	var core: float = beam_radius * Content.constants.LANCE.CORE_F

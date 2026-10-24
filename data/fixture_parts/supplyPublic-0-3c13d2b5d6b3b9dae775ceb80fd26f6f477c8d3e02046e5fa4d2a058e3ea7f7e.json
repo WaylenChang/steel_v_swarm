@@ -1,0 +1,1 @@
+[{"events":[{"type":"airfall","actor":0,"count":2},{"type":"airdrop","actor":99,"peer":99,"side":"SWARM","position":[12,0,-8],"size":"S","reward":"money","value":50},{"type":"relay","actor":99,"side":"SWARM","position":[12,0,-8]}],"types":["airfall","airdrop","relay"]}]

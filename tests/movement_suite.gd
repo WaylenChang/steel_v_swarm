@@ -1,5 +1,10 @@
 extends RefCounted
 
+class MovementUnit extends BattleUnit:
+	# The source launch seam has no rendered model. Retain native physics shapes.
+	func _build_model() -> void:
+		pass
+
 class LaunchSimulation extends BattleSimulation:
 	var requests := 0
 	func request_iframe(_unit: BattleUnit) -> bool:
@@ -83,10 +88,12 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			lift = result.lift
 			frames += 1
 	for item: Dictionary in fixtures.movementLaunch:
+		h._near(MovementRules.charged_launch_speed(item.charge, item.kind == "morph", item.modifier, 1.0),
+			item.vertical, "Original scalar charged launch speed before native vector storage")
 		var simulation := LaunchSimulation.new()
 		h.add_child(simulation)
 		simulation.set_physics_process(false)
-		var unit := BattleUnit.new()
+		var unit := MovementUnit.new()
 		simulation.add_child(unit)
 		unit.configure({"id": 1, "kind": item.kind, "character": item.character, "side": "STEEL", "position": Vector3(0, 20, 0)})
 		await h.get_tree().physics_frame
@@ -97,7 +104,8 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		unit.buffs = [{"until": 20.0, "mul": {"speed": item.modifier, "jump": item.modifier}}]
 		unit._launch_charged_jump(simulation)
 		h._check(unit.flying == item.flying and unit.low_gravity == item.low_gravity, "Original charged launch selects the flight or low-gravity state")
-		h._near(unit.velocity.y, item.vertical, "Original vertical charged launch speed")
+		h._check(unit.velocity.y == Vector3(0, item.vertical, 0).y,
+			"Native vertical charged launch is exactly the source scalar converted to Vector3 storage")
 		var actual := Vector2(unit.velocity.x, unit.velocity.z) if unit.flying else unit.impulse_velocity
 		h._check(actual.distance_to(Vector2(item.impulse[0], item.impulse[1])) < 0.0001, "Original charged jump preserves and adds horizontal impulse")
 		h._check(unit.position.distance_to(Vector3(item.position[0], item.position[1], item.position[2])) < 0.0001, "Original morph launch lifts off before its flight frame")

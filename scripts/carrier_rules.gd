@@ -21,10 +21,26 @@ static func turn_delta(angle: float) -> float:
 		angle += TAU
 	return angle
 
+static func hypot2(x: float, z: float) -> float:
+	# Preserve the captured V8 two-argument Math.hypot rounding at the dive apex.
+	# https://github.com/nodejs/node/blob/v24.19.0/deps/v8/src/builtins/math.tq
+	var a := absf(x)
+	var b := absf(z)
+	if is_inf(a) or is_inf(b):
+		return INF
+	if is_nan(a) or is_nan(b):
+		return NAN
+	var largest := maxf(a, b)
+	if largest == 0:
+		return 0.0
+	a /= largest
+	b /= largest
+	return sqrt(a * a + b * b) * largest
+
 static func destination(origin: Dictionary, x: float, z: float, yaw: float) -> Dictionary:
 	var dx: float = x - origin.x
 	var dz: float = z - origin.z
-	var distance := sqrt(dx * dx + dz * dz)
+	var distance := hypot2(dx, dz)
 	var minimum: float = Content.constants.ATK_CARRIER.MIN_LEG
 	if distance < minimum:
 		var ux := dx / distance if distance > 1 else -sin(yaw)

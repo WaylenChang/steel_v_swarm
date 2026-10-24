@@ -1,5 +1,25 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Imported captures are large generated payloads, not hand-edited source.
+# Keep their exact bytes and avoid multi-hundred-megabyte textual diffs.
+# Content-addressed fixture parts and numeric tapes must survive checkout intact.
+data/** binary
+data/fixtures.json text eol=lf -diff -merge
+data/provenance.json text eol=lf diff merge
+data/ui.json text eol=lf diff merge
+
+# Producer and consumer manifests hash these files' exact bytes. Preserve their
+# captured line endings across Windows/Linux checkouts while keeping code diffs.
+tools/** -text
+tests/** -text
+
+# Native/imported binary resources do not support textual merging.
+*.glb binary
+*.res binary
+*.scn binary
+
+# Existing oversized source worlds remain in Git LFS, including its diff driver.
 data/worlds/neworleans_3.json filter=lfs diff=lfs merge=lfs -text
 data/worlds/neworleans_4.json filter=lfs diff=lfs merge=lfs -text
 data/worlds/neworleans_5.json filter=lfs diff=lfs merge=lfs -text

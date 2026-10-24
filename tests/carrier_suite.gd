@@ -83,6 +83,10 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		var simulation := LifecycleSimulation.new()
 		h.add_child(simulation)
 		simulation.set_physics_process(false)
+		# The source trajectory oracle uses an unattached flat weather surface.
+		# Completion publication still requires a world for relative audio height.
+		simulation.world = BattleWorld.new()
+		simulation.add_child(simulation.world)
 		var owner := pilot(simulation, "s01")
 		var carrier := BattleUnit.new()
 		carrier.entity_id = 2

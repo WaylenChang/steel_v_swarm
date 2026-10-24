@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][string]$Godot, [switch]$LobControl, [switch]$KineticShots, [switch]$MissileShots, [switch]$Reachability, [switch]$Footprints, [switch]$Cockpits, [switch]$Cameras, [switch]$Bursts, [switch]$Projectiles, [switch]$Aiming, [switch]$MissileDefenses, [switch]$Bots, [switch]$Bosses, [switch]$Campaign, [switch]$Super, [switch]$Controls, [switch]$Mobile, [switch]$View, [switch]$Bodies, [switch]$Tps, [switch]$Deaths, [switch]$Blasts, [switch]$Rooms, [switch]$Loading, [switch]$Roster, [switch]$Members, [switch]$Spectators, [switch]$LateSpectators, [switch]$Rematch, [switch]$Recovery, [switch]$QuickRestart, [switch]$Fatal, [switch]$Pips, [switch]$HeadMarks, [switch]$VitalBars, [switch]$Minimap, [switch]$Balance)
+param([Parameter(Mandatory = $true)][string]$Godot, [switch]$LobControl, [switch]$KineticShots, [switch]$MissileShots, [switch]$Reachability, [switch]$Footprints, [switch]$Cockpits, [switch]$Cameras, [switch]$Bursts, [switch]$Projectiles, [switch]$Aiming, [switch]$MissileDefenses, [switch]$Bots, [switch]$Bosses, [switch]$Campaign, [switch]$Super, [switch]$Controls, [switch]$Mobile, [switch]$View, [switch]$Bodies, [switch]$Tps, [switch]$Deaths, [switch]$Blasts, [switch]$Rooms, [switch]$Loading, [switch]$Roster, [switch]$Members, [switch]$Spectators, [switch]$LateSpectators, [switch]$Rematch, [switch]$Recovery, [switch]$QuickRestart, [switch]$Fatal, [switch]$Pips, [switch]$HeadMarks, [switch]$VitalBars, [switch]$Minimap, [switch]$Balance, [ValidateSet("enet", "websocket")][string[]]$Transport = @("enet", "websocket"))
 $ErrorActionPreference = 'Stop'
 if (@($LobControl, $KineticShots, $MissileShots, $Reachability, $Footprints, $Cockpits, $Cameras, $Bursts, $Projectiles, $Aiming, $MissileDefenses, $Bots, $Bosses, $Campaign, $Super, $Controls, $Mobile, $View, $Bodies, $Tps, $Deaths, $Blasts, $Rooms, $Loading, $Roster, $Members, $Spectators, $LateSpectators, $Rematch, $Recovery, $QuickRestart, $Fatal, $Pips, $HeadMarks, $VitalBars, $Minimap, $Balance).Where({ $_ }).Count -gt 1) { throw 'Choose one gameplay transport fixture per run' }
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -6,7 +6,7 @@ $processes = @()
 $recoveryStores = @()
 $recoveryRunId = [Guid]::NewGuid().ToString('N')
 try {
-    foreach ($mode in @('enet', 'websocket')) {
+    foreach ($mode in $Transport) {
         $listenPort = if ($mode -eq 'enet') { 18762 } else { 18763 }
         $serverArguments = @('--headless', '--path', $projectRoot, '--', '--server', '--port', $listenPort)
         if ($MissileShots) { $serverArguments = @('--headless', '--path', $projectRoot, 'res://tests/missile_network.tscn', '--', '--server', '--port', $listenPort) }

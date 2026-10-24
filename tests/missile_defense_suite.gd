@@ -27,7 +27,7 @@ class DefenseSimulation extends BattleSimulation:
 const StatusHelper = preload("res://tests/status_suite.gd")
 
 static func run(h: Node, fixtures: Dictionary) -> void:
-	for key: String in ["missileDefenses", "missileReportGates", "missileSkillIntercepts"]:
+	for key: String in ["missileDefenses", "missileReportGates", "missileReportRanges", "missileSkillIntercepts"]:
 		if not fixtures.has(key):
 			h._check(false, "Regenerate original missile defense oracle: " + key)
 			return
@@ -68,21 +68,29 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 				h._check(position.distance_to(vector(expected.position)) < 0.001, label + " harmless visual endpoint")
 		StatusHelper.check_draws(h, simulation, 0)
 		simulation.free()
-	for item: Dictionary in fixtures.missileReportGates:
+	var positive_reports := 0
+	var source_reports: Array = fixtures.missileReportGates.duplicate()
+	source_reports.append_array(fixtures.missileReportRanges)
+	for item: Dictionary in source_reports:
 		var simulation := context(h)
 		simulation.over = item.over
 		var owner := actor(simulation, item.input)
 		owner.input_state = {"aim": item.aiming}
 		# Even a just-released aim cannot use the ordinary projectile grace window for missiles.
 		owner.aim_off_at = simulation.clock
-		var flight := {"id": 9, "side": "SWARM", "position": Vector3(0, 20, -10), "hp": 1.0}
+		h._check(item.precheckedWeaponGate, "Missile report oracle isolates settlement after the separate weapon budget gate")
+		var flight := missile(item.missile)
+		h._check(bool(item.friendly) == (flight.side == owner.side), "Original missile faction is captured rather than invented by the native adapter")
 		simulation.missiles.assign([flight])
 		simulation._damage_missile(owner, Content.weapon(item.character, item.slot, int(item.level)), 9, owner.position)
 		h._check(absf((1.0 - flight.hp) - float(item.damage)) < 0.001, "Original hitMissile status/aim gate " + item.gate)
 		h._check((not simulation.missiles.is_empty()) == bool(item.alive), "Original blocked report cannot remove missile")
 		h._near(owner.money, item.bounty, "Original blocked report cannot pay bounty")
 		StatusHelper.check_draws(h, simulation, int(item.draws))
+		if float(item.damage) > 0:
+			positive_reports += 1
 		simulation.free()
+	h._check(positive_reports > 0, "Original missile report references include actual accepted enemy damage")
 	for item: Dictionary in fixtures.missileSkillIntercepts:
 		var simulation := context(h)
 		var owner := actor(simulation, item.input)
@@ -97,7 +105,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		StatusHelper.check_draws(h, simulation, int(item.draws))
 		simulation.free()
 	print("MISSILE_DEFENSE_REFERENCE_PASS flight=", fixtures.missileDefenses.size(),
-		" reports=", fixtures.missileReportGates.size(), " skills=", fixtures.missileSkillIntercepts.size())
+		" reports=", source_reports.size(), " skills=", fixtures.missileSkillIntercepts.size())
 
 static func context(h: Node) -> DefenseSimulation:
 	var simulation := DefenseSimulation.new()
@@ -106,6 +114,9 @@ static func context(h: Node) -> DefenseSimulation:
 	simulation.authoritative = true
 	simulation.clock = 10
 	simulation.rng = SourceRng.new(42)
+	# The oracle uses relative missile coordinates without uploaded terrain.
+	simulation.world = BattleWorld.new()
+	simulation.add_child(simulation.world)
 	return simulation
 
 static func actor(simulation: BattleSimulation, input: Dictionary) -> BattleUnit:

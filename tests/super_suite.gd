@@ -4,6 +4,12 @@ const Helper = preload("res://tests/status_suite.gd")
 const BotTests = preload("res://tests/bot_suite.gd")
 const SessionScript = preload("res://scripts/session.gd")
 
+class ReferenceSimulation extends BattleSimulation:
+	func _height_reference(_unit: BattleUnit) -> float:
+		# The source SUPER oracle fixes owner.y to zero without native terrain.
+		# Match that reference frame; populated-world support is a separate check.
+		return 0.0
+
 class CountingRandom extends RefCounted:
 	var random: SourceRng
 	var draws := 0
@@ -128,7 +134,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 	print("SUPER_REFERENCE_PASS levels=", fixtures.superLevels.size(), " purchases=", fixtures.superBuys.size(), " spawns=", fixtures.superSpawns.size())
 
 static func context(h: Node) -> BattleSimulation:
-	var simulation := BattleSimulation.new()
+	var simulation := ReferenceSimulation.new()
 	h.add_child(simulation)
 	simulation.set_physics_process(false)
 	simulation.clock = 10

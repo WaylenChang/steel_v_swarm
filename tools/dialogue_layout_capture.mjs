@@ -23,6 +23,7 @@ if(!chromium)throw new Error('Original development Playwright runtime is require
 const browser=await chromium.launch({headless:true,executablePath:chromePath()});
 const output=join(root,'build/dialogue_layout');await mkdir(join(output,'fonts'),{recursive:true});
 const programs=[],fontResponses=new Map(),assetInputs={},pending=[];
+let language;
 try {
   const page=await browser.newPage({deviceScaleFactor:1});
   page.on('response',response=>{
@@ -44,8 +45,9 @@ try {
     catch {await route.fulfill({status:404,body:''});}
   });
   await page.goto('http://source.invalid/');
-  await page.evaluate(async({html,css})=>{
+  language=await page.evaluate(async({html,css})=>{
     const original=new DOMParser().parseFromString(html,'text/html');
+    document.documentElement.lang=original.documentElement.lang;
     const loading=[];
     for(const link of original.querySelectorAll('link[rel="stylesheet"]'))if(new URL(link.href).hostname==='fonts.googleapis.com'){
       const copy=document.importNode(link,true);loading.push(new Promise((resolve,reject)=>{copy.onload=resolve;copy.onerror=()=>reject(new Error('Original web font stylesheet failed'));}));document.head.appendChild(copy);
@@ -53,7 +55,7 @@ try {
     if(loading.length!==1)throw new Error('Expected the original web font stylesheet');
     const style=document.createElement('style');style.textContent=css+'\nbody::before {display:none !important;}';document.head.appendChild(style);
     document.body.style.background='#192b3c';window.overlayHTML=original.getElementById('overOverlay').outerHTML;
-    window.Dialogue=(await import('/js/dialogue.js')).Dialogue;await Promise.all(loading);
+    window.Dialogue=(await import('/js/dialogue.js')).Dialogue;await Promise.all(loading);return document.documentElement.lang;
   },{html,css});
   const cdp=await page.context().newCDPSession(page);await cdp.send('DOM.enable');await cdp.send('CSS.enable');
   for(const viewport of [{width:360,height:640},{width:720,height:900},{width:721,height:900},{width:1440,height:900}]) {
@@ -99,6 +101,6 @@ const file='tools/dialogue_layout_capture.mjs',inputs={[file]:digest((await read
 await mkdir(join(root,'tests/fixtures'),{recursive:true});
 await writeFixtureJson(join(root,'tests/fixtures/dialogue_layout.json'),{formatVersion:1,
   source:{inputs,sourceInputs,assetInputs:Object.fromEntries(Object.entries(assetInputs).sort(([a],[b])=>a.localeCompare(b)))},browser:browser.version(),
-  host:{markup:'overOverlay',populatedFields:['overTalk'],bodyClasses:[],backdrop:'#192b3c'},
+  host:{markup:'overOverlay',language,populatedFields:['overTalk'],bodyClasses:[],backdrop:'#192b3c'},
   fonts:[...fontResponses.values()].sort((a,b)=>a.url.localeCompare(b.url)),programs});
 console.log('DIALOGUE_LAYOUT_REFERENCES_PASS programs='+programs.length+' fontResources='+fontResponses.size);

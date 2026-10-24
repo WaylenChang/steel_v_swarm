@@ -11,6 +11,7 @@ const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 test('source identities and native avatar/portrait bytes retain the captured inputs',()=>{
   assert.equal(capture.formatVersion,1);
+  assert.equal(capture.host.language,'zh-Hant');
   for(const [path,hash]of Object.entries(capture.source.inputs))assert.equal(digest(read(path).toString('utf8').replace(/\r\n?/g,'\n')),hash,path);
   for(const [path,hash]of Object.entries(capture.source.sourceInputs))assert.equal(provenance.inputs[path],hash,path);
   assert.ok(Object.keys(capture.source.assetInputs).length>0);

@@ -276,13 +276,23 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   Noto font usage, pinned external font response hashes and original image bytes.
   `tests/dialogue_layout.test.mjs` verifies complete scenario coverage, source
   identity and sealed PNG crops using their exact fractional bounding rectangles.
-  Font resources remain in `build/dialogue_layout/fonts/` until native font
-  publication; retain CSS weight selection even when the font's internal family
-  name contains `Thin`. Source references populate only `overTalk` in the original
+  Retain CSS weight selection even when the font's internal family name contains
+  `Thin`. Source references populate only `overTalk` in the original
   overlay markup over a declared constant backdrop; winner/statistics content,
   touch-device classes, native typography and full settlement acceptance remain
   unresolved. Implement native inner script scrolling/padding and absolute
   background art without turning the portraits into an in-flow row.
+  `node tools/dialogue_fonts_capture.mjs` extends the frozen font responses to
+  every original radio/settlement character, preserving `zh-Hant` Canvas language
+  selection. `tools/import_dialogue_fonts.tscn` atomically publishes the original
+  WOFF2 bytes as a native Theme with separate 400/700 variation/fallback graphs,
+  explicit glyph coverage and an embedded original licence. It rejects changed
+  input hashes, missing subsets and silent system fallback. Run
+  `tests/dialogue_fonts.tscn` for reload/identity/coverage and
+  `tests/dialogue_font_metrics.tscn` for the separate strict browser-advance gate.
+  Keep its current precision failures visible; resource publication does not
+  qualify native typography or source line wrapping. Bind the Theme only after
+  the shared advance contract below is accepted for the relevant text consumer.
 - [ ] **S21 — Remaining quality consumers:** finish curated visual-style
   propagation, render-resolution scaling, world-text rebuilds and remaining
   low-power effect/audio consumers. Verify source constructor versus live-update
@@ -300,6 +310,18 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for campaign art
 
+- **Opus — source text advances:** provide an accepted shared adapter in
+  `scripts/source_font_metrics.gd` before Sol certifies source dialogue wrapping.
+  Input is the published native Font, original text, pixel size and `zh-Hant`
+  language; preserve original shaping/kerning and the captured CSS weight.
+  The strict browser widths are in `tests/fixtures/dialogue_fonts.json`, and
+  native public widths plus unrounded glyph sums are retained in
+  `build/dialogue_fonts/metrics-report.json`. Native integer widths are not the
+  same contract as browser fractional advances; disabling hinting/rounding or
+  using native MSDF did not establish parity. Acceptance needs the complete
+  source corpus, Latin/CJK/punctuation, both weights and all recorded sizes,
+  without arbitrary spacing corrections, tolerance widening or a baked table of
+  whole-string widths. Sol owns subsequent Label/row layout and pixel binding.
 - **Opus — transcript portrait matte and avatar frames:** agree accepted native
   bindings under `shaders/` for original `.dlg-art` and `.dlg-av` pixels before
   full transcript composition is accepted. Background portraits retain 150 px

@@ -37,12 +37,23 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   source wind/wave/gust/tide/ripple/vessel coupling. Bind the shared shader owner's
   accepted materials; certify weather style/low-power transitions and full
   seasonal rendered composition. Weather damage and hazards remain authority-owned.
-- [ ] **S6 — Room resources/prebuild:** certify background loader retention,
-  stale completion, cancellation, retry and missing-file recovery. Prebuilt worlds
-  must key on the complete map/environment/architecture identity, ignore name-only
-  edits and transfer one existing tree into the live physics space. Verify
-  superseded builds, room leave, base/season/seed changes and no early processing
-  or population. Shared loading/barrier handlers are Opus integration requests.
+- [ ] **S6 — Room resources/prebuild:** finish populated seasonal-world retention,
+  cancellation/retry and tree transfer in offline, ENet and WebSocket sessions.
+  Isolated lifecycle fixtures cannot establish complete-world dependency retention
+  or population/barrier behavior. Preserve request-time tickets across synchronous
+  readiness callbacks and the complete map/environment/architecture identity;
+  name-only edits must reuse one tree, with no early processing or population.
+  Shared loading/barrier handlers are Opus integration requests.
+  Resource retirement invalidates tickets and readiness immediately, then drains
+  each native request independently of the retired node without waiting for its
+  decoder. Pending `prepare()` calls return a signal that resolves to the native
+  resource or cancellation; its waiter retains only a weak loader reference.
+  Keep source requests active during SceneTree pause and preserve reentrant
+  detach/reattach/replacement from progress callbacks. Run
+  `tests/room_resource_retirement.tscn`, `tests/room_world_lifecycle.tscn` and
+  WASAPI `tests/audio_loop_loading.tscn` for shared-drain regression coverage.
+  Held decoder resources isolate lifecycle contracts; they do not certify actual
+  seasonal scene content, populated-world retention or the transport barrier.
 
 World workflow, from the repository root:
 

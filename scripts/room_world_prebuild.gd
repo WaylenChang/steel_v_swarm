@@ -73,11 +73,11 @@ func _build_selected() -> void:
 		var ticket := generation
 		var key := selected.duplicate(true)
 		var requested := settings.duplicate(true)
-		var data := await resources.prepare(requested)
+		var data: NativeWorldData = await resources.prepare(requested)
 		if ticket != generation:
 			continue
 		if data == null:
-			failure = resources.failure
+			failure = resources.failure if is_instance_valid(resources) else ""
 			if failure.is_empty():
 				failure = "Native world resource preparation was interrupted"
 			changed.emit()

@@ -9,11 +9,14 @@ var input_players: Array[AudioStreamPlayer] = []
 var output_player: AudioStreamPlayer
 var routes: Array[StringName] = []
 var configured := false
+var disposed := false
 var activated := false
 var context_origin := 0.0
 
 func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float) -> Error:
-	if configured or not is_inside_tree() or routing == null or not routing.available():
+	if configured or disposed or not is_inside_tree() or is_queued_for_deletion():
+		return ERR_UNCONFIGURED
+	if not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
 		return ERR_UNCONFIGURED
 	var plan := AudioMovePlan.compile(metadata.moveGraphs[category])
 	if plan.is_empty() or plan.lfos.size() > 1:
@@ -76,7 +79,7 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 	return OK
 
 func activate() -> Error:
-	if not configured or activated:
+	if not configured or disposed or activated or not is_inside_tree() or is_queued_for_deletion():
 		return ERR_UNCONFIGURED
 	mixer.origin = buses.context_seconds() - context_origin
 	var interval := AudioServer.get_time_to_next_mix() + AudioServer.get_time_since_last_mix()
@@ -115,6 +118,7 @@ func _stream_failed(operation: String, error: Error) -> void:
 
 func _exit_tree() -> void:
 	configured = false
+	disposed = true
 	mixer.stop()
 	if is_instance_valid(output_player):
 		output_player.stop()

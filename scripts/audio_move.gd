@@ -14,7 +14,9 @@ var configured := false
 var worker_ready := false
 
 func configure(metadata: Dictionary, routing: AudioBuses, low_power: bool) -> Error:
-	if configured or not is_inside_tree() or routing == null or not routing.available():
+	if configured or state.disposed or not is_inside_tree() or is_queued_for_deletion():
+		return ERR_UNCONFIGURED
+	if not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
 		return ERR_UNCONFIGURED
 	if not metadata.has("moveGraphs") or not metadata.has("moveTiming"):
 		return ERR_INVALID_DATA
@@ -30,17 +32,19 @@ func configure(metadata: Dictionary, routing: AudioBuses, low_power: bool) -> Er
 	return OK
 
 func unlock(origin: float) -> void:
-	if not configured or state.unlocked:
+	if not _active() or state.unlocked:
 		return
 	context_origin = origin
 	state.unlocked = true
 	_advance()
 
 func set_move(category: String, gain: float, pan: float = 0, rate: float = 1, wet: float = 0) -> void:
-	if not configured:
+	if not _active():
 		return
 	_advance()
 	state.set_move(category, gain, pan, rate, wet)
+	if not _active():
+		return
 	var voice: AudioMoveVoice = voices.get(category)
 	if voice == null or voice.activated:
 		return
@@ -56,13 +60,15 @@ func set_move(category: String, gain: float, pan: float = 0, rate: float = 1, we
 		_activate(category)
 
 func _worker_started() -> void:
-	if not configured or state.disposed:
+	if not _active():
 		return
 	worker_ready = true
 	for category: String in voices.keys():
 		_activate(category)
 
 func _activate(category: String) -> void:
+	if not _active():
+		return
 	var voice: AudioMoveVoice = voices.get(category)
 	if voice == null or voice.activated:
 		return
@@ -72,7 +78,10 @@ func _activate(category: String) -> void:
 		voice.queue_free()
 		failed.emit(category, "activate", error)
 		return
-	worker.add(voice.mixer)
+	if not worker.add(voice.mixer):
+		voices.erase(category)
+		voice.free()
+		failed.emit(category, "worker_stopped", ERR_UNCONFIGURED)
 
 func set_low_power(on: bool) -> void:
 	if configured:
@@ -85,6 +94,8 @@ func stop_move() -> void:
 		state.stop_move()
 
 func _register(category: String) -> void:
+	if not _active():
+		return
 	if bank == null:
 		bank = load(NativeAudioMoveBank.PATH) as NativeAudioMoveBank if ResourceLoader.exists(NativeAudioMoveBank.PATH) else null
 	if bank == null or not bank.valid():
@@ -103,13 +114,18 @@ func _register(category: String) -> void:
 	voices[category] = voice
 
 func _target(category: String, key: String, target: float, tau: float, time: float) -> void:
+	if not _active():
+		return
 	var voice: AudioMoveVoice = voices.get(category)
 	if voice != null:
 		voice.mixer.queue(key, target, tau, time)
 
 func _advance() -> void:
-	if configured and state.unlocked and not state.disposed:
+	if _active() and state.unlocked:
 		state.advance(maxf(0, buses.context_seconds() - context_origin - state.clock))
+
+func _active() -> bool:
+	return configured and not state.disposed and is_inside_tree() and not is_queued_for_deletion()
 
 func _process(_delta: float) -> void:
 	_advance()

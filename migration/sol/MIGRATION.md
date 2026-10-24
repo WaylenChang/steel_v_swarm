@@ -99,6 +99,15 @@ The wrapper runs capture, source references and native packing sequentially.
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.
   Verify fade-out retention, driver suspension, buffer latency, thread shutdown,
   scheduling/performance and threaded Web export with actual mixer output.
+  Movement owners and voices retire permanently on tree exit; reattachment must
+  reject configuration rather than reconnecting signals to stopped DSP state.
+  Use a fresh owner for new playback. Stopped workers release pending mixer
+  references and explicitly reject later submissions; the caller must release
+  the rejected voice. Deferred startup and reentrant registration callbacks cannot
+  reactivate retiring nodes or allocate new native voices after queued deletion.
+  Run WASAPI `tests/audio_move_retirement.tscn` and `tests/audio_move_render.tscn`
+  alongside source lifecycle checks. Native frames and shutdown probes do not
+  certify audible waveform parity, device suspension or threaded Web delivery.
 - [ ] **S10 — Event/frame audio integration:** certify immediate local fire,
   cast/purchase reports, death/leave and remote events in their source order.
   Cover deduplication across snapshot/RPC delivery and all offline/ENet/WebSocket

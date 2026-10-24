@@ -16,8 +16,16 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   cancellation and atomic publication. Bound peak memory through traversal and
   ResourceSaver publication; finish resource reload, complete rendered appearance
   and populated lifecycle checks on the full set, including actual tunnel cases.
+  Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
+  a complete numeric sidecar just to determine its size or verify its digest.
   Existing Berlin spring/summer/autumn resources are partial inputs, not world-set
   certification. Refresh stale generator fingerprints before source reuse.
+  Stop browser producers before disposing an interrupted mesh writer. Close its
+  live numeric handles and remove only its successfully opened raw/GZIP temporary
+  paths; retain published content-addressed sidecars and rejected existing files.
+  Writer temporary identities must remain unique within one process and clock
+  tick. Keep `tests/world_source.test.mjs` disposal/ownership checks alongside
+  native reload coverage; they do not qualify world content or publication.
 - [ ] **S3 — Terrain/scenery content:** finish source triangular terrain,
   dry-band/wet-grid, water/swamp, imagery, OSM facilities/buildings, habitat,
   complete biome orchestration and edge geometry capture. Retain original

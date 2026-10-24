@@ -173,10 +173,10 @@ const browser = await chromium.launch({ headless: true, executablePath: chromePa
 console.log('SOURCE_WORLD_CAPTURE browser-started');
 const reuse=process.argv.includes('--reuse');
 await mkdir(join(root, 'data/worlds'), { recursive: true });
+let worldMeshWriter=null;
 try {
   const page = await browser.newPage();
   let worldSections = Object.create(null);
-  let worldMeshWriter=null;
   await page.exposeFunction('__sourceWorldMesh', async (operation,index,offset,json) => {
     if(!Number.isInteger(index)||index<0||!Number.isInteger(offset)||offset<0||typeof json!=='string')
       throw new Error('Invalid original world mesh transfer');
@@ -632,6 +632,8 @@ try {
       }, { minimapMethod: minimapBakeMethod, minimapSize, cfg: worldConfig, raw: Array.from(raw), roads, osm, climbCaptureSource: captureClimbBundle.toString(), supportCaptureSource: captureSupportBundle.toString(), sceneryPrepareSource: prepareSceneryCapture.toString(), textureImageSource: captureTextureImage.toString(), textureDescriptionSource: describeSourceTexture.toString(), textureUVSource: captureTextureUV.toString(), trainCaptureSource: captureTrainBundle.toString(), motionCaptureSource:captureSceneryMotion.toString(), wildlifeCaptureSource:captureWildlifeBundle.toString(), petalCaptureSource:capturePetalBundle.toString(), aquaticCaptureSource:captureAquaticBundle.toString(), marineCaptureSource:captureMarineBundle.toString(), marineMaterialSource:captureMarineMaterial.toString(), marineShaderSource:captureMarineShader.toString(), outlineCaptureSource:captureOutlineUniforms.toString(), celCaptureSource:createCelCapture.toString() }));
       const bundle=transfer.header;
       const storage=await worldMeshWriter.finish();
+      await worldMeshWriter.dispose();
+      worldMeshWriter=null;
       if(storage.meshCount!==transfer.counts.meshes)throw new Error('Incomplete original world mesh count');
       Object.assign(bundle,storage);
       for(const [key,count]of Object.entries(transfer.counts)) {
@@ -664,5 +666,6 @@ try {
     }
   }
 } finally {
-  await browser.close();
+  try {await browser.close();}
+  finally {await worldMeshWriter?.dispose();}
 }

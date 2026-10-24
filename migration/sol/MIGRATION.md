@@ -198,6 +198,16 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   nearest-section/camera functions, including gaps, ties, zero heights and
   per-scene serialized targets in both orientations. Controlled section geometry
   does not certify live typography, event-loop/render timing or full cinematics.
+  Initial playback clamps the requested chapter once, before initial selection
+  and the deferred jump. Layout must not deliver camera targets before that
+  source callback. A middle-chapter jump retains the requested selection even
+  when scroll clamping or zero-height sections makes focus choose another scene;
+  retain any camera target already delivered to that other scene.
+  `node tools/campaign_start_capture.mjs` and real-driver
+  `tests/campaign_start.tscn` retain original `play`/focus/camera methods, browser
+  scroll quantization, both orientations, out-of-range indexes and empty/clipped
+  section geometry. Declared geometry and initial native layout probes do not
+  certify narrative layout or full event-loop/render ordering.
   Skip input retains original millisecond clocks and strict 650/350 ms hold/tap
   boundaries. Cancelled or unpaired releases never become taps; finish-button
   exclusion follows the touch origin, and release/cancel never extends the crawl

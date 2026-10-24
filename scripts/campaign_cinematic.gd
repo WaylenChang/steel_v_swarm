@@ -105,6 +105,7 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	_write_scroll()
 	var token := generation
 	scenes = sequence.duplicate(true)
+	start_index = clampi(start_index, 0, scenes.size() - 1)
 	for scene: Dictionary in scenes:
 		var layer := _make_art_layer()
 		layer.name = "prologueSceneItem-%d" % art_layers.size()
@@ -119,7 +120,6 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		sections.append(section)
 	finish_button = NativeUi.button(finish_text, finish)
 	column.add_child(finish_button)
-	playing = true
 	closing = false
 	modulate.a = 1.0
 	fade_opacity = 1.0
@@ -127,16 +127,18 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	set_process(true)
 	set_process_input(true)
 	_layout()
-	_set_scene(clampi(start_index, 0, scenes.size() - 1))
+	playing = true
+	_set_scene(start_index)
 	last_frame_at = _now_msec()
 	await get_tree().process_frame
 	if token != generation or not playing or closing:
 		return
-	if start_index > 0 and start_index < sections.size():
+	if start_index > 0:
 		var section: Control = sections[start_index]
 		scroll_offset = maxf(0, section.position.y + section.size.y * float(Content.campaign.presentation.crawl.start) - scroll.size.y * float(Content.campaign.presentation.crawl.focus))
-	_write_scroll()
-	_update_scene()
+		_write_scroll()
+		_update_scene()
+		_set_scene(start_index)
 
 func _layout() -> void:
 	if not is_instance_valid(card):

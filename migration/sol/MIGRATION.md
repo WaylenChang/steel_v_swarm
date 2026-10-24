@@ -259,6 +259,18 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   `tests/dialogue_motion.tscn` retain unrounded CSS Typed OM values and original
   removal methods. Controlled overlapping color layers qualify group animation,
   not actual radio layout, portrait filters, typography or complete overlay pixels.
+  Transcript rows retain original integer-millisecond stagger arithmetic and
+  260 ms ease-out group opacity/6 px translation, independent of gameplay pause.
+  Clear cancels pending reveals without hiding rows already revealed. Removing
+  a row retires its tween and isolated render target before deferred destruction.
+  Nearest scrolling uses transformed row bounds, oversized-row rules, current
+  scrollbar ranges before native layout catches up, and visible inner bounds
+  when propagating through multiple scroll ancestors.
+  `node tools/dialogue_transcript_capture.mjs` executes original `Dialogue.scene`
+  in Chromium; real-driver `tests/dialogue_transcript.tscn` retains original
+  line/avatar/direction/timing programs, controlled reveal rasters and directed
+  browser scroll geometry. These probes do not qualify source transcript padding,
+  typography, full portrait/backplate composition or complete settlement layout.
 - [ ] **S21 — Remaining quality consumers:** finish curated visual-style
   propagation, render-resolution scaling, world-text rebuilds and remaining
   low-power effect/audio consumers. Verify source constructor versus live-update

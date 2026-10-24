@@ -77,13 +77,16 @@ func dispose() -> void:
 	track(-1)
 
 func _after(seconds: float, callback: Callable) -> void:
+	_after_msec(seconds * 1000, callback)
+
+func _after_msec(delay: float, callback: Callable) -> void:
 	var token := generation
-	var deadline := _now_msec() + seconds * 1000
+	var deadline := _now_msec() + delay
 	var timer := Timer.new()
 	timer.one_shot = true
 	timer.ignore_time_scale = true
 	timer.process_mode = Node.PROCESS_MODE_ALWAYS
-	timer.wait_time = maxf(0.001, seconds)
+	timer.wait_time = maxf(0.001, delay / 1000)
 	add_child(timer)
 	timers.append(timer)
 	timer.timeout.connect(func():
@@ -203,11 +206,13 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lead_row.add_child(art)
+	var delay := float(Content.campaign.presentation.transcript.delay) * 1000
+	var interval := float(Content.campaign.presentation.transcript.step) * 1000
 	for index in range(scene.lines.size()):
 		var line: Dictionary = scene.lines[index]
 		var hero: Dictionary = Content.heroes[line.ch]
-		var row := HBoxContainer.new()
-		row.modulate.a = 0
+		var row = preload("res://scripts/dialogue_transcript_row.gd").new()
+		host.add_child(row)
 		var portrait := TextureRect.new()
 		portrait.texture = Content.campaign_art(line.ch, "avatar", art_mode)
 		portrait.custom_minimum_size = Vector2(52, 52)
@@ -218,9 +223,8 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		column.add_child(NativeUi.label(Content.label("story_speaker") % [hero.code, hero.name], 16))
 		column.add_child(NativeUi.prose(line.t))
 		var foe := "SWARM" if side == "STEEL" else "STEEL"
-		row.add_child(column if hero.side == foe else portrait)
-		row.add_child(portrait if hero.side == foe else column)
-		host.add_child(row)
-		_after(float(Content.campaign.presentation.transcript.delay) + index * float(Content.campaign.presentation.transcript.step), func():
+		row.content.add_child(column if hero.side == foe else portrait)
+		row.content.add_child(portrait if hero.side == foe else column)
+		_after_msec(delay + index * interval, func():
 			if is_instance_valid(row):
-				row.modulate.a = 1.0)
+				row.reveal())

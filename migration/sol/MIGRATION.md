@@ -250,6 +250,15 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   paused zero/slow/fast timers and bar retirement; the original dialogue fixture
   retains every automatic line duration. These clock checks do not qualify radio
   mount/unmount CSS curves, transcript reveal motion or complete overlay pixels.
+  Radio mount/unmount retains the original 320/400 ms ease-out/ease-in curves,
+  14/10 px offsets and separate 420 ms removal deadline. Animate an isolated
+  premultiplied SubViewport through Sprite2D so fractional translation samples
+  the complete group without GUI pixel snapping. Hidden and retired groups must
+  stop drawing, and replacement must cancel the old entrance/exit motion.
+  `node tools/dialogue_motion_capture.mjs` and real-driver
+  `tests/dialogue_motion.tscn` retain unrounded CSS Typed OM values and original
+  removal methods. Controlled overlapping color layers qualify group animation,
+  not actual radio layout, portrait filters, typography or complete overlay pixels.
 - [ ] **S21 — Remaining quality consumers:** finish curated visual-style
   propagation, render-resolution scaling, world-text rebuilds and remaining
   low-power effect/audio consumers. Verify source constructor versus live-update

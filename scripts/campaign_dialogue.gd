@@ -15,12 +15,16 @@ var total := 0
 var timers: Array[Timer] = []
 var generation := 0
 var fade: Tween
+var entrance: Tween
+var radio_group: Sprite2D
+var motion_rules: Dictionary
 var clock_msec := Callable()
 
 func _now_msec() -> float:
 	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
 
 func _ready() -> void:
+	motion_rules = Content.read_json("res://data/dialogue_motion.json").rules
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	track_label = NativeUi.label("", 16)
@@ -30,6 +34,11 @@ func _ready() -> void:
 	track_label.size = Vector2(520, 30)
 	add_child(track_label)
 	track_label.hide()
+	resized.connect(_layout_radio)
+
+func _layout_radio() -> void:
+	if is_instance_valid(radio_group):
+		radio_group.layout_radio(size)
 
 func track(stage: int = -1) -> void:
 	track_label.visible = stage >= 0
@@ -50,8 +59,12 @@ func clear() -> void:
 	timers.clear()
 	if fade != null and fade.is_valid():
 		fade.kill()
-	if is_instance_valid(bar):
-		bar.queue_free()
+	if entrance != null and entrance.is_valid():
+		entrance.kill()
+	if is_instance_valid(radio_group):
+		radio_group.retire()
+		radio_group.queue_free()
+	radio_group = null
 	bar = null
 	portraits.clear()
 	portrait_ids.clear()
@@ -91,9 +104,13 @@ func radio(scene: Dictionary) -> void:
 	clear()
 	lines = scene.lines.duplicate(true)
 	total = lines.size()
+	radio_group = preload("res://scripts/dialogue_radio_layer.gd").new()
+	radio_group.name = "RadioPresentation"
+	add_child(radio_group)
+	_layout_radio()
 	bar = NativeUi.panel(Vector2(860, 152))
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bar)
+	radio_group.content.add_child(bar)
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	bar.position = Vector2(-430, -260)
 	bar.size = Vector2(860, 152)
@@ -127,18 +144,33 @@ func radio(scene: Dictionary) -> void:
 	line_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_column.add_child(line_label)
 	row.add_child(portraits[1])
+	entrance = _animate_radio("enter")
 	_step()
+
+func _animate_radio(phase: String) -> Tween:
+	var rule: Dictionary = motion_rules[phase]
+	radio_group.opacity = rule.from
+	radio_group.position.y = rule.fromY
+	var animation := create_tween().set_ignore_time_scale(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS).set_parallel(true)
+	var curve: Array = rule.curve
+	var ease := func(value: float): return HurtFlashState.bezier_values(value, curve[0], curve[1], curve[2], curve[3])
+	animation.tween_property(radio_group, "opacity", float(rule.to), float(rule.duration)).set_custom_interpolator(ease)
+	animation.tween_property(radio_group, "position:y", float(rule.toY), float(rule.duration)).set_custom_interpolator(ease)
+	return animation
 
 func _step() -> void:
 	if not is_instance_valid(bar):
 		return
 	if at >= lines.size():
 		var seconds: float = Content.campaign.presentation.radioFade
-		fade = create_tween().set_ignore_time_scale(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		fade.tween_property(bar, "modulate:a", 0.0, seconds)
+		if entrance != null and entrance.is_valid():
+			entrance.kill()
+		fade = _animate_radio("exit")
 		_after(seconds, func():
-			if is_instance_valid(bar):
-				bar.queue_free()
+			if is_instance_valid(radio_group):
+				radio_group.retire()
+				radio_group.queue_free()
+			radio_group = null
 			bar = null)
 		return
 	var line: Dictionary = lines[at]

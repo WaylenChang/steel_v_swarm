@@ -271,6 +271,18 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   line/avatar/direction/timing programs, controlled reveal rasters and directed
   browser scroll geometry. These probes do not qualify source transcript padding,
   typography, full portrait/backplate composition or complete settlement layout.
+  `node tools/dialogue_layout_capture.mjs` retains all authored base-settlement
+  transcripts in both art modes at 360/720/721/1440 px widths, actual downloaded
+  Noto font usage, pinned external font response hashes and original image bytes.
+  `tests/dialogue_layout.test.mjs` verifies complete scenario coverage, source
+  identity and sealed PNG crops using their exact fractional bounding rectangles.
+  Font resources remain in `build/dialogue_layout/fonts/` until native font
+  publication; retain CSS weight selection even when the font's internal family
+  name contains `Thin`. Source references populate only `overTalk` in the original
+  overlay markup over a declared constant backdrop; winner/statistics content,
+  touch-device classes, native typography and full settlement acceptance remain
+  unresolved. Implement native inner script scrolling/padding and absolute
+  background art without turning the portraits into an in-flow row.
 - [ ] **S21 — Remaining quality consumers:** finish curated visual-style
   propagation, render-resolution scaling, world-text rebuilds and remaining
   low-power effect/audio consumers. Verify source constructor versus live-update
@@ -288,6 +300,19 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for campaign art
 
+- **Opus — transcript portrait matte and avatar frames:** agree accepted native
+  bindings under `shaders/` for original `.dlg-art` and `.dlg-av` pixels before
+  full transcript composition is accepted. Background portraits retain 150 px
+  width, bottom alignment, whole-image opacity 0.22, right-side mirroring and
+  `linear-gradient(to top, #000 30%, transparent)` alpha masking; the body clips
+  them at its 8 px rounded boundary. Avatar frames retain the SWARM 16%/84%
+  polygon, STEEL 2 px radius plus its 1 px outline at 2 px offset, and MERC
+  3 px double border/6 px radius. Preserve original RGBA and premultiplied group
+  composition without mutating imported textures. Source computed styles and
+  populated pixels are in `tests/fixtures/dialogue_layout.json`; acceptance
+  needs isolated material probes in both art modes, alpha-gradient endpoints,
+  fractional placement and the complete native/source transcript composition
+  after Sol publishes the captured fonts and container geometry.
 - **Opus — radio portrait filter binding:** agree an isolated canvas-item shader
   contract under `shaders/` for the original `.dlg-row .dlg-av` grayscale filter.
   Source inactive portraits use opacity 0.35 and grayscale 0.75; `.on` uses opacity

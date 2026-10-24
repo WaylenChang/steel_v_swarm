@@ -89,6 +89,17 @@ The wrapper runs capture, source references and native packing sequentially.
   frames, normalization, mono/stereo routing, PCM/synthesis resources, retained
   BGM position/fallback, first gesture and independent sample RNG. Verify original
   sample rate/resampling, source codec failure and complete native audible output.
+  Keep SFX clips content-addressed by PCM, full-precision normalization gains,
+  stream format/rate/loop layout and original take/source identity. Publish the
+  catalogue last through the atomic native resource publisher; never overwrite
+  an existing fingerprint path or remove a prior catalogue's referenced clips.
+  New sample libraries read a fresh catalogue snapshot and verify every clip
+  before registering the complete batch. Legacy catalogues without fingerprints
+  require regeneration with `tools/import_audio.tscn -- --samples-only`.
+  `tests/audio_catalogue.tscn` covers native reload, staged replacement and
+  retained-reader isolation; `tests/audio_resources.tscn` checks original PCM and
+  take order. The samples-only publication does not certify atomic updates of
+  synthesis/music/movement resources, codec parity or complete audible output.
 - [ ] **S8 — Mixer and voice lifecycle:** certify native SFX/BGM settings,
   panning, bus/filter order, initial dedup timestamp, cap reservation grace and
   playing-stream lifetime. Malformed legacy negative SFX polarity stays explicitly

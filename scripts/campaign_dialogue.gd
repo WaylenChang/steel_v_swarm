@@ -15,6 +15,10 @@ var total := 0
 var timers: Array[Timer] = []
 var generation := 0
 var fade: Tween
+var clock_msec := Callable()
+
+func _now_msec() -> float:
+	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -61,16 +65,24 @@ func dispose() -> void:
 
 func _after(seconds: float, callback: Callable) -> void:
 	var token := generation
+	var deadline := _now_msec() + seconds * 1000
 	var timer := Timer.new()
 	timer.one_shot = true
+	timer.ignore_time_scale = true
+	timer.process_mode = Node.PROCESS_MODE_ALWAYS
 	timer.wait_time = maxf(0.001, seconds)
 	add_child(timer)
 	timers.append(timer)
 	timer.timeout.connect(func():
+		if token != generation or not timers.has(timer):
+			return
+		var remaining := deadline - _now_msec()
+		if remaining > 0:
+			timer.start(remaining / 1000)
+			return
 		timers.erase(timer)
 		timer.queue_free()
-		if token == generation:
-			callback.call())
+		callback.call())
 	timer.start()
 
 func radio(scene: Dictionary) -> void:
@@ -122,7 +134,7 @@ func _step() -> void:
 		return
 	if at >= lines.size():
 		var seconds: float = Content.campaign.presentation.radioFade
-		fade = create_tween()
+		fade = create_tween().set_ignore_time_scale(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 		fade.tween_property(bar, "modulate:a", 0.0, seconds)
 		_after(seconds, func():
 			if is_instance_valid(bar):

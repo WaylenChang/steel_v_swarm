@@ -19,6 +19,8 @@ func _run() -> void:
 		return
 	for program: Dictionary in capture.programs:
 		var view := CampaignDialogue.new()
+		var clock := {"now": 0.0}
+		view.clock_msec = func(): return clock.now
 		view.side = program.side
 		view.art_mode = program.artMode
 		add_child(view)
@@ -32,6 +34,7 @@ func _run() -> void:
 				"timer":
 					_check(not view.timers.is_empty(), "Original dialogue timer remains scheduled before delivery")
 					if not view.timers.is_empty():
+						clock.now += view.timers[0].wait_time * 1000
 						view.timers[0].timeout.emit()
 			_compare(view, frame.state)
 		view.free()

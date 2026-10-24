@@ -242,6 +242,14 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   CSS layout/filter pixels. Manual `next()` is source storybook inspection only;
   live gameplay must remain automatic. Finish original portrait opacity/filter
   transitions and complete radio/transcript composition before visual acceptance.
+  Radio and transcript callbacks retain absolute monotonic wall deadlines,
+  including native timeouts that arrive early. Gameplay speed and SceneTree pause
+  must not freeze their timers or the radio retirement tween. Reject duplicate
+  delivered callbacks and retired-generation callbacks before scheduling work.
+  `tests/dialogue_clock.tscn` checks strict deadline edges, replacement, actual
+  paused zero/slow/fast timers and bar retirement; the original dialogue fixture
+  retains every automatic line duration. These clock checks do not qualify radio
+  mount/unmount CSS curves, transcript reveal motion or complete overlay pixels.
 - [ ] **S21 — Remaining quality consumers:** finish curated visual-style
   propagation, render-resolution scaling, world-text rebuilds and remaining
   low-power effect/audio consumers. Verify source constructor versus live-update

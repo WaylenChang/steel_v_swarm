@@ -1,13 +1,23 @@
 class_name ScopeOverlay
 extends ColorRect
 
-var fire_opacity := 0.0
-var weather_opacity := 0.0
+var fire_opacity := 0.0:
+	set(value):
+		fire_opacity = value
+		if shader_material != null:
+			shader_material.set_shader_parameter("fire_opacity", value)
+var weather_opacity := 0.0:
+	set(value):
+		weather_opacity = value
+		if shader_material != null:
+			shader_material.set_shader_parameter("weather_opacity", value)
 var fire_target := 0.0
 var weather_target := 0.0
 var fire_tween: Tween
 var weather_tween: Tween
 var shader_material: ShaderMaterial
+var fire_transition: Dictionary = {}
+var weather_transition: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -31,16 +41,10 @@ func update_view(state: ScopeState, scoped: bool) -> void:
 	var rules: Dictionary = Content.balance.view.mask
 	if fire_target != state.fire_fog:
 		fire_target = state.fire_fog
-		if fire_tween != null:
-			fire_tween.kill()
-		fire_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		fire_tween.tween_property(self, "fire_opacity", fire_target, rules.fireTransition)
+		fire_tween = _start_fade("fire_opacity", fire_target, rules.fireTransition, fire_tween, fire_transition)
 	if weather_target != state.weather_fog:
 		weather_target = state.weather_fog
-		if weather_tween != null:
-			weather_tween.kill()
-		weather_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		weather_tween.tween_property(self, "weather_opacity", weather_target, rules.weatherTransition)
+		weather_tween = _start_fade("weather_opacity", weather_target, rules.weatherTransition, weather_tween, weather_transition)
 	var radius := ScopeState.radius_vmin(state.fire_fog, state.weather_fog)
 	var inner := maxf(float(rules.weatherInnerMinimum), radius - float(rules.weatherInnerInset))
 	var stops := ScopeState.weather_stops(state.weather_fog)
@@ -55,6 +59,9 @@ func update_view(state: ScopeState, scoped: bool) -> void:
 	shader_material.set_shader_parameter("fire_blur", roundf(state.fire_fog * float(rules.blurPixels) * 100) / 100)
 	visible = scoped or fire_opacity > 0 or weather_opacity > 0 or fire_target > 0 or weather_target > 0
 
+func _start_fade(property: String, target: float, seconds: float, previous: Tween, transition: Dictionary) -> Tween:
+	return preload("res://scripts/css_transition.gd").start(self, property, target, seconds, previous, transition, HurtFlashState._ease_out)
+
 func clear() -> void:
 	if fire_tween != null:
 		fire_tween.kill()
@@ -64,4 +71,6 @@ func clear() -> void:
 	weather_opacity = 0
 	fire_target = 0
 	weather_target = 0
+	fire_transition.clear()
+	weather_transition.clear()
 	hide()

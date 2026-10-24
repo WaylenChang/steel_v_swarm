@@ -21,6 +21,7 @@ import { captureMarineShader } from './marine_shader_capture.mjs';
 import { captureOutlineUniforms } from './outline_capture.mjs';
 import { createCelCapture } from './cel_capture.mjs';
 import { minimapCanvasSize } from './minimap_references.mjs';
+import { instrumentWorldTextCapture, captureWorldTextMesh } from './world_text_capture.mjs';
 import { createHash } from 'node:crypto';
 
 // Source execution is confined to migration; saved meshes and collision metadata run natively.
@@ -49,7 +50,7 @@ for (const name of ['public/index.html', 'server/sim.js', 'tools/elevation_fixtu
 }
 for (const name of (await readdir(join(source,'out/forest_review'))).filter(name=>name.endsWith('.js')).sort())
   sourceInputs['out/forest_review/'+name] = sha256(await readFile(join(source,'out/forest_review',name)));
-const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString());
+const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString() + '\n' + instrumentWorldTextCapture.toString() + '\n' + captureWorldTextMesh.toString());
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const campaignMaps = JSON.parse(await readFile(join(root, 'data/campaign.json'), 'utf8')).maps;
@@ -75,6 +76,7 @@ const mosaicOf = new Function(`${grabFn(elevationSource, 'makeMosaic')}\nreturn 
 const projection = elevationSource.slice(elevationSource.indexOf('const d2r ='), elevationSource.indexOf('const sha256 ='));
 const sampler = new Function(`${projection}\n${grabFn(elevationSource, 'sampleMosaic')}\nreturn sampleMosaic;`)();
 const biomesSource = readSrc('public', 'js', 'biomes.js');
+const offlineWorldTextSource = instrumentWorldTextCapture(readSrc('public','js','worldtext.js'));
 const trainRules = readTrainRules(biomesSource,await readFile(join(source,'out/forest_review/three.module.js'),'utf8'));
 const trainSeam = 'let s = Math.random() * line.total, dirn = 1;';
 if (!biomesSource.includes(trainSeam)) throw new Error('Original train initialization seam missing');
@@ -176,6 +178,7 @@ await mkdir(join(root, 'data/worlds'), { recursive: true });
 let worldMeshWriter=null;
 try {
   const page = await browser.newPage();
+  await page.addInitScript({content:'globalThis.__sourceWorldTextCapture = ('+captureWorldTextMesh.toString()+');'});
   let worldSections = Object.create(null);
   await page.exposeFunction('__sourceWorldMesh', async (operation,index,offset,json) => {
     if(!Number.isInteger(index)||index<0||!Number.isInteger(offset)||offset<0||typeof json!=='string')
@@ -222,6 +225,7 @@ try {
     if (url.endsWith('/__godot_bake')) return route.fulfill({ contentType: 'text/html', body:
       '<html><head><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script></head></html>' });
     if (url.endsWith('/js/biomes.js')) return route.fulfill({ contentType: 'text/javascript', body: offlineBiomesSource + worldAdapter });
+    if (url.endsWith('/js/worldtext.js')) return route.fulfill({ contentType: 'text/javascript', body: offlineWorldTextSource });
     if (url.endsWith('/js/ground.js')) return route.fulfill({ contentType: 'text/javascript', body: offlineGroundSource });
     if (url.endsWith('/js/partMotion.js')) return route.fulfill({ contentType: 'text/javascript', body: motionSources.parts });
     if (url.endsWith('/js/wildlifeRender.js')) return route.fulfill({ contentType: 'text/javascript', body: wildlifeSources.render });
@@ -478,6 +482,8 @@ try {
         };
         const captureMesh = (object, label, terrainMesh = false, flags = {}) => {
           if (!object.isMesh || !object.geometry?.attributes?.position) return;
+		  const worldText=globalThis.__sourceWorldTextCapture(object);
+		  if(worldText)flags.sourceWorldText=worldText;
 			if(object.isInstancedMesh&&object.geometry.attributes.seaFade)
 				throw new Error('Original instanced water needs its exact instance-aware shader capture');
           object.updateWorldMatrix(true, false);

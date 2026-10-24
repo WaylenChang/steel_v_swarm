@@ -10,7 +10,7 @@ func _run() -> void:
 		push_error("Aquatic point raster certification requires a rendered Godot session")
 		get_tree().quit(1)
 		return
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+	var fixtures: Dictionary = _captured_fixtures() if OS.get_cmdline_user_args().has("--source-capture") else Content.read_json("res://data/fixtures.json")
 	if not fixtures.has("aquaticPointRasters"):
 		push_error("Regenerate original PointsMaterial WebGL raster references")
 		get_tree().quit(1)
@@ -57,3 +57,24 @@ func _run() -> void:
 		viewport.free()
 	print("AQUATIC_RENDER_PASS" if failures == 0 else "AQUATIC_RENDER_FAIL", " cases=", fixtures.aquaticPointRasters.size(), " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
+
+func _captured_fixtures() -> Dictionary:
+	var capture: Dictionary = Content.read_json("res://tests/fixtures/aquatic_points.json")
+	if capture.get("formatVersion") != 1 or not capture.get("source") is Dictionary or not capture.get("fixtures") is Dictionary:
+		push_error("Capture original aquatic point rasters before native verification")
+		return {}
+	if not capture.source.get("inputs") is Dictionary or capture.source.inputs.is_empty() or not capture.source.get("sourceInputs") is Dictionary or capture.source.sourceInputs.is_empty() \
+			or not capture.fixtures.get("aquaticPointRasters") is Array or capture.fixtures.aquaticPointRasters.is_empty():
+		push_error("Aquatic point capture requires source identities and nonempty raster cases")
+		return {}
+	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
+	for path: String in capture.source.inputs:
+		var text := FileAccess.get_file_as_string("res://" + path).replace("\r\n", "\n").replace("\r", "\n")
+		if text.sha256_text() != capture.source.inputs[path]:
+			push_error("Stale aquatic point capture input: " + path)
+			return {}
+	for path: String in capture.source.sourceInputs:
+		if provenance.get("inputs", {}).get(path) != capture.source.sourceInputs[path]:
+			push_error("Aquatic point source differs from imported metadata: " + path)
+			return {}
+	return capture.fixtures

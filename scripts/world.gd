@@ -98,6 +98,7 @@ func sync_airdrops(states: Array, now: float) -> void:
 		return
 	if airdrop_visuals == null:
 		airdrop_visuals = AirdropPresentation.new()
+		airdrop_visuals.wall_clock = BodyPresentation.time_now
 		add_child(airdrop_visuals)
 	var poses: Array = []
 	for state: Dictionary in states:
@@ -136,6 +137,7 @@ func sync_loots(states: Array, now: float) -> void:
 		return
 	if loot_visuals == null:
 		loot_visuals = LootPresentation.new()
+		loot_visuals.wall_clock = BodyPresentation.time_now
 		add_child(loot_visuals)
 	loot_visuals.sync(states, now)
 

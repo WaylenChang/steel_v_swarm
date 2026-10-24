@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {join,resolve,sep} from 'node:path';
 import {createHash} from 'node:crypto';
-import {captureSynthStems} from './audio_synth_capture.mjs';
+import {captureSynthStems,captureFilterImpulses} from './audio_synth_capture.mjs';
 import {audioMoveReferences} from './audio_move_references.mjs';
 import {captureMoveBank} from './audio_move_capture.mjs';
 
@@ -31,7 +31,7 @@ export async function captureAudioClips(page,source) {
       return {id,url,index,missing:true};
     }
   })));
-  const result=await page.evaluate(async({body,files,synthStemSource,moveGraphs,moveBankSource})=>{
+  const result=await page.evaluate(async({body,files,synthStemSource,filterSource,moveGraphs,moveBankSource})=>{
     const api=new Function('setInterval','clearInterval',body+'\nreturn {GameAudio,SFX_MANIFEST};')(()=>0,()=>{});
     const musicConfigurations=[];
     for(const mood of ['menu','battle']){
@@ -146,7 +146,8 @@ export async function captureAudioClips(page,source) {
       const minimumFrames=Math.ceil(counts[0]*sampleRate);
       probes.push({id,gain,reservationSeconds:counts[0],graph:{nodes,connections,centered:nodeIds.get(centered)},...pcm(rendered,minimumFrames)});
     }
-    const synth=await new Function('return ('+synthStemSource+');')()(api,probes,noise,sampleRate,moveGraphs);
+    const captureFilters=new Function('return ('+filterSource+');')();
+    const synth=await new Function('return ('+synthStemSource+');')()(api,probes,noise,sampleRate,moveGraphs,captureFilters);
     const move=await new Function('return ('+moveBankSource+');')()(moveGraphs,noise);
     const music=[];
     for(const configuration of musicConfigurations){
@@ -177,7 +178,7 @@ export async function captureAudioClips(page,source) {
     const noiseValues=noise.getChannelData(0),noiseBytes=new Uint8Array(noiseValues.length*4),noiseView=new DataView(noiseBytes.buffer);
     noiseValues.forEach((value,index)=>noiseView.setFloat32(index*4,value,true));
     return {sampleRate,samples,failures,music,synth,move,synthProbes:probes,noise:{sampleRate,frames:noiseValues.length,encoding:'float32le',data:base64(noiseBytes)}};
-  },{body,files,synthStemSource:captureSynthStems.toString(),moveGraphs:audioMoveReferences(script).graphs,moveBankSource:captureMoveBank.toString()});
+  },{body,files,synthStemSource:captureSynthStems.toString(),filterSource:captureFilterImpulses.toString(),moveGraphs:audioMoveReferences(script).graphs,moveBankSource:captureMoveBank.toString()});
   result.noise.sha256=createHash('sha256').update(Buffer.from(result.noise.data,'base64')).digest('hex');
   return {...result,formatVersion:1,source:{audioSha256:createHash('sha256').update(script).digest('hex')},
     inputs:files.filter(file=>!file.missing).map(file=>'public/'+file.url)};

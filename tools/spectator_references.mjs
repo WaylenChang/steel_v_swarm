@@ -2,7 +2,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 // Execute original spectator methods; native physics owns the supplied pull ray.
-export async function spectatorReferences(d, source, gameSource, heroView) {
+export async function spectatorReferences(d, source, gameSource, heroView, {captureRotation=false,extraAngles=[]}={}) {
   const {grabMethod} = await import(pathToFileURL(join(source, 'tools/audit_src.mjs')).href);
   const THREE = await import(pathToFileURL(join(source, 'out/forest_review/three.module.js')).href);
   const text = gameSource.replace(/\r\n?/g, '\n');
@@ -40,7 +40,8 @@ export async function spectatorReferences(d, source, gameSource, heroView) {
     const ctx = Object.assign(Object.create(proto), {
       side: null, yaw: 0, pitch: rules.startPitch, keys: {},
       pos: new THREE.Vector3(0, Math.min(rules.startHeight, ceiling), 0),
-      camera: {position: new THREE.Vector3(), fov: 68, rotation: {set() {}}, rotateY() {}, rotateX() {}, updateProjectionMatrix() {}},
+      camera: captureRotation?new THREE.PerspectiveCamera(68,1,.1,10000):
+        {position: new THREE.Vector3(), fov: 68, rotation: {set() {}}, rotateY() {}, rotateX() {}, updateProjectionMatrix() {}},
       _specView: d.SPEC_CAM.VIEWS[0], _specPid: null, _specHid: null,
       _specFov: 68, _specAnchor: new THREE.Vector3(), _specAnchorOk: false, _specYaw: 0,
       ents: entities, hud: {feed: value => messages.push(value)},
@@ -86,7 +87,7 @@ export async function spectatorReferences(d, source, gameSource, heroView) {
         ctx.keys = {Space: !!operation.up, KeyC: !!operation.down, ControlLeft: !!operation.ctrl};
         ctx._updateSpectator(operation.delta);
       }
-      steps.push({operation, result: record()});
+      steps.push({operation, result: record(),...(captureRotation?{cameraRotation:ctx.camera.quaternion.toArray()}:{})});
     }
     programs.push({label, initial, steps});
     return ctx;
@@ -141,6 +142,9 @@ export async function spectatorReferences(d, source, gameSource, heroView) {
   for (const side of ['', ...Object.keys(d.SIDES)]) run('snapshot without character: ' + side, {}, [
     {add: actor('17', side, [0, 5, 0], {ch: ''})}, {mode: 'fpv'}, {delta: .016},
     {update: {pid: '17', heroY: d.SPEC_CAM.FLY_M + 1}, delta: .016}, {mode: 'tps'}, {delta: .016},
+  ]);
+  for(const yaw of extraAngles)run('large free-camera orientation: '+yaw,{},[
+    {yaw,pitch:-.7,delta:0},{delta:.016},{pitch:.4,delta:.1},{yaw:-yaw,delta:0},
   ]);
   // Obtain localized templates by executing original notices with a name seam.
   const templateMessages = [];

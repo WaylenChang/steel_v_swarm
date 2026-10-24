@@ -18,7 +18,7 @@ func configure(battle: BattleSimulation) -> bool:
 	near = Content.balance.cameraRules.near
 	var bounds: Dictionary = simulation.world.bounds
 	far = maxf(float(bounds.maxX) - float(bounds.minX), float(bounds.maxZ) - float(bounds.minZ)) * float(rules.farFactor)
-	global_transform = Transform3D(Basis.from_euler(Vector3(state.pitch, state.yaw, 0), EULER_ORDER_YXZ), state.position)
+	_apply_pose(state.position)
 	make_current()
 	refresh()
 	return true
@@ -56,9 +56,14 @@ func advance(delta: float, angles: Vector2, axis: Dictionary, rising: bool, desc
 	var pull := func(start: Vector3, end: Vector3) -> Vector3: return CameraPose._pull(start, end, collision, world.visual_surface)
 	for command: Dictionary in state.advance(delta, rows.values(), axis, rising, descending, world.visual_surface, world.ceiling, pull):
 		_visibility(command.actor, command.visible)
-	global_transform = Transform3D(Basis.from_euler(Vector3(state.pitch, state.yaw, 0), EULER_ORDER_YXZ), state.camera_position)
+	_apply_pose(state.camera_position)
 	fov = state.camera_fov
 	return Vector2(state.yaw, state.pitch)
+
+func _apply_pose(point: Vector3) -> void:
+	var rotation := SourceQuaternion.multiply(SourceQuaternion.axis_angle(Vector3.UP, state.yaw),
+		SourceQuaternion.axis_angle(Vector3.RIGHT, state.pitch))
+	global_transform = Transform3D(SourceQuaternion.basis(rotation), point)
 
 func _visibility(row: Dictionary, shown: bool) -> void:
 	var unit: Variant = row.get("unit")

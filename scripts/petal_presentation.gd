@@ -62,7 +62,8 @@ func advance(delta: float, dynamics: Dictionary) -> void:
 		var position := Vector3(float(part.cx) + float(part.ox), float(base) + float(part.oy) if visible else 0, float(part.cz) + float(part.oz))
 		var rotation := SourceQuaternion.axis_angle(Vector3(part.ax, part.ay, part.az), part.ang)
 		if float(part.get("groundTime", 0)) > 0:
-			rotation = WeaponPresentation.source_rotation({"rotation": [-PI / 2, 0, part.a], "order": "XYZ"})
+			rotation = SourceQuaternion.multiply(SourceQuaternion.axis_angle(Vector3.RIGHT, -PI / 2),
+				SourceQuaternion.axis_angle(Vector3.BACK, float(part.a)))
 		var fade: Variant = part.get("fade")
 		var size := float(part.sz) * (1.0 if fade == null else float(fade)) if visible else 0.0
 		var transform := Transform3D(SourceQuaternion.basis(rotation).scaled_local(Vector3(size * float(motion.rules.ASPECT), size, size)), position)

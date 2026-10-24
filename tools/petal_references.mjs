@@ -2,7 +2,8 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {instrumentPetalCapture,capturePetalBundle} from './petal_capture.mjs';
 
-export async function petalReferences(source) {
+export async function petalReferences(source, {groundedSpin=null,seasons=['spring','summer','autumn','winter'],
+  modes=['flat','slope','wet','missing','empty','dense']}={}) {
   const load = path=>import(pathToFileURL(join(source,path)).href);
   const {readSrc,grabFn} = await load('tools/audit_src.mjs');
   const THREE = await load('out/forest_review/three.module.js');
@@ -10,7 +11,7 @@ export async function petalReferences(source) {
   const original = readSrc('public','js','biomes.js'), instrumented = instrumentPetalCapture(original,grabFn);
   const code = new Function('WATER',grabFn(original,'terrainEnvCode')+'\nreturn terrainEnvCode;')(data.WATER);
   const programs = [];
-  for (const season of ['spring','summer','autumn','winter']) for (const mode of ['flat','slope','wet','missing','empty','dense']) {
+  for (const season of seasons) for (const mode of modes) {
     if(mode==='dense'&&season!=='summer')continue;
     const group = new THREE.Group(), calls = [];
     const height = (x,z)=>mode==='missing'&&x>0?NaN:mode==='slope'?x*.02+z*.01:mode==='wet'?(x>0?-3:data.WATER.SWAMP_BAND+1):0;
@@ -35,6 +36,8 @@ export async function petalReferences(source) {
       build(root,terrain,items,season,petals.petalSeason(season),callbacks,42,low);
       calls.push({root,callbacks});
     }
+    if(groundedSpin!==null)for(const {root} of calls)for(const part of root.userData.nativePetals.parts)
+      Object.assign(part,{a:groundedSpin,y:0,groundTime:1,fade:1,lifted:false,wasGrounded:false});
     const bundle = capturePetalBundle(group).petals;
     const snapshot = () => calls.map(({root})=>{
       const source = root.userData.nativePetals;
@@ -54,7 +57,7 @@ export async function petalReferences(source) {
       frames.push({delta:Number.isFinite(delta)?delta:null,deltaKind:Number.isNaN(delta)?'nan':delta===Infinity?'infinity':'finite',
         weather:{...weather},variants:snapshot()});
     }
-    programs.push({season,mode,source:bundle,initial,frames});
+    programs.push({season,mode,source:bundle,initial,frames,...(groundedSpin===null?{}:{groundedSpin})});
   }
   const planned = petals.planPetalFields(Array.from({length:4},(_,i)=>({x:20+i,z:20+i,top:2,r:8})),
     {mode:'leaf',groundAt:()=>0,dryAt:()=>true},petals.petalRnd(123));

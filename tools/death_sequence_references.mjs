@@ -27,7 +27,7 @@ export function captureDeathSequences({THREE,d,BattleClient}) {
   try {
     for(const flying of [false,true])for(const height of [.2,5,50,5000])for(const deferred of [false,true])for(const cancel of [false,true]) {
       let draws=0,pendingCut=null,stop=0;calls=[];
-      Math.random=()=>random[(draws++)%random.length];
+      Math.random=previous;
       const position=[12,20,-9].map(Math.fround),eye=[12,20+height,-9].map(Math.fround),velocity=[30,8,-12].map(Math.fround),angles=[.17,-.6,.08].map(Math.fround);
       const camera=new THREE.PerspectiveCamera();camera.position.fromArray(eye);
       camera.rotation.set(angles[0]+.03,angles[1]-.02,angles[2]+.01,'YXZ');camera.updateMatrixWorld(true);
@@ -44,6 +44,8 @@ export function captureDeathSequences({THREE,d,BattleClient}) {
         _wipeCut(callback,color){record('cut',null,{color});if(deferred)pendingCut=callback;else callback();}};
       Object.defineProperty(client,'_hitstop',{get:()=>stop,set:value=>{stop=value;record('hitstop',null,{seconds:value});}});
       const input={position,eye:camera.matrixWorld.toArray(),velocity,angles,flying,color:0x4fc3f7};
+      // Input-camera UUID allocation is setup, outside the executed death methods.
+      Math.random=()=>random[(draws++)%random.length];
       initialize.call(client,...Object.values(scope));
       const initial={...snapshot(client),calls:structuredClone(calls),queries:structuredClone(queries),draws};
       const steps=[];

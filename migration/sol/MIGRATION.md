@@ -39,6 +39,44 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   constructor-time power/density budgets, route/habitat admission and per-instance
   resource isolation. Finish original starting-time-dependent scenery selection;
   do not regenerate populations on a later preference change.
+  Preserve source double Euler state and evaluate unbounded rotor spin before
+  native Float32 storage, retaining the original YXZ order and wind reversal.
+  `node tools/scenery_rotor_capture.mjs` and real-driver
+  `tests/scenery_rotor.tscn` cover original part/edge/waterfall frame programs,
+  large fractional rotor phases and long wind reversals. Their synthetic geometry
+  isolates motion; these checks do not qualify scenery meshes or populated worlds.
+  `node tools/train_motion_capture.mjs` and real-driver
+  `tests/train_motion.tscn` retain the original train-driver programs plus the
+  captured Berlin autumn routes, including native PackedScene disk reload.
+  Preserve their source/path fingerprints and existing transform tolerances;
+  route replay does not certify train model geometry, random constructor-phase
+  selection or complete seasonal-world retention.
+  Wildlife construction retains source `write(0, weather)` and constructor
+  activity, then advances its own staggered route states; do not substitute an
+  elapsed wind clock at construction or rebuild populations for live preferences.
+  `node tools/wildlife_native_capture.mjs` and real-driver
+  `tests/wildlife_native.tscn` cover original habitat/motion programs, capacity
+  prefixes, full/low budgets, constructor activity boundaries and saved instance
+  buffer isolation. Synthetic probe geometry does not qualify original animal
+  meshes, rendered habitats or complete seasonal population/transport retention.
+  Aquatic school headings retain an unbounded source double angle; derive the
+  quaternion before native storage. `node tools/aquatic_native_capture.mjs` and
+  real-driver `tests/aquatic_native.tscn` cover original bubbles, detritus, fish,
+  jellies, vessel/wake frames and private buffers, including large environment
+  clocks. Their probe geometry does not qualify source model pixels or full worlds.
+  `node tools/aquatic_point_capture.mjs` captures original PointsMaterial pixels
+  through locally fulfilled, fingerprinted source modules. Run real-driver
+  `tests/aquatic_render.tscn -- --source-capture` for the independent six-case
+  oracle; the default shared-fixture guard remains unchanged. Preserve the failed
+  point-pixel gate until the shared shader contract below is accepted.
+  Petal landing uses original XYZ orientation with a fixed horizontal tilt and
+  the accumulated double orbit phase; do not quantize that phase before evaluating
+  its quaternion. `node tools/petal_native_capture.mjs` and real-driver
+  `tests/petal_native.tscn` retain seasonal/prewarm budgets, grounding/fade/re-lift,
+  directed invalid-input boundaries and original render matrices. Large seeded
+  phase cases also compare normalized orientation independently of tiny petal
+  scale. Declared crown/quad probes do not qualify original foliage/flower meshes,
+  material pixels or complete seasonal world composition.
 - [ ] **S5 — Environment appearance:** finish cloud/fog-bank detail,
   precipitation, celestial bodies, deposits/scorch, contact effects,
   shoreline/underwater/waves/reflections and
@@ -78,6 +116,9 @@ node tools/bake_worlds.mjs --list-bundles
 ./tools/migrate_worlds.ps1 -Godot C:/path/to/godot_console.exe -Bundle berlin_1_autumn
 godot --headless --path . res://tests/worlds.tscn -- --bundle=berlin_1_autumn
 node --test tests/world_source.test.mjs tests/world_selection.test.mjs
+godot --headless --path . res://tests/world_storage.tscn
+godot --headless --path . res://tests/room_world_lifecycle.tscn
+godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy res://tests/seasonal_prebuild.tscn -- --bundle=berlin_1_autumn
 ```
 
 The selected bundle is an example, not a substitute for completing the manifest.
@@ -128,6 +169,32 @@ Relevant existing checks include `audio_*_suite.gd`,
 `tests/audio_pan_render.tscn` and `tests/audio_move_render.tscn`. Source capture
 and native sample checks do not replace audible/mixer/transport acceptance.
 
+Audio workflow, from the repository root:
+
+```powershell
+node tools/audio_mixer_references.mjs C:/path/to/steel_vs_swarm
+node tools/audio_lifecycle_references.mjs C:/path/to/steel_vs_swarm
+godot --headless --path . res://tools/import_audio.tscn
+godot --headless --path . res://tests/audio_resources.tscn
+godot --headless --path . res://tests/audio_lifecycle.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_loop_loading.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_pan_render.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_move_render.tscn
+```
+
+`data/audio_mixer.json` is a dedicated Sol oracle, independent of the shared
+fixture registry. Regenerate it after changing its source captures or generators;
+its tool fingerprints normalize text line endings. Mixer capture covers the
+active device rate; captured reference rates alone do not certify other native
+device rates, codec/resampling behavior, audible output or populated transports.
+Native audio publication must keep using the atomic resource publisher.
+`data/audio_lifecycle.json` retains the original streamed-state, ambience-envelope,
+movement and location/source-selection oracles. It does not include the shared
+music envelope adapter. Retiring a pending audio player must not wait for decode;
+drain the request without capturing the retired node or consuming another
+player's completion. Keep imported loop properties immutable and retain each
+player's position when pausing/resuming.
+
 ## Owner controls, camera and minimap presentation
 
 - [ ] **S11 — Personal input state:** certify preference restoration, look and
@@ -142,6 +209,25 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   death/respawn transitions. Preserve source unknown observer resources. Models
   owns occlusion/rig geometry; Opus owns authority heading, acknowledgements and
   populated LOS/target contract changes.
+  Fog opacity must retain the original CSS ease-out curve and reversal-shortened
+  durations, including repeated reversals, unchanged targets and zero-progress
+  cancellation. Native tween writes must reach shader uniforms in the same frame.
+  `node tools/scope_transition_capture.mjs` and real-driver
+  `tests/scope_transition.tscn` compare original browser transitions and native
+  uniforms; these checks do not certify scope gradient/blur pixels or complete
+  frame-order, freeze/death and populated view integration.
+  `node tools/scope_raster_capture.mjs` and real-driver `tests/scope_raster.tscn`
+  retain original CSS/HUD callback composition over controlled browser backgrounds.
+  Keep the strict raster failures and exact byte witnesses in `build/scope_raster/`;
+  transition-state success cannot discharge the shared ring-color, backdrop-blur
+  and raster-comparator contracts below.
+  Spectator pose writes preserve the original Y-then-X rotation from double
+  angles before native storage. `node tools/spectator_native_capture.mjs` and
+  real-driver `tests/spectator_native.tscn` retain original camera/state/HUD
+  programs, actual Three camera quaternions and native exit ownership probes.
+  Unknown remote magazines and movement resources remain null. These checks do
+  not qualify populated ray queries, actor pixels, recipient publication or the
+  shared main-to-camera angle transfer contract below.
 - [ ] **S13 — Minimap:** certify full/vicinity windows, warmup/draw deadlines,
   original baked pixels, lane grades/dash/miter rules, labels, remembered bunkers,
   neutral exclusions and public entity markers. Finish persistent exploration,
@@ -149,17 +235,37 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   SubViewport composition against browser raster sequences. World blocker query
   semantics and recipient vision remain Opus-owned. Relevant checks include
   `minimap_*_suite.gd` and `tests/minimap_fog_render.tscn`.
+  `node tools/minimap_native_capture.mjs` and real-driver
+  `tests/minimap_native.tscn` retain original window/marker/cadence/lane/vision
+  programs and atlas ownership. Run real-driver
+  `tests/minimap_fog_render.tscn -- --source-capture --full-raster` for complete
+  composition and persistent-mask sequences. The existing probe tolerance remains
+  four bytes; probe-only success does not discharge the full-image gate.
+  Diagnostics are retained under `build/minimap_fog/`. Controlled canvas inputs
+  do not qualify the actual baked terrain base or populated recipient/query state.
 - [ ] **S14 — PiP:** certify original companion/decoy selection, stable order,
   ownership/death/lost-link gates, low-power limits, layout and camera offsets.
   Shared-world views must hide only their source body/cockpit while rendering,
   restore masks before copies and stop inactive viewports. Finish pixel,
   frame-order, performance and populated lifecycle/transport acceptance.
-- [ ] **S15 — Local feedback:** certify optimistic cast/defense state,
-  immutable rounded control publication, rising-edge notices, shared fire/cast
-  warning clocks and replay rejection. Preserve zero-charge/zero-cooldown source
-  eligibility and silent rejection gates. Complete owner movement/reaction and
+  Visibility loss through either the control or its ancestors, detachment and
+  retirement must immediately disable updates, release the shared world and
+  restore temporary layers. Reattachment requires fresh selection before drawing.
+  `node tools/pip_capture.mjs` and real-driver `tests/pip_native.tscn` retain
+  original selection/render decisions, layout and native lifecycle/pixel-isolation
+  checks. Primary-color probes isolate camera masking; they do not substitute
+  source model pixels, full-scene composition or populated transport acceptance.
+- [ ] **S15 — Local feedback:** finish integrated immutable rounded control
+  publication, rising-edge notices and replay rejection. Keep the source
+  eligibility, silent rejection, optimistic cast/defense and shared fire/cast
+  clock contracts covered by `tests/local_controls.tscn` and
+  `tests/audio_lifecycle.tscn`. Complete owner movement/reaction and
   unbalance-notice binding from actual flight/sinking state, without inventing
   authority timers or client-side resource settlement.
+
+Local-feedback references are captured with `node tools/local_controls_capture.mjs`
+and `node tools/audio_lifecycle_references.mjs`. Run the corresponding native
+scenes before integrated acceptance; neither scene certifies populated snapshots.
 
 ## Projectile and screen effects
 
@@ -168,13 +274,19 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   callbacks and private versus public shot cadence. Preserve pre-fire initial
   emitters, compressed reverse-order bursts, source crowding limits and contact
   star gates. Complete moving-shot interpolation, terminal owner-shell retirement,
-  stale/same-clock snapshot suppression, geographic collision and immediate
+  geographic collision and immediate
   impact/prediction timing. These effects never repeat damaging settlement.
+  Keep owner-pose clocks monotonic and terminal deadlines nondecreasing;
+  `tests/projectile_lifecycle.tscn` covers stale/equal-clock packets before and
+  after terminal-guard reclamation. Populated transports still require acceptance.
 - [ ] **S17 — Impact/particles:** certify muzzle/contact/explosion layers,
   source fire/smoke/embers, texture/opacity/depth rules, pooling/oldest-first
   budgets, victim first-observation/healing/re-entry gates and guard peak rules.
-  Finish original mechanical debris/comic-pop producers, bounce/shrink and
-  ordered death/eviction behavior across both quality modes.
+  Finish original mechanical-debris random ordering, lossless instance colors,
+  source comic texture import, bounce/shrink and ordered death/eviction behavior
+  across both quality modes. `node tools/destruction_capture.mjs` captures the
+  original particle states/textures; `tests/destruction_native.tscn` retains the
+  strict native checks (`-- --comic` or `-- --mechanical` selects one family).
   Body-bound damage/guard materials are a Models contract; event producers are Opus.
 - [ ] **S18 — Hit/death screen presentation:** certify hitstop order, damage
   bearings, immutable blood/glint drops, CSS decimal/gradient/blur composition,
@@ -183,11 +295,26 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   whiteout raster, shop layering, configurable wipe behavior and blast feedback
   timing. Authority impulses and death reports remain Opus-owned. Use
   `tests/splat_render.tscn`, `tests/death_render.tscn` and affected transport cases.
+  Preserve source camera setup outside measured death-method RNG consumption.
+  `node tools/death_overlay_capture.mjs` captures camera states and CSS;
+  `tests/death_native.tscn` checks component state without replacing shared camera
+  ownership/respawn integration. Run `tests/death_render.tscn -- --source-capture`
+  on the real driver for independently fingerprinted CSS raster acceptance.
 - [ ] **S19 — Loot/fields/missiles:** certify native airdrop descent/landing,
   loot/relay/threat effects, cube/fog presentation, interpolated missile views,
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
   source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
+  Keep loot bob/airdrop descent on the local wall clock, independent of incoming
+  authority clocks; creation and frame updates must use that same time base while
+  rotation still consumes the source frame delta. Accumulate rotation in double
+  state instead of feeding Node3D Float32 Euler values back into later updates.
+  Derive quaternions before native storage so large source angles do not lose
+  their fractional phase. Validate exact source IEEE-754 phase/delta bits and
+  rendered orientation rather than canonicalized native Euler representations.
+  `node tools/loot_clock_capture.mjs`
+  and real-driver `tests/loot_clock.tscn` cover the original methods and world
+  binding, not complete loot geometry or populated pickup/transport settlement.
 - [ ] **S20 — Campaign presentation:** certify original crawl/pan/zoom/skip,
   portrait/art fallbacks, UTF-16 radio timing, stable portrait ties, timer
   cancellation, transitions and victory transcript/replay. Campaign maps and
@@ -273,8 +400,9 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   Keep PNG alpha-border processing out of that resource. Its isolated SubViewport
   and premultiplied texture opacity must also work inside the outer presentation
   group; `tests/campaign_hold_render.tscn -- --nested-presentation` retains that
-  composition gate. Run `tests/campaign_hold_render.tscn` for the seven original
-  pixel cases;
+  composition gate. Scope and hold consumers
+  share `CssTransition`, with `tests/scope_transition.tscn` retaining its source
+  oracle. Run `tests/campaign_hold_render.tscn` for the seven original pixel cases;
   static/group controls pass but dynamic native SVG stroke coverage remains an
   open shared-renderer contract below. Do not certify full cinematic pixels,
   fractional/DPI placement, hardware input, export or performance from these probes.
@@ -353,6 +481,22 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   low-power effect/audio consumers. Verify source constructor versus live-update
   boundaries, persistence and whole-scene rendering. Shared main-scene/renderer
   wiring and shader changes require exact Opus handoffs.
+  `node tools/visual_preferences_capture.mjs` and
+  `tests/visual_preferences.tscn` retain source preference transactions, native
+  ConfigFile reload and scalar marine uniform/reflection contracts. Preserve
+  initialized shader-default baselines when testing material isolation; lazy
+  real-driver compilation is not a material mutation. These checks do not
+  establish whole-water pixels, signage rebuilds or dynamic resolution behavior.
+  World captures retain per-mesh `sourceWorldText` constructor profiles, accepted
+  copies/styles, atlas size, admission/drop counts and exact vertex glow. Native
+  mesh resources retain the matching `source_world_text` metadata and existing
+  `source_cel_geometry` frame; prefab sign-item coordinates remain local to that
+  frame. Language/profile reconstruction remains unavailable until source
+  candidate selection and font/atlas behavior are implemented. Do not substitute
+  generic Label3D text, invented translations or a global atlas-quality setting.
+  Run `tests/world_text_capture.test.mjs` for capture/storage contracts and
+  real-driver `tests/world_text_import.tscn -- --non-glowing` for native reload.
+  The default scene is an explicit unsupported-glow rejection (expected exit 1).
 
 ## Integration and handoffs
 
@@ -362,6 +506,169 @@ switches for `-Loading`, `-Mobile`, `-Controls`, `-View`, `-Tps`, `-Pips`,
 `-Minimap`, `-Projectiles`, `-Deaths` and `-Blasts`; invoke one switch per run.
 Cross-owner changes stay as exact requests in this file until their owner pulls
 them. Remove completed items; no dated checkpoints or copied validation history.
+
+### Local execution constraints
+
+- In this worktree, source tools need
+  `$env:SVS_SOURCE='C:/Users/user/Documents/app/steel_vs_swarm'`; the default
+  sibling source checkout does not exist. The required/output presence inventory
+  is [world-inventory.json](../../artifacts/sol/world-inventory.json). Presence
+  does not establish source fingerprints, dependency integrity or native parity.
+- Godot 4.7.2 is available at
+  `C:/Users/user/AppData/Local/Temp/steel-v-swarm-godot/Godot_v4.7.2-stable_win64_console.exe`.
+  Set process-local `APPDATA` to this worktree's `build/sol-user` and
+  `LOCALAPPDATA` to `build/sol-local` for isolated test preferences and caches.
+- Runtime smoke and both loading transports fail on missing seasonal native
+  resources; produce the selected original bundles before repeating populated
+  acceptance. Root-suite failures in other owners' fixtures do not authorize
+  changing their production code or shared reference registries here.
+- `tests/world_storage.tscn` consumes the artifacts generated by
+  `node --test tests/world_source.test.mjs`. Its float64 decode/disk-reload checks
+  do not establish complete world geometry, rendered appearance or delivery.
+
+### Shared-owner contracts required for world/audio acceptance
+
+- **Opus — float vertex colors:** agree the native mesh/shader attribute contract
+  in `scripts/source_cel_*.gd` and `shaders/` before Sol changes
+  `tools/import_worlds.gd` to bind it. Original Berlin autumn `SourceMesh_5`
+  contains active vertex colors up to `1.059999942779541`; Godot `ARRAY_COLOR`
+  stores that value as `1.0`. Preserve source RGB/RGBA values, including signed
+  and HDR channels, without clamping or loosening the verifier. The importer
+  explicitly rejects these active channels until the shared shader accepts
+  lossless storage. Acceptance: regenerate `berlin_1_autumn`, pass original
+  surface-color checks in `tests/worlds.tscn` and source/native pixel comparison.
+- **Opus — cel resource metadata:** resolve the source/native material-table
+  mismatch through `scripts/source_cel_data.gd` or its serialized consumer
+  contract. Acceptance: `SourceCelData.material_source(material)` equals the
+  captured per-surface `cel` declaration after native resource reload;
+  `tests/worlds.tscn -- --bundle=berlin_1_autumn` must retain its exact material
+  checks. The full failure evidence is in `tests/sol-world-qualified.log`.
+- The rejected candidate is retained at
+  `artifacts/sol/unqualified-worlds/berlin_1_autumn.res`, outside normal world
+  selection. Its successful prebuild transfer/lifecycle does not discharge the
+  failed geometry/material qualification. Keep unqualified candidates unavailable.
+- **Opus — shared audio fixtures:** refresh the existing audio routing/state
+  fields in `data/fixtures.json` through `tools/import_source.mjs` and
+  `tools/model_references.mjs`. In particular, `tests/audio_suite.gd` still needs
+  the source `audioEvents`/`audioPan` fields before it reaches its routing,
+  preference and lifecycle checks. Preserve the producers in
+  `tools/audio_references.mjs` and `tools/audio_pan_capture.mjs`; do not invent
+  outputs or relax the entry guard. The independent native resource/mixer scenes
+  use Sol-owned captures and cannot certify the missing shared decision fixtures.
+
+### Shared-owner contracts required for local feedback
+
+- **Opus — spectator angle transfer:** `scripts/main.gd::_advance_spectator`
+  packs double `yaw`/`pitch` into `Vector2` before calling
+  `SpectatorCamera.advance`, then unpacks its Float32 `Vector2` result. Agree a
+  double-preserving producer/consumer contract with Sol before changing the
+  camera API; the native pose writer cannot recover precision already discarded
+  by this boundary. Preserve the source unbounded yaw and input increments, not
+  a wrapped/canonicalized Euler substitute. Acceptance: repeated sub-Float32
+  input increments at a large fractional yaw retain original free/orbit camera
+  motion and orientation, plus existing FPV/TPS follow, zoom, reset and lifecycle
+  behavior. Authority heading and gameplay settlement remain unchanged.
+- **Opus — snapshot acceptance before feedback:** `scripts/session.gd::_snapshot`
+  emits `state_received` even when `scripts/simulation.gd::apply_snapshot`
+  rejects an older clock. `scripts/main.gd::_receive_state` then consumes the
+  rejected control publication, optimistic cast state and presentation clock.
+  Give the producer/consumer one round-scoped acceptance contract before those
+  mutations. Acceptance: after newer freeze/EMP/cast/control edges, an older
+  snapshot and duplicate snapshot cannot rewind state or rearm notices; later
+  valid false/true edges still notify, and a new round accepts its initial clock.
+  Preserve separately delivered tactical events and offline authority snapshots;
+  component-local projectile guards cannot discharge this shared integration.
+- **Opus — owner unbalance notice:** `scripts/actor_snapshot.gd` currently
+  publishes `unbalLeft` but omits the `unbalanced` field consumed by
+  `ControlStatusState` through `scripts/main.gd`. Publish an explicit owner-only
+  boolean using actual flying/dead/drone/altitude/wind/sink/lift-lock state from
+  `scripts/simulation.gd`, following the original client `_unbalanced()`.
+  Use recipient-rounded `unbalLeft` for the status branch, not the raw authority
+  deadline remainder. Existing `MovementRules.flight_unbalanced()` provides the
+  predicate once given that recipient state. Acceptance: grounded/dead and
+  below-threshold drones publish false; airborne sinking/lift-lock/status each
+  independently publish true; exact altitude/lock and rounded-zero status
+  boundaries retain source behavior. Repeated true snapshots emit one notice,
+  false then true emits another, and replayed snapshots emit none. Do not infer
+  this flag from `unbalLeft` alone or add client resource settlement.
+
+### Shared-owner contracts required for particle acceptance
+
+- **Opus — debris source random contract:** the original default
+  `vfx.debrisBurst()` path captured by `tools/destruction_references.mjs` consumes
+  `Math.random` while constructing Three.js groups/materials/instance batches,
+  before sampling chunk parameters. The first normal/small case consumes 73
+  draws versus native `MechanicalDebris`'s 49, shifting the first scale from
+  source `0.5774999856948853` to native `0.498750001192093` and later motion.
+  Publish source-derived allocation/effect draw separation for Sol to consume;
+  do not insert unexplained constant RNG burns or silently shift expected data.
+  Preserve the distinct explicitly injected random callback used by seeded
+  scenery bursts. Acceptance: all default and seeded cases retain their original
+  parameters, draw order, bounce/spin/shrink and independent combat RNG streams.
+- **Opus — lossless debris palette binding:** agree the shared cel shader
+  contract in `shaders/` and `scripts/source_cel_*.gd` before Sol changes the
+  `MechanicalDebris` MultiMesh binding. Current per-instance colors round source
+  float32 `0.0930589661002159` to `0.093017578125` on the real OpenGL driver.
+  Palette indices are exactly representable, but the accepted shader must resolve
+  them to the original float32 palette/accent without half-float color loss.
+  Keep original low-power two-batch/full-power four-batch topology and metal
+  shading. Acceptance: strict matrix/color checks in `tests/destruction_native.tscn`
+  and source/native pixels, including accent zero and both quality modes.
+- **Opus — comic PNG import contract:** `tools/import_source.mjs` publishes
+  `assets/ui/combat-comic-*.png` without source-preserving texture import settings.
+  All 32 captured PNGs match original decoded pixels, while all 32 imported
+  textures differ with `process/fix_alpha_border=true`. The first texture has
+  6,506 changed transparent and 174 changed nonzero-alpha pixels; applying
+  `Image.fix_alpha_edges()` to its original pixels reproduces the imported bytes
+  exactly. Publish the
+  explicit import configuration and reimport through the shared pipeline;
+  leave original PNGs immutable. Acceptance: original captured RGBA bytes equal
+  the imported `Texture2D.get_image()` bytes, then qualify native billboard pixels.
+  Passing sprite scale/opacity/roll/pool state does not discharge this texture gate.
+
+### Shared-owner contracts required for death presentation
+
+- **Opus — source CSS inset-shadow raster:** fix the accepted shader contract in
+  `shaders/death_rim_mask.gdshader`, `shaders/death_rim_present.gdshader` and the
+  shared `shaders/splat_blur.gdshader` before Sol changes their viewport bindings.
+  Current original CSS/native comparisons fail the rim cases at 640x360,
+  360x640 and 128x128, with 44,308 / 53,001 / 5,837 mismatched pixels and maximum
+  premultiplied-channel errors 0.027451 / 0.027451 / 0.023852. Whiteout cases
+  pass at the existing tolerance. Acceptance: all six original raster cases in
+  `tests/death_render.tscn -- --source-capture` pass without loosening
+  `tests/raster_compare.gd`; retain source inset spread, blur, corner coverage and
+  transparent composition. Diagnostics are in `build/death_render/`.
+- **Opus — shared death integration fixture cleanup:**
+  `tests/death_sequence_suite.gd::run` stores a lambda on each RefCounted sequence
+  that captures the same sequence strongly. Clear its callbacks after each case
+  or use an explicitly typed `WeakRef`; retain its `_lifecycle` assertions against
+  `scripts/main.gd` and `scripts/unit.gd`. Acceptance: source sequence checks and
+  camera ownership/early respawn/reset integration pass with no ObjectDB/resource
+  leaks or engine errors at exit. Sol's source-only `tests/death_native.tscn`
+  avoids that cycle but does not certify the omitted shared lifecycle checks.
+
+### Shared-owner contracts required for loot frame integration
+
+- **Opus — capped/hitstop frame delivery:** `scripts/main.gd::_process` obtains
+  the accepted delta from `PresentationFrame.advance`, while the independently
+  processing loot/airdrop nodes receive raw engine deltas. Original
+  `BattleClient` passes its single adjusted `dt` to `_updateLoot` and
+  `_updateAirdrop`, alongside continuous local wall time. Agree one main-to-world
+  frame contract so Sol can expose the matching consumers without double-stepping
+  or introducing another hitstop budget. Acceptance: long stalls retain the
+  source delta cap; hitstop freezes spin but wall-clock bob/descent phases retain
+  original behavior; snapshot bursts never restart either clock. Keep authority
+  simulation time and resource settlement unchanged.
+- **Opus — native loot orientation assertions:** when refreshing shared
+  `lootVisuals` / `airdropVisuals`, update `tests/scene_suite.gd` and
+  `tests/supply_suite.gd` to distinguish source double phase from the native
+  quaternion pose. Node3D canonicalizes Euler representations after quaternion
+  writes, so raw Euler-vector equality is not a valid pose comparison across
+  complete turns. Preserve source phase/delta bits as demonstrated by
+  `tools/loot_clock_capture.mjs`; assert the double phase on presentation state
+  and source quaternion orientation on the actual node. Acceptance includes
+  both short original programs and fractional large-angle states without
+  increasing pose tolerances or changing authority behavior.
 
 ### Shared-owner contracts required for campaign art
 
@@ -429,8 +736,7 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   Acceptance: invalid imports never crash mipmap generation; valid foreground,
   background and portrait paths remain reusable without corrupting cached art.
 
-
-### Shared-owner contracts required for cinematic renderer quality
+### Shared-owner contracts required for renderer quality
 
 - **Opus — cinematic hold stroke coverage:** agree an accepted material in
   `shaders/cinematic_hold.gdshader` before Sol replaces the native SVG binding in
@@ -446,11 +752,82 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   progress/reversal frames, without width/color retuning, a finite baked-progress
   substitute or a looser raster tolerance. Source/native evidence is retained in
   `build/campaign_hold/`; Sol binds the accepted shared renderer in a separate change.
-- **Opus — raster comparator byte boundary:** preserve the two-byte budget in
-  `tests/raster_compare.gd` while comparing opaque RGB8 channels numerically.
-  Frame 7 of `tests/campaign_art.tscn` differs by at most two channel bytes,
-  with zero pixels over that limit, but the normalized Float32 comparison
-  reports 2,240 pixels at `0.0078431386500597`. Keep the strict failure and
-  witness in `build/campaign_art/report.json`; the other twelve first-frame
-  scene comparisons pass. Acceptance includes exact 0/1/2/3-byte differences,
-  transparent premultiplied buffers and the unchanged source/native suites.
+- **Opus — minimap mask raster contract:** agree source-faithful scratch-mask
+  coverage and read/composition materials in `shaders/minimap_*.gdshader` before
+  Sol changes the `MinimapMaskTile`/`MinimapFog` bindings. Native `draw_ellipse`
+  and antialiased Polygon2D masks retain the source geometry but do not yet match
+  original Canvas coverage and persistent source-over accumulation. At the
+  unchanged four-byte tolerance, full composite frames 1–4 differ in
+  422/515/1,610/784 pixels; exploration frames 1–5 differ in
+  456/566/542/842/842 pixels, with maximum alpha difference 220/255. Direct alpha
+  witnesses in `build/minimap_fog/report.json` confirm real coverage differences,
+  independently of RGB premultiplication. Existing point probes still pass.
+  Preserve per-source shadow clipping, hard/soft order, full-map exploration,
+  vicinity resampling, pulse fill, observer bypass and reset. Acceptance: all
+  twenty source/native raster comparisons from the ten-frame sequence in
+  `tests/minimap_fog_render.tscn -- --source-capture --full-raster`, without
+  widening tolerances or replacing persistent masks with a generic reveal.
+- **Opus — original aquatic point compositing:** qualify
+  `shaders/aquatic_points.gdshader` against original Three.js PointsMaterial
+  color/opacity composition, retaining vertex colors, depth, perspective size
+  attenuation and pixel-ratio behavior. All six original cases in
+  `tests/aquatic_render.tscn -- --source-capture` currently fail at the unchanged
+  two-byte tolerance: 392/32/120/6/392/8 pixels, each with maximum channel error
+  44/255. Source/native images are in `build/aquatic_render/`; the capture uses
+  original material construction and source colors, not invented palette values.
+  Acceptance: all six source rasters and native motion/buffer isolation checks,
+  with no source-color retuning or tolerance increase. Point-state equivalence
+  does not qualify point colors, transparency or complete water composition.
+- **Opus — source scope ring color:** `tools/view_references.mjs` currently
+  selects `rgba(ringCss)[0]`, the transparent center stop, as `mask.ringColor`.
+  Consequently `data/balance.json` contains `[0,0,0,0]`, and the native scope
+  has no visible ring. Select the original visible ring stop and verify its
+  repeated declarations agree before publishing through `tools/import_source.mjs`.
+  Original CSS uses `rgba(150,200,230,0.4)` for the two-pixel ring; do not patch
+  imported data or hardcode a replacement in `ScopeOverlay`. Acceptance: native
+  source-config equality and the scoped-clear cases in `tests/scope_raster.tscn`,
+  followed by full ordered fog composition at all three viewport sizes.
+- **Opus — source scope backdrop composition:** finish `shaders/scope_mask.gdshader`
+  against the original CSS Gaussian backdrop filter and layer/group ordering.
+  Source scope mask/ring is z7, then the fire element's backdrop blur and gradient
+  share its opacity at z8, followed by weather fog. Native mip-level sampling and
+  successive opacity mixes are not a qualification of that composition. The
+  unscoped 0.8-fire cases differ in 202,944 / 202,976 / 11,692 pixels at 640x360,
+  360x640 and 128x128, with maxima 15 / 15 / 25 channel bytes. Preserve the source
+  blur amount and scope-edge coverage; do not loosen the existing tolerance.
+  Acceptance: original `tests/scope_raster.tscn` cases, including mixed fire/weather
+  and high-density small scoped views, after the ring-color producer is corrected.
+- **Opus — raster comparator byte boundary:** `tests/raster_compare.gd` compares
+  Color's Float32-normalized channel differences against double `2.0/255`.
+  Opaque weather-only cases 2/8/14 in `build/scope_raster/report.json` have exact
+  RGB8/RGBA8 differences no greater than two bytes, yet report 107/102/8 failed
+  pixels because the normalized difference reaches `0.00784316658973694`.
+  Preserve the two-byte tolerance and transparent premultiplied semantics while
+  making the boundary numerically faithful. Acceptance includes exact 0/1/2/3
+  byte differences, opaque and transparent buffers, and the source/native raster
+  suites; Sol's witness records do not suppress the current strict failures.
+  Also retain frame 7 of `tests/campaign_art.tscn`: every opaque channel differs
+  by at most two bytes, yet the current normalized comparator reports 2,240
+  pixels at `0.0078431386500597`. `build/campaign_art/report.json` records zero
+  pixels over two bytes; the other twelve first-frame scene comparisons pass.
+- **Opus — source resolution governor integration:** `scripts/main.gd` currently
+  reads `get_viewport().scaling_3d_scale` for PiP but never applies the original
+  `_dpr` / `_applyRes` / `_tickResGov` renderer contract. Agree the native DPI,
+  frame/load metrics and visibility inputs through `scripts/main.gd`,
+  `scenes/main.tscn` and `project.godot` before exposing render-scale behavior.
+  Preserve source low-power DPR 1, touch DPR cap 1.5, desktop cap 2 and desktop
+  dynamic scale 1; the touch governor retains spike/hidden-frame exclusion,
+  complexity weighting, recovery cooldown and permanent reversal shutdown.
+  Acceptance: source-oracle frame programs, actual viewport dimensions and PiP
+  scaling agree across low-power changes, resize and visibility transitions.
+  Do not substitute a fixed low-resolution toggle for the source governor.
+- **Opus — original sign emission:** agree a lossless per-vertex `signGlow`
+  binding in `scripts/source_cel_*.gd` and `shaders/`, using captured
+  `sourceWorldText.glow` and the original text atlas. Original
+  `worldtext.js::applySignGlow` multiplies atlas-sampled emissive radiance by the
+  interpolated vertex attribute, so unlit civic plates and backlit tactical
+  plates share one mesh/material. Preserve Float32 values, single-sided front/
+  back geometry, source UV inset and atlas sampling; do not apply one emission
+  amount to every plate. Acceptance: mixed zero/nonzero source glow and lit/unlit
+  raster fixtures match before Sol enables the native import path. The importer
+  currently rejects active glow instead of silently dropping the attribute.

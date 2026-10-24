@@ -1,0 +1,216 @@
+{
+	"after_stall": {
+		"engine": {
+			"frames": 22528,
+			"gain": 0.324243191210149,
+			"input_frames": 23488,
+			"late_control_frames": 0,
+			"lfo_phase": 0.0,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"rotor": {
+			"frames": 22528,
+			"gain": 0.386003132375521,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.0400000000004819,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"stomp": {
+			"frames": 22528,
+			"gain": 0.386003132375521,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.220266666666932,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"wingflap": {
+			"frames": 22528,
+			"gain": 0.262483250044774,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.754666666666386,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		}
+	},
+	"audibleAcceptanceRequired": true,
+	"before_stall": {
+		"engine": {
+			"frames": 15360,
+			"gain": 0.301838502324989,
+			"input_frames": 16320,
+			"late_control_frames": 0,
+			"lfo_phase": 0.0,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"rotor": {
+			"frames": 15360,
+			"gain": 0.359329613217514,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.800000000000313,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"stomp": {
+			"frames": 15360,
+			"gain": 0.359329613217514,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.832000000000214,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"wingflap": {
+			"frames": 15360,
+			"gain": 0.244347391432464,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.559999999999818,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		}
+	},
+	"mean_energy": 0.0156069517606507,
+	"quiet": {
+		"engine": {
+			"frames": 58368,
+			"gain": 0.00720520071983394,
+			"input_frames": 59328,
+			"late_control_frames": 960,
+			"lfo_phase": 0.0,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"rotor": {
+			"frames": 58368,
+			"gain": 0.00702279766974147,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.240000000001235,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"stomp": {
+			"frames": 58880,
+			"gain": 0.00632238521793663,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.189333333334165,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.995526229929093
+		},
+		"wingflap": {
+			"frames": 58368,
+			"gain": 0.0048069484531201,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.727999999999262,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		}
+	},
+	"resumed": {
+		"engine": {
+			"frames": 73216,
+			"gain": 0.29420917887795,
+			"input_frames": 74176,
+			"late_control_frames": 960,
+			"lfo_phase": 0.0,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"rotor": {
+			"frames": 73216,
+			"gain": 0.353372103263394,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.880000000001565,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		},
+		"stomp": {
+			"frames": 73216,
+			"gain": 0.353372103263394,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.96586666666778,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.117911947504086
+		},
+		"wingflap": {
+			"frames": 73216,
+			"gain": 0.240296761383637,
+			"input_frames": 0,
+			"late_control_frames": 0,
+			"lfo_phase": 0.202666666665748,
+			"output_skips": 0,
+			"rate": 1.0,
+			"ready": true,
+			"startup_frames": 960,
+			"wet": 0.0
+		}
+	},
+	"wet": {
+		"frames": 38912,
+		"gain": 0.398777695116196,
+		"input_frames": 0,
+		"late_control_frames": 0,
+		"lfo_phase": 0.107733333333893,
+		"output_skips": 0,
+		"rate": 1.0,
+		"ready": true,
+		"startup_frames": 960,
+		"wet": 0.912672969653149
+	}
+}

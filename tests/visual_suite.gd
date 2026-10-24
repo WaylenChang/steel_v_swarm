@@ -70,9 +70,10 @@ void fragment() { ALBEDO = vec3(0.0); }
 		var saved_material := ShaderMaterial.new()
 		saved_material.shader = shader
 		saved_material.set_shader_parameter("uNativeOpacity", float(program.reflectionAlpha))
-		var saved_foam: Variant = saved_material.get_shader_parameter("uFoamA")
 		var binding := MarineShaderBinding.new()
 		binding.material = saved_material.duplicate()
+		# Duplication resolves shader defaults on real renderers; capture the initialized baseline.
+		var saved_foam: Variant = saved_material.get_shader_parameter("uFoamA")
 		var node := Node3D.new()
 		node.visible = false
 		var presentation := MarinePresentation.new()

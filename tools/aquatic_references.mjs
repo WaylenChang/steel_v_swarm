@@ -36,7 +36,7 @@ export async function captureAquaticPointRasters(page, factorySource) {
   },factorySource);
 }
 
-export async function aquaticReferences(source) {
+export async function aquaticReferences(source, {extraTimes=[]}={}) {
   const load = path=>import(pathToFileURL(join(source,path)).href);
   const {readSrc,grabFn}=await load('tools/audit_src.mjs');
   const THREE=await load('out/forest_review/three.module.js'), {mulberry32}=await load('public/js/rng.js');
@@ -94,7 +94,8 @@ export async function aquaticReferences(source) {
     };
     const initial=snapshots(),frames=[];
     for(const [delta,time,waveAmp] of [[0,0,1],[.016,.016,1],[.25,.266,0],[8,8.266,.001],
-      [0,8.266,.0011],[.25,8.516,1],[-.1,8.416,1],[12,20.416,1],[.25,20.666,.0009],[.25,20.916,1]]) {
+      [0,8.266,.0011],[.25,8.516,1],[-.1,8.416,1],[12,20.416,1],[.25,20.666,.0009],[.25,20.916,1],
+      ...extraTimes.map(time=>[.016,time,1])]) {
       wind.waveAmp.value=waveAmp;
       for(const system of systems)system.step(delta,time);
       vessel?.step(delta,time,frozen());

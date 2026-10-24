@@ -98,7 +98,7 @@ func _fish(system: Dictionary, now: float) -> void:
 				float(school.swimDepth) + sin(now * 1.5 + fish) * 0.4, float(school.cz) + sin(angle) * radius)
 			var heading := angle + (PI / 2 if float(school.rotDir) > 0 else -PI / 2)
 			var wag := sin(now * 6.5 + fish * 1.8) * 0.22
-			var rotation := WeaponPresentation.source_rotation({"rotation": [0, heading + wag, 0], "order": "XYZ"})
+			var rotation := SourceQuaternion.axis_angle(Vector3.UP, heading + wag)
 			if index < mesh.instance_count:
 				mesh.set_instance_transform(index, Transform3D(SourceQuaternion.basis(rotation), position))
 				index += 1

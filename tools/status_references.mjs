@@ -32,7 +32,7 @@ export function statusReferences(d, BattleSim, config, makeRng) {
     buffs:(h.mods||[]).map(m=>({key:m.k,value:m.m,until:m.until,break_on_hit:!!m.brk})),
     status:Object.fromEntries(Object.entries(statusKeys).filter(([source])=>h[source]!=null).map(([source,key])=>[key,clone(h[source])])),
     bleed:h.bleed?{dps:h.bleed.dps,until:h.bleed.until,pen:h.bleed.pen,peer:h.bleed.pid||0}:null,
-    aura:h.healAura?{until:h.healAura.until,radius:h.healAura.r,hps:h.healAura.hps,sp_hps:h.healAura.spHps,cleanse:!!h.healAura.cleanse}:null,
+    aura:h.healAura?{until:h.healAura.until,radius:h.healAura.r,hps:h.healAura.hps,sp_hps:h.healAura.spHps,side:h.healAura.side,cleanse:!!h.healAura.cleanse}:null,
     ammo:clone(h.ammo||{}),reload_at:Object.fromEntries(Object.entries(h.reloadUntil||{}).filter(([,v])=>v>0))});
   const actorInput = h => ({character:h.ch||'',kind:h.kind,id:h.id,side:h.side,position:[h.x,h.y||0,-h.z],
     hp:h.hp,max_hp:h.maxHp,shield:h.sp,max_shield:h.maxSp,power:h.mp,max_power:h.maxMp,
@@ -228,5 +228,67 @@ export function statusReferences(d, BattleSim, config, makeRng) {
     const {draws}=seeded(42,()=>npcFire.call(s,...Object.values(npcScope),e,unit,target));
     statusNpcFire.push({kind,mode,inputs:[actorInput(e),actorInput(target)],now:s.t,hits,blasts,draws,shot:s.events.some(event=>event.e==='shot')});
   }
-  return {statusMath,statusCritical,statusDodge,statusElements,statusCharges,statusAbilities,statusInterruptions,statusSettlement,statusPhase,statusBash,statusNpcFire};
+  const statusFloors=[];
+  for(const kind of ['hero','boss','npc']) for(const hp of [.25,.5,1,5,10,25,100])
+  for(const shield of kind==='npc'?[0]:[0,30]) for(const floor of [0,d.SIEGE.BLD_HP_FLOOR,10]) for(const siegeFloor of [0,d.SIEGE.BLD_HP_FLOOR])
+  for(const amount of [.1,5,25,250]) for(const definition of [null,{vsHp:0},{spPierce:.5,vsSp:1.4,vsHp:.8}]) {
+    const attacker=hero('t05'),target=hero('t05',2,'SWARM');
+    attacker.mods.push({k:'vamp',m:.2,until:20});
+    target.hp=hp;target.sp=shield;target.armor=0;
+    if(kind==='npc'){target.hero=false;target.kind='soldier';target.ch='';}
+    if(kind==='boss')target.sq={boss:true,bossSeg:0};
+    const s=context([attacker,target]),inputs=[attacker,target].map(actorInput),order=[];
+    s.siegeHpFloor=()=>siegeFloor;
+    s._kill=t=>{order.push('kill');t.hp=0;t.dead=true;};
+    s._bossSync=()=>order.push('boss_sync');
+    const {draws}=seeded(42,()=>s._damage(target,amount,attacker,0,floor,definition));
+    statusFloors.push({kind,inputs,floor,siegeFloor,amount,definition,draws,
+      result:{hp:target.hp,shield:target.sp,dead:!!target.dead,attacker_hp:attacker.hp,
+        damage_out:attacker.dmgOut||0,assisted:!!target.asst?.[attacker.pid],focus:attacker.lastHitTargetId===target.id,order}});
+  }
+  const statusHealAuras=[];
+  const auraLevels=[1,2,3,4,...[1,19,20,21,39,100].map(value=>d.superCombatLvl(value))];
+  for(const level of auraLevels)for(const fraction of [0,.25,1])for(const bossStage of Array.from({length:d.bossSegN()},(_,index)=>index))
+  for(const casterBoss of [false,true])for(const scenario of ['expire','recast','owner_dead','zero_hp_target']) {
+    const h=hero('s08'),ally=hero('t05',2,'STEEL',2,0),boss=hero('t05',3,'STEEL',3,0);
+    h.abil.def=level;h.pid=42;
+    if(casterBoss)h.sq={boss:true,bossSeg:bossStage,bodies:[h]};
+    boss.sq={boss:true,bossSeg:bossStage,bodies:[boss]};
+    ally.mods.push({k:'healAmp',m:1.5,until:100});
+    const npc=(id,x,extra={})=>({id,kind:'soldier',side:'STEEL',x,z:0,y:0,hp:d.UNITS.soldier.hp*.4,
+      maxHp:d.UNITS.soldier.hp,sp:0,maxSp:0,mp:0,maxMp:0,armor:d.UNITS.soldier.armor,mods:[],buffs:{},dead:false,...extra});
+    const A=d.heroAbility(h.ch,'def',level),dead=hero('t05',9,'STEEL',2,0);dead.hp=0;dead.dead=true;
+    const actors=[h,ally,boss,npc(4,5),npc(5,6,{neutral:true}),hero('t05',6,'SWARM',7,0),
+      npc(7,A.r+1,{r:1}),npc(8,A.r+1.01,{r:1}),dead];
+    const s=context(actors);
+    // Use the active t05 clone producer; clones remain entity-only aura targets.
+    s._castEffect(ally,d.heroAbility(ally.ch,'atk',1),ally.x,ally.z,1,null,true);
+    s.events=[];
+    const roster=[...s.ents.values()],ids=new Map(roster.map((e,index)=>[e,index+1]));
+    const inputs=roster.map(e=>({...actorInput(e),id:ids.get(e),source_id:e.id,hero:!!e.hero,clone:!!e.isClone,
+      peer:e.pid??0,effect_radius:e.r||0,boss:!!e.sq?.boss,boss_segment:e.sq?.bossSeg||0,neutral:!!e.neutral}));
+    const reports=()=>s.events.splice(0).filter(e=>['heal_aoe','heal_aura_start','heal_aura_end'].includes(e.e)).map(e=>({
+      type:e.e,actor:ids.get(s.heroes.get(e.pid)),peer:e.pid,side:e.side,radius:e.r??null,duration:e.dur??null,
+      position:e.x==null?null:[e.x,0,-e.z]}));
+    const snapshot=()=>({actors:roster.map(e=>({id:ids.get(e),hp:e.hp,shield:e.sp||0,dead:!!e.dead})),
+      active:!!h.healAura,aura:state(h).aura,events:reports()});
+    s._castEffect(h,A,0,0,fraction,null,true);
+    const initial=snapshot(),duration=(A.dur||6)*fraction,frames=[];
+    const ages=duration>0?[0,.125,.5,duration-.001,duration,duration+.125,duration+.25]:[0,.125,.25];
+    let previous=0;
+    const {draws}=seeded(42,()=>{
+      for(const [index,age]of ages.entries()) {
+        s.t=10+age;
+        const recast=scenario==='recast'&&index===1,die=scenario==='owner_dead'&&index===1;
+        const zeroHpTarget=scenario==='zero_hp_target'&&index===1;
+        if(recast)s._castEffect(h,A,0,0,fraction,null,true);
+        if(die){h.hp=0;h.dead=true;}
+        if(zeroHpTarget)ally.hp=0;
+        const delta=age-previous;s._tickHealAuras(delta);
+        frames.push({now:s.t,delta,recast,die,zeroHpTarget,result:snapshot()});previous=age;
+      }
+    });
+    statusHealAuras.push({character:h.ch,level,fraction,inputs,initial,frames,draws});
+  }
+  return {statusMath,statusCritical,statusDodge,statusElements,statusCharges,statusAbilities,statusInterruptions,statusSettlement,statusPhase,statusBash,statusNpcFire,statusFloors,statusHealAuras};
 }

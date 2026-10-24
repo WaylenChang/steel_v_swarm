@@ -1,6 +1,9 @@
 class_name BattleSimulation
 extends Node3D
 
+const SupportRay = preload("res://scripts/source_support_ray.gd")
+const CarrierLaunchTrig = preload("res://scripts/source_carrier_trig.gd")
+
 signal result(winner: String)
 signal message(peer: int, key: String)
 signal body_event(event: Dictionary)
@@ -81,13 +84,13 @@ var weather_dynamics: Dictionary = {}
 var weather_surface: Dictionary = {}
 var weather_seed := 0
 var weather_elapsed := 0.0
-var weather_accumulator := 0.0
 var weather_last_freeze_step := -1
 var lightning_timer := 0.0
 var creep_upgrades: Dictionary = {"STEEL": [], "SWARM": []}
 var npc_index: Array = []
 var npc_index_active := false
-var npc_accumulator := 0.0
+var authority_accumulator := 0.0
+var simulation_tick := 0
 var wave_anchors: Dictionary = {}
 var npc_structures: Array = []
 var authority_bounds: Dictionary = {}
@@ -1516,30 +1519,94 @@ func _physics_process(delta: float) -> void:
 		return
 	if over:
 		return
+	# Player controls and native kinetic hit reports run on the physics clock,
+	# as source client reports do outside the room's combat tick.
+	_tick_player_controls(delta)
+	authority_accumulator += delta
+	var tick_delta: float = float(Content.constants.GAME.TICK_MS) / 1000
+	while authority_accumulator + 0.000000001 >= tick_delta and not over:
+		authority_accumulator = maxf(0, authority_accumulator - tick_delta)
+		_tick_authority(tick_delta)
+		if not setup_error.is_empty():
+			return
+	_tick_projectiles(delta)
+	_present_authority_actors(delta)
+
+func _tick_authority(delta: float) -> void:
+	if not authoritative or over:
+		return
+	# The original room updates brains against the preceding battle time/state.
+	for unit: BattleUnit in pilots.values():
+		if unit.is_bot:
+			if not bot_brains.has(unit.entity_id):
+				_create_bot_brain(unit)
+				if not setup_error.is_empty():
+					return
+			if bot_brains.has(unit.entity_id):
+				bot_brains[unit.entity_id].update(delta)
+	simulation_tick += 1
+	if over:
+		return
 	clock += delta
-	weather_accumulator += delta
-	var weather_delta: float = float(Content.constants.GAME.TICK_MS) / 1000
-	while weather_accumulator + 0.000000001 >= weather_delta:
-		weather_accumulator = maxf(0, weather_accumulator - weather_delta)
-		_tick_weather(weather_delta)
+	_tick_weather(delta)
 	if clock >= next_wave:
-		spawn_wave()
 		next_wave = clock + Content.constants.GAME.WAVE_S
+		spawn_wave()
 	if clock >= next_airdrop:
 		next_airdrop = clock + float(Content.constants.AIRDROP.INTERVAL_S)
 		_spawn_airdrop_wave()
+	# Anchors use the previous engagement state, before recovery and new targets.
+	wave_anchors = _wave_anchors()
 	for unit: BattleUnit in pilots.values():
 		if unit.alive():
-			_update_fluid_state(unit)
 			_regenerate(unit, delta)
-		elif unit.respawn_at > 0 and clock >= unit.respawn_at:
+		elif clock >= unit.respawn_at and simulation_tick > unit.death_tick + 1:
 			respawn(unit)
-	_tick_ability_states(delta)
+	_tick_actor_status(delta)
+	_tick_casts(delta)
+	_tick_carriers(delta)
+	_tick_environment(delta)
+	_tick_persistent_abilities(delta)
+	_tick_npcs(delta)
+	_tick_missiles(delta)
+	_record_shot_history()
+	npc_index_active = false
+	npc_index.clear()
+	npc_structures.clear()
+	_prune_dead_creeps()
+
+func _tick_environment(delta: float) -> void:
+	_tick_civilians(delta)
+	_tick_mines()
+	_tick_ambush(delta)
+	_tick_relays(delta)
+	_tick_fires(delta)
+	_tick_loots(delta)
+	_tick_airdrops(delta)
+	_tick_camps(delta)
+
+func _tick_npcs(delta: float) -> void:
+	npc_structures.clear()
+	for structure: BattleUnit in units.values():
+		if structure.alive() and structure.kind in ["tower", "base"]:
+			npc_structures.append({"kind": structure.kind, "x": float(structure.position.x), "z": float(structure.position.z)})
+	_begin_npc_index()
+	for unit: BattleUnit in units.values():
+		if unit.alive() and not unit.is_hero() and (unit.special.is_empty() or unit.special.get("third", false)):
+			_tick_npc(unit, delta)
+
+func _record_shot_history() -> void:
+	for unit: BattleUnit in pilots.values():
+		if unit.alive():
+			_record_actor_history(unit)
+
+func _record_actor_history(unit: BattleUnit) -> void:
+	ShotHistory.record(unit.position_trail, clock, unit.position.x, unit.position.z, balance_profile.shot_trail_seconds() if balance_profile != null else NAN)
+
+func _tick_player_controls(delta: float) -> void:
 	for unit: BattleUnit in units.values():
 		if not unit.alive():
 			fire_controls.erase(unit.entity_id)
-			_tick_weapon_pose(unit, delta)
-			_tick_authority_body(unit, delta)
 			continue
 		if unit.is_pilot():
 			var was_aiming: bool = unit.input_state.get("aim", false)
@@ -1569,52 +1636,16 @@ func _physics_process(delta: float) -> void:
 				_tick_lock(unit)
 			if not unit.is_bot and unit.input_state.get("fire", false):
 				fire(unit, unit.input_state.get("slot", "light"))
+
+func _present_authority_actors(delta: float) -> void:
+	for unit: BattleUnit in units.values():
+		if unit.is_pilot():
 			_tick_weapon_pose(unit, delta)
 			_tick_authority_body(unit, delta)
 		unit.visible = (unit.alive() or unit.special.get("collapsed", false)) and unit.presentation_visible and not unit.special.get("garrison", false)
 		if unit.special.get("role") != "carrier":
 			unit.position.y = minf(unit.position.y, world.ceiling)
 		unit.buffs = unit.buffs.filter(func(buff): return buff.until > clock)
-	npc_accumulator += delta
-	var npc_delta: float = float(Content.constants.GAME.TICK_MS) / 1000
-	while npc_accumulator + 0.000000001 >= npc_delta:
-		npc_accumulator = maxf(0, npc_accumulator - npc_delta)
-		for unit: BattleUnit in pilots.values():
-			if unit.is_bot:
-				if not bot_brains.has(unit.entity_id):
-					_create_bot_brain(unit)
-					if not setup_error.is_empty():
-						return
-				if not bot_brains.has(unit.entity_id):
-					continue
-				bot_brains[unit.entity_id].update(npc_delta)
-		_tick_civilians(npc_delta)
-		_tick_mines()
-		_tick_ambush(npc_delta)
-		_tick_relays(npc_delta)
-		_tick_fires(npc_delta)
-		_tick_loots(npc_delta)
-		_tick_airdrops(npc_delta)
-		_tick_camps(npc_delta)
-		wave_anchors = _wave_anchors()
-		npc_structures.clear()
-		for structure: BattleUnit in units.values():
-			if structure.alive() and structure.kind in ["tower", "base"]:
-				npc_structures.append({"kind": structure.kind, "x": float(structure.position.x), "z": float(structure.position.z)})
-		_begin_npc_index()
-		for unit: BattleUnit in units.values():
-			if unit.alive() and not unit.is_hero() and (unit.special.is_empty() or unit.special.get("third", false)):
-				_tick_npc(unit, npc_delta)
-		npc_index_active = false
-		npc_index.clear()
-		npc_structures.clear()
-		for unit: BattleUnit in pilots.values():
-			if unit.alive():
-				ShotHistory.record(unit.position_trail, clock, unit.position.x, unit.position.z, balance_profile.shot_trail_seconds() if balance_profile != null else NAN)
-	_tick_projectiles(delta)
-	_tick_missiles(delta)
-	_prune_dead_creeps()
-	for unit: BattleUnit in units.values():
 		if unit.body_presentation != null:
 			unit.presented_altitude = _missile_target_altitude(unit) if unit.is_hero() or unit.flying else 0.0
 
@@ -2907,7 +2938,7 @@ func _projectile_surface(point: Vector3) -> float:
 	# The synthetic test world uses only the ordinary static collision layer.
 	if world.native_data == null:
 		query.collision_mask = 1
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit := SupportRay.intersect(get_world_3d().direct_space_state, query)
 	return hit.position.y if not hit.is_empty() else NAN
 
 func _weapon_surface(point: Vector3) -> float:
@@ -3496,7 +3527,10 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 		target.special.aggro_id = attacker.entity_id
 		target.special.aggro_at = clock
 	var floor_hp := maxf(float(context.get("floor_hp", 0)), _siege_hp_floor(target))
-	var remaining_hp := maxf(floor_hp, target.hp - hp_damage)
+	# Source damage floors only prevent further loss; an already lower HP value
+	# must never heal. Damage/credit/vamp budgets still use the original hit loss.
+	var minimum_hp := minf(target.hp, floor_hp) if floor_hp > 0 else 0.0
+	var remaining_hp := maxf(minimum_hp, target.hp - hp_damage)
 	var hp_loss := minf(target.hp, hp_damage)
 	target.shield = maxf(0, target.shield - split.toSp)
 	target.hp = remaining_hp
@@ -3513,6 +3547,8 @@ func damage(attacker: BattleUnit, target: BattleUnit, def: Dictionary, amount: f
 			_heal_body(attacker, dealt * StatusRules.maximum(attacker.buffs, "vamp", clock))
 		events.append({"type": "hurt", "actor": target.entity_id, "attacker": attacker.entity_id,
 			"origin": attacker.position, "amount": dealt, "side": target.side})
+	if floor_hp > 0 or target.is_hero() and split.toHp <= 0:
+		return
 	if target.hp <= 0:
 		_kill_unit(target, attacker)
 		if target.hp > 0:
@@ -3571,6 +3607,8 @@ func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 		return
 	if target.is_pilot() and _clone_death_swap(target):
 		return
+	if target.is_pilot():
+		target.death_tick = simulation_tick
 	_report_death(target)
 	if target.is_pilot():
 		target.climb.release()
@@ -3664,7 +3702,7 @@ func _kill_unit(target: BattleUnit, attacker: BattleUnit) -> void:
 		events.append({"type": "penalty", "actor": target.entity_id, "amount": roundf(penalty)})
 
 func _fire_burn(unit: BattleUnit, amount: float) -> void:
-	if not authoritative or over or not unit.alive() or unit.special.get("invulnerable", false) or unit.special.get("garrison", false):
+	if not authoritative or over or unit.hp <= 0 or not unit.alive() or unit.special.get("invulnerable", false) or unit.special.get("garrison", false):
 		return
 	if unit.is_hero() and unit.has_status("inv_until", clock):
 		return
@@ -3675,7 +3713,7 @@ func _fire_burn(unit: BattleUnit, amount: float) -> void:
 	unit.hp = state.hp
 	unit.shield = state.shield
 	if unit.hp <= 0:
-		var killer: BattleUnit = pilots.get(int(unit.bleed.get("peer", 0)))
+		var killer: BattleUnit = pilots.get(int(unit.bleed.get("peer", 0)), units.get(int(unit.bleed.get("actor", 0))))
 		_kill_unit(unit, killer)
 	_boss_sync(unit)
 
@@ -3980,7 +4018,8 @@ func respawn(unit: BattleUnit) -> void:
 	unit.collision_mask = 1 | 4
 	unit.refresh_collision()
 	unit.visible = unit.presentation_visible
-	unit.buffs.clear()
+	# Source clears ability modifiers but retains timed loot affixes.
+	unit.buffs = unit.buffs.filter(func(buff): return not str(buff.get("affix", "")).is_empty())
 	unit.status.erase("lightning_scorch")
 	unit.status.last_weather_freeze = -Content.constants.WEATHER_FREEZE.COOLDOWN_S
 	for key: String in ["stun_until", "slow_until", "confuse_until", "blind_until", "inv_until", "emp_until", "stealth_until", "mark_until", "unbalanced_until", "cast_lock_until", "freeze_until", "sup_until", "sup_factor", "element_buildup", "element_last_hit", "poison_stacks", "sonic_stacks", "stagger_stacks"]:
@@ -4154,6 +4193,11 @@ func cast(unit: BattleUnit, slot: String, requested_point: Vector3 = Vector3(INF
 	if not point.is_finite() or not _companion_surfaces_available(unit, def, point):
 		message.emit(unit.peer_id, "unavailable_surface")
 		return false
+	var carrier_origin := _ability_origin(unit, slot) if slot == "atk" and def.carrier else Vector3.ZERO
+	if slot == "atk" and def.carrier and (world == null or not carrier_origin.is_finite()
+			or not is_finite(world.ground_height(carrier_origin.x, carrier_origin.z))):
+		message.emit(unit.peer_id, "unavailable_surface")
+		return false
 	if def.fx == "cube":
 		for index in range(6):
 			var angle := index * PI / 3
@@ -4190,12 +4234,16 @@ func cast(unit: BattleUnit, slot: String, requested_point: Vector3 = Vector3(INF
 	unit.defending = false
 	unit.status.cast_lock_until = clock + (def.castTime if def.castTime else Content.constants.ATK_CAST_S)
 	if def.carrier:
-		_launch_carriers(unit, def, point, _ability_origin(unit, slot))
+		_launch_carriers(unit, def, point, carrier_origin)
 	else:
 		point = unit.position if def.target == "self" or (def.add is Dictionary and def.add.get("fx") == "clone") else point
 		_cast_effect(unit, def, point)
-	_emit_body_event({"type": "cast", "actor": unit.entity_id, "slot": slot, "fx": def.fx, "point": point,
-		"radius": def.r, "duration": def.dur, "fraction": 1.0, "level": level})
+	var event := {"type": "cast", "actor": unit.entity_id, "slot": slot, "fx": def.fx, "point": point,
+		"radius": def.r, "duration": def.dur, "fraction": 1.0, "level": level,
+		"carrier": def.carrier, "cast_duration": cast_duration}
+	if def.carrier:
+		event.origin = carrier_origin
+	_emit_body_event(event)
 	return true
 
 func _ability_point(unit: BattleUnit, definition: Dictionary) -> Vector3:
@@ -4286,11 +4334,11 @@ func _launch_carriers(owner: BattleUnit, definition: Dictionary, point: Vector3,
 			elif owner.character == "m07":
 				var radius: float = (definition.scatter if definition.scatter else 35.0) * (0.2 + float(index) / count * 1.2)
 				var angle := rng.next() * TAU
-				tx += cos(angle) * radius
-				tz += sin(angle) * radius
+				tx += CarrierLaunchTrig.cosine(angle) * radius
+				tz += CarrierLaunchTrig.sine(angle) * radius
 			var dx: float = tx - start.x
 			var dz: float = tz - start.z
-			var distance := maxf(1, sqrt(dx * dx + dz * dz))
+			var distance := maxf(1, CarrierRules.hypot2(dx, dz))
 			_spawn_carrier(owner, definition, {"kind": "hyper", "x": start.x, "z": start.z, "y": start.y,
 				"x0": start.x, "z0": start.z, "y0": start.y, "yaw": atan2(-dx, dz), "tx": tx, "tz": tz,
 				"ux": dx / distance, "uz": dz / distance, "distance": distance, "travel": 0.0,
@@ -4317,9 +4365,13 @@ func _spawn_carrier(owner: BattleUnit, definition: Dictionary, state: Dictionary
 	return unit
 
 func _tick_carriers(delta: float) -> void:
+	if not authoritative:
+		return
 	# Original producers run bomber, kamikaze and hypersonic rosters in separate passes.
+	# Squads retain their single body when the hero representative leaves the roster.
 	for kind: String in ["decoy", "kami", "hyper"]:
-		for owner: BattleUnit in pilots.values():
+		var owners := pilots.values() if kind == "hyper" else units.values().filter(func(unit): return unit.is_pilot())
+		for owner: BattleUnit in owners:
 			for index in range(owner.carrier_ids.size() - 1, -1, -1):
 				var id: int = owner.carrier_ids[index]
 				var unit: BattleUnit = units.get(id)
@@ -4470,6 +4522,10 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 					_heal_body(ally, amount * fraction)
 					if definition.sp and not definition.aura:
 						ally.shield = minf(ally.max_shield, ally.shield + ally.max_shield * fraction)
+			if definition.target == "team" and definition.r > 0:
+				events.append({"type": "heal_aoe", "actor": unit.entity_id, "peer": unit.peer_id,
+					"side": unit.side, "position": center, "radius": definition.r})
+			for ally: BattleUnit in allies:
 				if definition.cleanse and once:
 					_cleanse(ally)
 				var duration: float = definition.dur * fraction
@@ -4485,7 +4541,9 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 				unit.heal_aura = {"until": clock + duration, "radius": definition.r if definition.r else 28,
 					"hps": (definition.hot if definition.hot else 35) * fraction,
 					"sp_hps": (definition.spRestore / duration if definition.spRestore and duration > 0 else 15 if definition.sp else 0) * fraction,
-					"cleanse": definition.cleanse}
+					"side": unit.side, "cleanse": definition.cleanse}
+				events.append({"type": "heal_aura_start", "actor": unit.entity_id, "peer": unit.peer_id, "side": unit.side,
+					"position": unit.position, "radius": unit.heal_aura.radius, "duration": duration})
 		"emp":
 			for target: BattleUnit in units.values():
 				if target.side == unit.side or not target.alive() or target.kind in ["tower", "base", "bunker"] or Vector2(target.position.x - center.x, target.position.z - center.z).length() > definition.r:
@@ -4552,6 +4610,8 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 				var radius: float = 0.0 if index == 0 else rng.next() * (definition.scatter if definition.scatter else definition.r * 2)
 				var point := center + Vector3(cos(angle) * radius, 0, -sin(angle) * radius)
 				point.y = 0
+				_publish_blast_event({"type": "boom", "actor": unit.entity_id, "position": _missile_world_position(point),
+					"radius": definition.r, "side": unit.side})
 				var attack := {"dmg": definition.dmg * fraction, "r": definition.r, "vs": definition.vs, "pen": definition.pen,
 					"vsSp": definition.vsSp, "vsHp": definition.vsHp, "spPierce": definition.spPierce,
 					"elem": definition.elem, "elemBuildup": definition.elemBuildup}
@@ -5251,14 +5311,41 @@ func _fog_snapshot() -> Array:
 			"until": fog.until, "duration": fog.duration, "side": fog.side})
 	return states
 
+func _tick_heal_auras(delta: float) -> void:
+	if not authoritative:
+		return
+	for unit: BattleUnit in pilots.values():
+		if not unit.heal_aura.is_empty():
+			if not unit.alive() or float(unit.heal_aura.until) <= clock:
+				events.append({"type": "heal_aura_end", "actor": unit.entity_id, "peer": unit.peer_id, "side": unit.side})
+				unit.heal_aura.clear()
+				continue
+			var aura := unit.heal_aura
+			# Source visits hero representatives and the entity roster separately.
+			for ally: BattleUnit in pilots.values() + units.values():
+				if ally.side != aura.side or ally.side.is_empty() or ally.special.get("neutral", false) or ally.hp <= 0 or not ally.alive() \
+						or Vector2(ally.position.x - unit.position.x, ally.position.z - unit.position.z).length() > float(aura.radius) + ally.effect_radius:
+					continue
+				if float(aura.hps) > 0:
+					_heal_body(ally, float(aura.hps) * delta, "aura")
+				if float(aura.sp_hps) > 0 and ally.shield < ally.max_shield:
+					ally.shield = minf(ally.max_shield, ally.shield + float(aura.sp_hps) * delta)
+				if aura.cleanse and ally.is_hero():
+					_cleanse(ally)
+
 func _tick_ability_states(delta: float) -> void:
-	# Preserve source ordering across actors, including the separate autonomous producer ticks.
+	# Aggregate ability seam retained for isolated source-component consumers.
+	_tick_actor_status(delta)
+	_tick_casts(delta)
+	_tick_carriers(delta)
+	_tick_persistent_abilities(delta)
+
+func _tick_actor_status(delta: float) -> void:
 	for unit: BattleUnit in units.values():
 		unit.buffs = unit.buffs.filter(func(buff): return float(buff.until) > clock)
 		if not unit.alive():
 			unit.cast_state.clear()
 			unit.cast_preview.clear()
-			unit.heal_aura.clear()
 			unit.bleed.clear()
 			unit.status.erase("phase_until")
 	for unit: BattleUnit in pilots.values():
@@ -5271,6 +5358,8 @@ func _tick_ability_states(delta: float) -> void:
 			else:
 				var attacker: BattleUnit = pilots.get(int(unit.bleed.get("peer", 0)), units.get(int(unit.bleed.get("actor", 0))))
 				damage(attacker, unit, {"pen": unit.bleed.pen}, float(unit.bleed.dps) * delta, false, {"weather_weapon": false}, false)
+
+func _tick_casts(_delta: float) -> void:
 	for unit: BattleUnit in pilots.values():
 		if unit.alive() and not unit.cast_state.is_empty() and clock >= float(unit.cast_state.start) + float(unit.cast_state.duration):
 			var state := unit.cast_state.duplicate(true)
@@ -5278,25 +5367,18 @@ func _tick_ability_states(delta: float) -> void:
 			_cast_effect(unit, state.definition, state.point)
 			events.append({"type": "cast", "actor": unit.entity_id, "character": unit.character, "side": unit.side,
 				"slot": "def", "fx": state.definition.fx, "fraction": 1.0, "point": state.point, "level": state.level})
-	_tick_carriers(delta)
-	for unit: BattleUnit in pilots.values():
-		if not unit.heal_aura.is_empty():
-			if not unit.alive() or float(unit.heal_aura.until) <= clock:
-				unit.heal_aura.clear()
-				continue
-			var aura := unit.heal_aura
-			# Source visits hero representatives and the entity roster separately.
-			for ally: BattleUnit in pilots.values() + units.values():
-				if ally.side != unit.side or not ally.alive() or Vector2(ally.position.x - unit.position.x, ally.position.z - unit.position.z).length() > float(aura.radius) + ally.effect_radius:
-					continue
-				_heal_body(ally, float(aura.hps) * delta)
-				ally.shield = minf(ally.max_shield, ally.shield + float(aura.sp_hps) * delta)
-				if aura.cleanse and ally.is_hero():
-					_cleanse(ally)
+
+func _tick_persistent_abilities(delta: float) -> void:
+	_tick_heal_auras(delta)
 	_tick_clones(delta)
 	_tick_cubic_slabs(delta)
 	_tick_fogs(delta)
 	_tick_summons(delta)
+	_tick_phase_shift(delta)
+	_tick_holograms(delta)
+	_tick_element_states(delta)
+
+func _tick_phase_shift(_delta: float) -> void:
 	for unit: BattleUnit in pilots.values():
 		if not unit.alive():
 			unit.status.erase("phase_until")
@@ -5308,7 +5390,8 @@ func _tick_ability_states(delta: float) -> void:
 			blast(unit, {"dmg": amount if amount else 50, "r": 6, "pen": 10}, Vector3(unit.position.x, 0, unit.position.z), false, true, 0)
 			_apply_cc(unit, {"fx": "pull", "imp": -20}, unit.position, 6)
 			events.append({"type": "phase_exit", "actor": unit.entity_id, "side": unit.side, "position": unit.position, "radius": 6.0})
-	_tick_holograms(delta)
+
+func _tick_element_states(delta: float) -> void:
 	for unit: BattleUnit in units.values():
 		_tick_element_buildup(unit, delta)
 

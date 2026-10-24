@@ -41,9 +41,22 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Finish weather/projectile/visibility/aiming/scenery interactions, source
   carrier/clone/summon/hologram lifetimes and complete entity targeting. Cube
   planes and tactical fog need combined LOS, barrier, poison and protection cases.
-- [ ] **O8 — Carrier/companion settlement:** certify launch origins, fractional
-  SUPER counts, bomber drops, kamikaze/hypersonic tracking/scatter, arrival order,
-  interception and owner-dead versus owner-absent behavior. Zero budgets must not
+  Finish populated frame comparison for moving humans/bots, mixed carriers with
+  live interception/terrain, lethal environmental paths and room recovery around respawn.
+  Preserve bot decisions before advancing the clock, wave anchors based on the
+  previous engagement state before recovery, environmental producers between
+  carriers and persistent abilities,
+  and final missile/history/index cleanup order. Shared combat settlement uses
+  the source tick cadence while native movement and kinetic reports retain the
+  physics cadence; an isolated scalar frame cannot certify a populated match.
+  Preserve the complete dead-snapshot tick barrier, elemental-owner fire credit,
+  timed loot affixes through respawn and the early stop when a bot ends a match.
+  Populated healing acceptance must retain aura-source BOSS rejection, separate
+  hero/entity visits, neutral and radius gates, and once-only start/end reports
+  through replacement, owner death and inclusive expiry on both transports.
+- [ ] **O8 — Carrier/companion settlement:** certify populated launch origins,
+  fractional SUPER counts, bomber drops, kamikaze/hypersonic tracking/scatter,
+  interception and owner changes with real terrain and targets. Zero budgets must not
   invent effects. Source companions retain distinct body/sight height bands,
   expiry/lethal swaps, assist/focus/credit rules and no invented summon lifetime.
   Missing generated model content must reject before spending.
@@ -53,6 +66,14 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Keep private flight/observer altitude, damage-body bands and published visual
   lift separate. Certify native hit areas and visual acquisition on terrain,
   decks and water against those distinct original coordinate frames.
+  Populated carrier acceptance must retain separate bomber/kamikaze body rosters
+  and the hypersonic hero roster, including dead, absent and restored owners,
+  reverse traversal, shared scatter RNG and per-impact reports before settlement.
+  Preserve source scalar launch rounding at the hypersonic dive apex; native
+  single-precision scene coordinates must not feed back into the trajectory.
+  Populated cast acceptance must retain the single captured launch origin and
+  its public `carrier`, `origin` and `cast_duration` event contract across both
+  transports; missing launch terrain must leave resources and stealth intact.
 - [ ] **O9 — Traversal and visibility:** finish complete support/slope/climb/
   collision order on terrain, roofs, bridges, tunnels, galleries, scenery and
   frozen fluids. Preserve source planar progress, per-layer blast separation,
@@ -106,6 +127,9 @@ runtime acceptance remain incomplete. Component results do not certify the build
   third-faction stats, auto shop and mode-specific recovery/observer behavior.
   Require generated source resources; missing chapters or SUPER metadata stay
   unavailable. Full transitions, source frame order and chapter lifecycles remain open.
+  Populated mode acceptance must retain non-healing HP floors below the authored
+  building floor, floor-hit credit/vamp budgets and the source return before BOSS
+  synchronization when a shield absorbs all HP damage or an HP floor is active.
 - [ ] **O18 — Membership/readiness/loading:** certify logical-seat/physical-
   route separation, bot capacity/selection, ready cancellation, source loaded
   barrier and deferred authority population. Verify live ordinary seat/side edits,
@@ -147,14 +171,24 @@ runtime acceptance remain incomplete. Component results do not certify the build
   cannot substitute for complete match comparison. Resolve new failures before
   calling a path verified. Current `tests/run.tscn` cannot complete cleanly with
   failed world setup and owner-specific geometry/audio/scenery differences;
-  later physics failures in that contaminated scene need isolated reproduction
-  before authority changes. Native fixture consumers must use the generated
+  engine errors remain failed acceptance even when a component's assertions pass.
+  Native fixture consumers must use the generated
   section plan and exact numeric tapes, preserving source order and tolerances.
-  Populated core fixtures in `tests/run.gd` require the selected authored world;
+  Populated core fixtures in `tests/run.gd` and layered blast/bridge/tunnel cases
+  in `tests/structure_suite.gd` require the selected authored world;
   missing preparation is an explicit failed acceptance case. Rerun all retained
   combat assertions on real geometry once the seasonal resources are available.
-  Authority cases in campaign/SUPER, climb and field suites also remain unresolved;
-  isolate their source seams before attributing failures to presentation owners.
+  Campaign deployment still requires authored chapter terrain. Isolated climb
+  failures are in `scripts/climb_presentation.gd` MultiMesh buffers/matrices;
+  isolated field failures are in `scripts/skill_field_presentation.gd` fog
+  vertices. Sol owns those consumers. Preserve every authority assertion when
+  rerunning them after those corrections; presentation failures cannot certify
+  populated traversal or field interactions.
+  Sol handoff: `scripts/scenery_presentation.gd` must preserve source instance
+  transforms and duplicate the imported MultiMesh before camp clearance.
+  `tests/structure_suite.gd` reproduces buffer-size errors and source matrix/
+  shared-resource mutation differences without world setup; retain every
+  rotated, mirrored, zero-scale, overlap and repeated-clearance assertion.
   Sol handoff: `scripts/room_world_resources.gd`, `scripts/world.gd` and the
   generated `assets/worlds/*_{spring,summer,autumn,winter}.res` must agree
   on available authored seasonal resources. The ordinary smoke and both baseline
@@ -230,9 +264,11 @@ filter, omitted fixture parts and staged-byte changes to pinned inputs. Keep the
 existing oversized world files in LFS; changing diff attributes does not exempt a
 file from GitHub's object-size limit.
 
-Use `--status-references`, `--bot-references`, `--companion-references` or
-`--missile-defense-references` with the source path for focused authority-oracle
-publication. Each seals its producer, rechecks all published original input
+Use `--status-references`, `--bot-references`, `--companion-references`,
+`--missile-defense-references`, `--ability-route-references`, `--tick-references`
+or `--death-references` with the source path for focused authority-oracle
+publication. Each seals its
+producer, rechecks all published original input
 hashes and rejects a changed destination without replacing unrelated sections.
 
 For the isolated procedural-envelope source comparison:

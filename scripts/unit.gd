@@ -39,6 +39,7 @@ var armor := 0.0
 var money := 0.0
 var score := 0.0
 var deaths := 0
+var death_tick := 0
 var radius := 1.0
 var effect_radius := 0.0
 var height := 2.0

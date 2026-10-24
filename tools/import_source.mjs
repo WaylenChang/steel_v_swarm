@@ -41,6 +41,8 @@ import { footprintReferences } from './footprint_references.mjs';
 import { cameraReferences } from './camera_references.mjs';
 import { burstReferences } from './burst_references.mjs';
 import { statusReferences } from './status_references.mjs';
+import { tickReferences } from './tick_references.mjs';
+import { deathReferences } from './death_references.mjs';
 import { movementReferences } from './movement_references.mjs';
 import { traversalReferences } from './traversal_references.mjs';
 import { climbReferences } from './climb_references.mjs';
@@ -84,14 +86,17 @@ const statusReferencesOnly=process.argv.includes('--status-references');
 const botReferencesOnly=process.argv.includes('--bot-references');
 const companionReferencesOnly=process.argv.includes('--companion-references');
 const missileDefenseReferencesOnly=process.argv.includes('--missile-defense-references');
+const abilityRoutesOnly=process.argv.includes('--ability-route-references');
+const tickReferencesOnly=process.argv.includes('--tick-references');
+const deathReferencesOnly=process.argv.includes('--death-references');
 if(process.argv.includes('--refresh-fixture-consumers')) {
-  if(stageIndex>=0||partitionIndex>=0||outputIndex>=0||auditReferencesOnly||statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefenseReferencesOnly||process.argv.includes('--audio-music-gain'))
+  if(stageIndex>=0||partitionIndex>=0||outputIndex>=0||auditReferencesOnly||statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefenseReferencesOnly||abilityRoutesOnly||tickReferencesOnly||deathReferencesOnly||process.argv.includes('--audio-music-gain'))
     throw new Error('Choose one source publication operation');
   await refreshFixtureConsumers(join(root,'data/fixtures.json'),root);
   process.exit(0);
 }
-if(statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefenseReferencesOnly) {
-  if([statusReferencesOnly,botReferencesOnly,companionReferencesOnly,missileDefenseReferencesOnly].filter(Boolean).length!==1||stageIndex>=0||partitionIndex>=0||outputIndex>=0||auditReferencesOnly||process.argv.includes('--audio-music-gain'))
+if(statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefenseReferencesOnly||abilityRoutesOnly||tickReferencesOnly||deathReferencesOnly) {
+  if([statusReferencesOnly,botReferencesOnly,companionReferencesOnly,missileDefenseReferencesOnly,abilityRoutesOnly,tickReferencesOnly,deathReferencesOnly].filter(Boolean).length!==1||stageIndex>=0||partitionIndex>=0||outputIndex>=0||auditReferencesOnly||process.argv.includes('--audio-music-gain'))
     throw new Error('Choose one source publication operation');
   const {publishReferenceSections}=await import('./source_stage.mjs');
   await publishReferenceSections(root,source,async()=>{
@@ -100,7 +105,10 @@ if(statusReferencesOnly||botReferencesOnly||companionReferencesOnly||missileDefe
     const {mulberry32}=await import(pathToFileURL(join(source,'public/js/rng.js')).href);
     const maps=JSON.parse(await readFile(join(root,'data/maps.json')));
     const config=maps[0].variants['1'].config;
+    if(abilityRoutesOnly)return abilityRouteReferences(d,BattleSim);
     if(statusReferencesOnly)return statusReferences(d,BattleSim,config,mulberry32);
+    if(tickReferencesOnly)return tickReferences(d,BattleSim,config,mulberry32,source);
+    if(deathReferencesOnly)return deathReferences(d,BattleSim,config,mulberry32,source);
     if(companionReferencesOnly)return companionReferences(d,BattleSim,config,mulberry32);
     if(missileDefenseReferencesOnly){const {missileDefenseReferences}=await import('./missile_defense_references.mjs');return missileDefenseReferences(d,BattleSim,config,mulberry32);}
     const {botReferences}=await import('./bot_references.mjs');
@@ -346,6 +354,8 @@ const fixtures = {
   ...await fieldReferences(d, BattleSim, maps[0].variants['1'].config, source),
   ...await movementReferences(d, source, gameSource),
   ...statusReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32),
+  ...await tickReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32, source),
+  ...deathReferences(d, BattleSim, maps[0].variants['1'].config, mulberry32, source),
   ...burstReferences(d, gameSource),
   ...await footprintReferences(d, gameSource, source),
   ...(auditReferencesOnly ? {} : modelReference.fixtures),

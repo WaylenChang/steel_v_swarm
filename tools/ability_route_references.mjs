@@ -20,9 +20,14 @@ export function abilityRouteReferences(d, BattleSim) {
       const route=actor.cast?'channel':calls[0]?.route;
       if(!route||calls.length>1) throw new Error('Original ability did not take exactly one active route');
       const point=actor.cast?{x:actor.cast.x,z:actor.cast.z}:calls[0];
+      const event=simulation.events.at(-1);
       fixtures.push({character,slot,...sample,definition:{fx:definition.fx,carrier:definition.carrier,support:definition.support,
         target:definition.target??null,added:definition.add?.fx??null,unit:definition.unit??null},
-        route,point:[point.x,0,-point.z],eventPoint:simulation.events.at(-1)?[simulation.events.at(-1).x,0,-simulation.events.at(-1).z]:null});
+        route,point:[point.x,0,-point.z],eventPoint:event?[event.x,0,-event.z]:null,
+        state:{power:actor.mp,cooldown:actor.acd[slot],defending:actor.defending,
+          castLock:actor.castLockUntil??0,stealth:actor.stealthUntil??0},
+        event:event?{type:event.e,carrier:event.carrier??null,castDuration:event.castDur??null,
+          origin:event.ox==null?null:[event.ox,0,-event.oz]}:null});
     }
   }
   return {abilityRoutes:fixtures};

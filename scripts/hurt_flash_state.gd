@@ -30,14 +30,17 @@ static func ease_in_out(value: float) -> float:
 	return bezier(value, Vector2(.42, 0), Vector2(.58, 1))
 
 static func bezier(value: float, first: Vector2, second: Vector2) -> float:
+	return bezier_values(value, first.x, first.y, second.x, second.y)
+
+static func bezier_values(value: float, first_x: float, first_y: float, second_x: float, second_y: float) -> float:
 	var low := 0.0
 	var high := 1.0
 	for index in range(40):
 		var time := (low + high) * .5
-		var x := 3 * (1 - time) * (1 - time) * time * first.x + 3 * (1 - time) * time * time * second.x + time * time * time
+		var x := 3 * (1 - time) * (1 - time) * time * first_x + 3 * (1 - time) * time * time * second_x + time * time * time
 		if x < value:
 			low = time
 		else:
 			high = time
 	var time := (low + high) * .5
-	return 3 * (1 - time) * (1 - time) * time * first.y + 3 * (1 - time) * time * time * second.y + time * time * time
+	return 3 * (1 - time) * (1 - time) * time * first_y + 3 * (1 - time) * time * time * second_y + time * time * time

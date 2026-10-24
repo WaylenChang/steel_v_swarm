@@ -134,7 +134,6 @@ func _step() -> void:
 	var hero: Dictionary = Content.heroes[line.ch]
 	var foe := "SWARM" if side == "STEEL" else "STEEL"
 	var index := 1 if hero.side == foe else 0
-	portraits[index].show()
 	if portrait_ids[index] != line.ch:
 		portraits[index].texture = Content.campaign_art(line.ch, "avatar", art_mode)
 		portrait_ids[index] = line.ch

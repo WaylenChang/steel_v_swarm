@@ -145,6 +145,93 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   portrait/art fallbacks, UTF-16 radio timing, stable portrait ties, timer
   cancellation, transitions and victory transcript/replay. Campaign maps and
   authority stage/progress eligibility remain explicit external contracts.
+  Retain generation checks across synchronous `finishing` listeners; cancelled,
+  replaced, detached or retiring cinematics must not schedule old completion work.
+  Empty sequence replacement disposes the previous scene before completing.
+  `tests/campaign_lifecycle.tscn` covers these lifecycle contracts independently
+  of the unresolved native story-art import and complete visual composition.
+  Exit opacity applies once to the complete CanvasGroup, using the captured
+  original curve. A separate native wall timer retains the 650 ms completion
+  deadline; completing or pausing the visual tween cannot settle it early.
+  Detachment invalidates pending completion and requires fresh playback after
+  reattachment. `node tools/campaign_transition_capture.mjs` and real-driver
+  `tests/campaign_transition.tscn` retain the original finish method/CSS, deadline
+  boundaries and layered opacity rasters. Controlled color layers do not qualify
+  actual story art, blur/vignette filters or complete cinematic composition.
+  Art opacity retains the original 0.9 s cubic-bezier(0.4,0,0.2,1), stable scene
+  order and independent state for every still-visible scene during rapid
+  three-way changes. `node tools/campaign_art_capture.mjs` and real-driver
+  `tests/campaign_art.tscn` retain original construction/selection methods,
+  reversals, unchanged targets and first-frame layered color probes. Native
+  SubViewports isolate the groups from the containing presentation CanvasGroup;
+  use premultiplied blending with opacity applied to RGBA, and stop retired or
+  transparent render targets. Preserve the strict frame-7 comparator failure
+  and byte witness below. Declared colors do not qualify actual art decoding,
+  fallback pixels, blur, framing, populated transitions or performance.
+  Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
+  whole-transform reversal shortening and unchanged-target behavior. Serialize
+  source camera targets through `CssDecimal` before comparison; keep interpolation
+  tuples and Bezier controls in double precision until native image storage.
+  Resize reapplies the current pose without restarting its transition, while the
+  blurred background remains fixed. `node tools/campaign_pose_capture.mjs` and
+  real-driver `tests/campaign_pose.tscn` retain original camera functions and
+  unrounded typed CSS samples for every original camera/orientation. Browser
+  completion states also verify settled native coordinates. These probes do not
+  qualify actual art/framing pixels, per-frame crawl/target delivery, complete
+  populated cinematic composition or platform/DPI behavior.
+  Crawl uses its own monotonic wall-frame timestamp, updated even while paused
+  or at the scroll limit. Preserve the original 0.1 s delta cap, strict pause
+  deadline and each DOM scroll write/read; hidden fractional accumulation changes
+  the source's frame-rate-dependent pixel quantization. Fresh playback resets
+  both the retained viewport position and frame clock. Original browser probes
+  at scales 1/1.25/1.5/2 retain the same integer logical-pixel readback.
+  `node tools/campaign_crawl_capture.mjs` and real-driver
+  `tests/campaign_crawl.tscn` retain original controller methods and real browser/
+  native scroll containers, including half-pixel, pause, gap, limit and replay
+  cases. Declared geometry isolates scrolling; it does not qualify narrative
+  layout, complete frame ordering, camera-target delivery or hardware DPI behavior.
+  Camera-target delivery follows the original frame branch: paused or saturated
+  automatic scrolling does not reevaluate focus solely because section geometry
+  changed. Explicit scroll/resize producers retain their own focus updates.
+  `node tools/campaign_delivery_capture.mjs` and real-driver
+  `tests/campaign_delivery.tscn` connect actual scroll controls to original
+  nearest-section/camera functions, including gaps, ties, zero heights and
+  per-scene serialized targets in both orientations. Controlled section geometry
+  does not certify live typography, event-loop/render timing or full cinematics.
+  Skip input retains original millisecond clocks and strict 650/350 ms hold/tap
+  boundaries. Cancelled or unpaired releases never become taps; finish-button
+  exclusion follows the touch origin, and release/cancel never extends the crawl
+  pause. Replacement callbacks must not inherit retired input state.
+  `node tools/campaign_input_capture.mjs` and real-driver
+  `tests/campaign_input.tscn` compare original handlers and directed native
+  replacement callbacks. Event-target doubles and direct native input dispatch
+  do not qualify hardware touch bundling, GUI button activation, source image
+  buffering, crawl/art pixels or complete campaign/transport acceptance.
+  Hold feedback retains the original zero-coordinate fallback and viewport clamp,
+  circumference targets, CSS ease/linear curves and reversal-shortened durations.
+  Restarting an active hold resets progress without restarting its opacity fade.
+  `node tools/campaign_hold_capture.mjs`, real-driver
+  `tools/import_campaign_hold.tscn` and `tests/campaign_hold.tscn` retain the
+  dedicated source identities and atomically published lossless native backplate.
+  Keep PNG alpha-border processing out of that resource. Its isolated SubViewport
+  and premultiplied texture opacity must also work inside the outer presentation
+  group; `tests/campaign_hold_render.tscn -- --nested-presentation` retains that
+  composition gate. Run `tests/campaign_hold_render.tscn` for the seven original
+  pixel cases;
+  static/group controls pass but dynamic native SVG stroke coverage remains an
+  open shared-renderer contract below. Do not certify full cinematic pixels,
+  fractional/DPI placement, hardware input, export or performance from these probes.
+  Finish original first-play asset readiness, buffer-warning presentation and
+  skip-readiness gates before accepting the complete loading/cinematic lifecycle.
+  Automatic radio retains original empty-scene, UTF-16 timer, replacement/clear,
+  viewer-relative portrait/guest and single-speaker endpoint behavior. A hidden
+  portrait endpoint stays hidden when receiving a speaker update.
+  `node tools/dialogue_native_capture.mjs` and real-driver
+  `tests/dialogue_native.tscn` compare original Dialogue methods and actual native
+  character/mech asset bindings. DOM probes observe mutations without qualifying
+  CSS layout/filter pixels. Manual `next()` is source storybook inspection only;
+  live gameplay must remain automatic. Finish original portrait opacity/filter
+  transitions and complete radio/transcript composition before visual acceptance.
 - [ ] **S21 — Remaining quality consumers:** finish curated visual-style
   propagation, render-resolution scaling, world-text rebuilds and remaining
   low-power effect/audio consumers. Verify source constructor versus live-update
@@ -159,3 +246,59 @@ switches for `-Loading`, `-Mobile`, `-Controls`, `-View`, `-Tps`, `-Pips`,
 `-Minimap`, `-Projectiles`, `-Deaths` and `-Blasts`; invoke one switch per run.
 Cross-owner changes stay as exact requests in this file until their owner pulls
 them. Remove completed items; no dated checkpoints or copied validation history.
+
+### Shared-owner contracts required for campaign art
+
+- **Opus — radio portrait filter binding:** agree an isolated canvas-item shader
+  contract under `shaders/` for the original `.dlg-row .dlg-av` grayscale filter.
+  Source inactive portraits use opacity 0.35 and grayscale 0.75; `.on` uses opacity
+  1 and no filter, with both channels transitioning for 0.18s ease-out. Native
+  `CampaignDialogue` currently uses instantaneous alpha 0.5/1 and no grayscale.
+  Preserve original portrait pixels/alpha and shared texture immutability; Sol
+  binds the accepted material and complete transitions in a separate change.
+  Acceptance: original CSS/native portraits at both endpoints, transition and
+  reversal frames, across character/mech modes and guest/single-speaker cases.
+  Passing state/asset-path checks in `tests/dialogue_native.tscn` cannot certify
+  opacity, grayscale, faction frames or complete dialogue pixels.
+- **Opus — story image encoding:** `tools/import_source.mjs` copies original
+  story images verbatim under their original `.png` names, but all 70 PNG-named
+  files in `assets/story/` contain JPEG JFIF bytes (`FF D8 FF E0`), and all 70
+  have invalid native imports. The complete presence/encoding inventory is in
+  `artifacts/sol/campaign-art-inventory.json`.
+  Publish correctly encoded native PNGs through the shared importer while
+  preserving immutable original source files and campaign path metadata; do not
+  hand-edit image data or `.import` validity flags. Acceptance: every campaign
+  art path loads normally and with mipmaps, fallback selection follows original
+  semantics, and native art pixels match the original decoded images.
+- **Opus — failed story load guard:** `scripts/content.gd::story_texture`
+  calls `get_image()` without checking whether `load()` returned a texture when
+  mipmaps are requested. Reject a failed native decode before dereferencing it,
+  preserving the original fallback contract and explicit availability checks.
+  Acceptance: invalid imports never crash mipmap generation; valid foreground,
+  background and portrait paths remain reusable without corrupting cached art.
+
+
+### Shared-owner contracts required for cinematic renderer quality
+
+- **Opus — cinematic hold stroke coverage:** agree an accepted material in
+  `shaders/cinematic_hold.gdshader` before Sol replaces the native SVG binding in
+  `scripts/campaign_hold.gd`. Godot's native SVG raster retains the original
+  geometry, dash targets and rounded caps but differs from browser coverage in
+  the quarter/half/full and translucent-half progress cases by 104/199/372/165
+  pixels at the unchanged two-byte threshold (maximum normalized errors
+  0.187912/0.286275/0.243460/0.097732). Static backplate, translucent group and
+  cancelled-dash controls pass. Keep the captured radius, width, color, dash
+  array, source analytic circumference and distinct browser path length;
+  cancellation must not leave a spurious rounded-cap dot. Acceptance: all seven
+  original CSS/SVG cases in `tests/campaign_hold_render.tscn` and continuous
+  progress/reversal frames, without width/color retuning, a finite baked-progress
+  substitute or a looser raster tolerance. Source/native evidence is retained in
+  `build/campaign_hold/`; Sol binds the accepted shared renderer in a separate change.
+- **Opus — raster comparator byte boundary:** preserve the two-byte budget in
+  `tests/raster_compare.gd` while comparing opaque RGB8 channels numerically.
+  Frame 7 of `tests/campaign_art.tscn` differs by at most two channel bytes,
+  with zero pixels over that limit, but the normalized Float32 comparison
+  reports 2,240 pixels at `0.0078431386500597`. Keep the strict failure and
+  witness in `build/campaign_art/report.json`; the other twelve first-frame
+  scene comparisons pass. Acceptance includes exact 0/1/2/3-byte differences,
+  transparent premultiplied buffers and the unchanged source/native suites.

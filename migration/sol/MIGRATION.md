@@ -307,8 +307,16 @@ and native sample checks do not replace audible/mixer/transport acceptance.
   `Thin`. Source references populate only `overTalk` in the original
   overlay markup over a declared constant backdrop; winner/statistics content,
   touch-device classes, native typography and full settlement acceptance remain
-  unresolved. Implement native inner script scrolling/padding and absolute
-  background art without turning the portraits into an in-flow row.
+  unresolved. Preserve the native inner script scroller and absolute background
+  portrait slots; portraits must not contribute an in-flow row or intrinsic height.
+  `node tools/dialogue_body_capture.mjs` retains original CSS boxes with declared
+  minimum-height rows and visible browser scrollbars. `tests/dialogue_body.tscn`
+  checks the inner padding/gaps, reserved scrollbar width, viewport cap, responsive
+  portrait geometry and viewport reattachment. The visible scrolling box retains
+  fractional source layout units independently of Godot's rounded VBox allocation.
+  These probes do not qualify header baselines, actual font wrapping, outer
+  settlement spacing, rounded portrait clipping, gradient mattes or scrollbar
+  pixels. Keep the shared font/material gates below before full composition.
   `node tools/dialogue_fonts_capture.mjs` extends the frozen font responses to
   every original radio/settlement character, preserving `zh-Hant` Canvas language
   selection. `tools/import_dialogue_fonts.tscn` atomically publishes the original
@@ -337,6 +345,17 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for campaign art
 
+- **Flash — settlement transcript host:** `scripts/campaign_ui.gd::show_result`
+  owns the outer expandable transcript ScrollContainer and the result
+  title/statistics/buttons. Bind the source settlement host width, outer overflow
+  and placement around `CampaignDialogue.transcript()` without expanding the
+  inner script beyond its original 42vh cap or counting background portraits in
+  text flow. Sol's visible inner box preserves fractional CSS height; native VBox
+  allocation alone does not establish source outer spacing. Acceptance: complete
+  populated victory/defeat and replay layouts at 360/720/721/1440 px widths after
+  the accepted font/material bindings, including nested nearest scrolling.
+  `tests/fixtures/dialogue_layout.json` populates only original `overTalk`; its
+  crops cannot certify the missing winner/statistics and outer-host content.
 - **Opus — source text advances:** provide an accepted shared adapter in
   `scripts/source_font_metrics.gd` before Sol certifies source dialogue wrapping.
   Input is the published native Font, original text, pixel size and `zh-Hant`

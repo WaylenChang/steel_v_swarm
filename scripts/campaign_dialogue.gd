@@ -196,23 +196,18 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		return
 	host.add_child(NativeUi.label(scene.title, 24))
 	host.add_child(NativeUi.prose(scene.note, 16))
-	var lead_row := HBoxContainer.new()
-	host.add_child(lead_row)
-	for id: String in CampaignRules.leaders(scene.lines, side, true):
-		var art := TextureRect.new()
-		art.texture = Content.campaign_art(id, "portrait", art_mode)
-		art.custom_minimum_size = Vector2(200, 180)
-		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lead_row.add_child(art)
+	var body = preload("res://scripts/dialogue_transcript_body.gd").new()
+	host.add_child(body)
+	var leaders := CampaignRules.leaders(scene.lines, side, true)
+	for index in range(leaders.size()):
+		body.add_portrait(Content.campaign_art(leaders[index], "portrait", art_mode), index > 0)
 	var delay := float(Content.campaign.presentation.transcript.delay) * 1000
 	var interval := float(Content.campaign.presentation.transcript.step) * 1000
 	for index in range(scene.lines.size()):
 		var line: Dictionary = scene.lines[index]
 		var hero: Dictionary = Content.heroes[line.ch]
 		var row = preload("res://scripts/dialogue_transcript_row.gd").new()
-		host.add_child(row)
+		body.rows.add_child(row)
 		var portrait := TextureRect.new()
 		portrait.texture = Content.campaign_art(line.ch, "avatar", art_mode)
 		portrait.custom_minimum_size = Vector2(52, 52)

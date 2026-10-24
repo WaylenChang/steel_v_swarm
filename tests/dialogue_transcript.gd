@@ -26,7 +26,7 @@ func _run() -> void:
 		var host := VBoxContainer.new()
 		add_child(host)
 		view.transcript(host, program.scene)
-		var rows: Array = host.get_children().slice(3)
+		var rows: Array = host.get_child(2).rows.get_children()
 		_check(rows.size() == program.metadata.size(), "Every original transcript line creates one native row")
 		for index in range(mini(rows.size(), program.metadata.size())):
 			var expected: Dictionary = program.metadata[index]

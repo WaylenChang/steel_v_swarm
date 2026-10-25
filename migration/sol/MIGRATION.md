@@ -533,8 +533,23 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   static/group controls pass but dynamic native SVG stroke coverage remains an
   open shared-renderer contract below. Do not certify full cinematic pixels,
   fractional/DPI placement, hardware input, export or performance from these probes.
-  Finish original first-play asset readiness, buffer-warning presentation and
-  skip-readiness gates before accepting the complete loading/cinematic lifecycle.
+  Prologue playback continues while native image/font cache attempts run. Gesture
+  skipping waits for every attempt; the explicit finish button retains its source
+  bypass. Failed attempts count toward progress, not asset availability. Preserve
+  independent 1800 ms warning deadlines, generation checks and decoder drains
+  across replacement/exit, including pause and zero gameplay speed. Original model
+  warming currently has an empty base manifest; reject nonempty/custom manifests
+  until their native preload contract is published. Keep retained successful
+  resource-cache entries separate from cancelled owners and private scene state.
+  `node tools/campaign_buffer_capture.mjs` and real-driver
+  `tests/campaign_buffer.tscn` retain original cache/error/skip programs, native
+  resource requests, held-decoder retirement and warning timers. Controlled art
+  layers do not qualify actual story decoding, warning CSS/flash appearance,
+  complete cinematic pixels or hardware input. Successful-image readiness and
+  complete first-play loading still require the shared story-encoding contract
+  below and publication of the remaining preload images (`assets/logo_flat.png`
+  and `assets/loading/`) through Opus-owned `tools/import_source.mjs`, preserving
+  the original paths, decoded bytes and explicit failure behavior.
   Automatic radio retains original empty-scene, UTF-16 timer, replacement/clear,
   viewer-relative portrait/guest and single-speaker endpoint behavior. A hidden
   portrait endpoint stays hidden when receiving a speaker update.

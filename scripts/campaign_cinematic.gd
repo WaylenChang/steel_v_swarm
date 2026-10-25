@@ -1,6 +1,8 @@
 class_name CampaignCinematic
 extends Control
 
+const Buffer = preload("res://scripts/campaign_buffer.gd")
+
 signal finished
 signal finishing
 
@@ -39,6 +41,11 @@ var exit_timer: Timer
 var exit_deadline := 0.0
 var generation := 0
 var clock_msec := Callable()
+var buffer_loader: Buffer
+var buffer_status: Label
+var buffer_rules: Dictionary
+var buffer_warning := false
+var buffer_warning_timers: Array[Timer] = []
 
 func _now_msec() -> float:
 	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
@@ -47,6 +54,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	transition_rules = Content.read_json("res://data/campaign_transition.json").rules
+	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
 	add_child(presentation_group)
@@ -79,6 +87,11 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", 38)
 	scroll.add_child(column)
 	caption = NativeUi.label(Content.label("story_skip_hint"), 14)
+	buffer_status = NativeUi.label("", 14)
+	buffer_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	buffer_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buffer_status.hide()
+	body.add_child(buffer_status)
 	body.add_child(caption)
 	scroll.get_v_scroll_bar().value_changed.connect(func(value):
 		if not writing_scroll:
@@ -94,6 +107,9 @@ func _ready() -> void:
 
 func _make_art_layer() -> Control:
 	return preload("res://scripts/campaign_art_layer.gd").new()
+
+func _make_buffer() -> Buffer:
+	return Buffer.new()
 
 func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	if sequence.is_empty():
@@ -129,6 +145,18 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	_layout()
 	playing = true
 	_set_scene(start_index)
+	if is_same(sequence, Content.campaign.get("prologue", [])):
+		var loader := _make_buffer()
+		buffer_loader = loader
+		loader.progress.connect(_buffer_progress.bind(token))
+		add_child(loader)
+		if token != generation or not playing or closing or is_queued_for_deletion() or buffer_loader != loader:
+			return
+		buffer_status.show()
+		_render_buffer()
+		loader.begin(buffer_rules)
+		if token != generation or not playing or closing or is_queued_for_deletion():
+			return
 	last_frame_at = _now_msec()
 	await get_tree().process_frame
 	if token != generation or not playing or closing:
@@ -164,8 +192,10 @@ func _process(_delta: float) -> void:
 		hold_indicator.advance((now - held_at) / (float(Content.campaign.presentation.skip.hold) * 1000))
 	if held_at >= 0 and now - held_at >= float(Content.campaign.presentation.skip.hold) * 1000:
 		held_at = -1
-		finish()
-		return
+		var token := generation
+		_try_skip()
+		if token != generation or not playing or closing:
+			return
 	if now > paused_until:
 		var maximum := maxf(0, scroll.get_v_scroll_bar().max_value - scroll.get_v_scroll_bar().page)
 		if scroll.get_v_scroll_bar().value < maximum:
@@ -199,7 +229,7 @@ func _input(event: InputEvent) -> void:
 			held_at = now
 			hold_indicator.begin(event.position, get_viewport_rect().size)
 			if event.double_click:
-				finish()
+				_try_skip()
 		else:
 			held_at = -1
 			hold_indicator.cancel()
@@ -226,7 +256,7 @@ func _input(event: InputEvent) -> void:
 				return
 			var token := generation
 			if now - last_tap < float(Content.campaign.presentation.skip.doubleTap) * 1000:
-				finish()
+				_try_skip()
 			if token == generation:
 				last_tap = now
 
@@ -252,6 +282,63 @@ func _set_scene(index: int) -> void:
 		art_layers[layer_index].select(layer_index == index)
 	heading.text = scene.badge + " · " + scene.title
 	tag.text = scene.tag
+
+func _buffer_progress(_loaded: int, _total: int, _percent: int, _name: String, _ready: bool, token: int) -> void:
+	if token == generation and playing and not closing and is_inside_tree() and not is_queued_for_deletion():
+		_render_buffer()
+
+func _render_buffer() -> void:
+	if buffer_loader == null:
+		return
+	buffer_status.text = buffer_rules.ready if buffer_loader.complete else String(buffer_rules.pending).replace("{percent}", str(buffer_loader.percent))
+	caption.text = buffer_rules.readyHint if buffer_loader.complete else buffer_rules.pendingHint
+
+func _try_skip() -> void:
+	if not playing or closing or not is_inside_tree() or is_queued_for_deletion():
+		return
+	if buffer_loader == null or buffer_loader.complete:
+		finish()
+		return
+	buffer_warning = true
+	buffer_status.text = String(buffer_rules.warning).replace("{percent}", str(buffer_loader.percent))
+	var timer := Timer.new()
+	timer.one_shot = true
+	timer.ignore_time_scale = true
+	timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	buffer_warning_timers.append(timer)
+	var token := generation
+	add_child(timer)
+	if token != generation or not playing or closing or not buffer_warning_timers.has(timer):
+		return
+	var deadline := _now_msec() + float(buffer_rules.warningMsec)
+	timer.timeout.connect(_buffer_warning_timeout.bind(timer, deadline, generation))
+	timer.start(float(buffer_rules.warningMsec) / 1000)
+
+func _buffer_warning_timeout(timer: Timer, deadline: float, token: int) -> void:
+	if token != generation or not playing or not buffer_warning_timers.has(timer):
+		return
+	var remaining := deadline - _now_msec()
+	if remaining > 0:
+		timer.start(remaining / 1000)
+		return
+	buffer_warning_timers.erase(timer)
+	timer.queue_free()
+	buffer_warning = false
+	_render_buffer()
+
+func _retire_buffer() -> void:
+	if buffer_loader != null:
+		buffer_loader.retire()
+		buffer_loader.queue_free()
+		buffer_loader = null
+	for timer: Timer in buffer_warning_timers:
+		timer.stop()
+		timer.queue_free()
+	buffer_warning_timers.clear()
+	buffer_warning = false
+	if is_instance_valid(buffer_status):
+		buffer_status.hide()
+		caption.text = Content.label("story_skip_hint")
 
 func finish() -> void:
 	if not playing or closing:
@@ -293,6 +380,7 @@ func _exit_curve(value: float) -> float:
 
 func dispose() -> void:
 	generation += 1
+	_retire_buffer()
 	playing = false
 	held_at = -1
 	hold_indicator.reset()
@@ -329,6 +417,7 @@ func _cancel_transitions() -> void:
 
 func _exit_tree() -> void:
 	generation += 1
+	_retire_buffer()
 	playing = false
 	closing = false
 	held_at = -1

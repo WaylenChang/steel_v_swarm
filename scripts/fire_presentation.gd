@@ -4,9 +4,10 @@ extends Node3D
 var entries: Dictionary = {}
 var dynamics: Dictionary = {}
 var clock := 0.0
+var wall_clock := Callable()
 
 func sync(states: Array, now: float, weather: Dictionary) -> void:
-	clock = now
+	clock = float(wall_clock.call()) if wall_clock.is_valid() else now
 	dynamics = weather
 	var seen := {}
 	for state: Dictionary in states:
@@ -36,16 +37,16 @@ func sync(states: Array, now: float, weather: Dictionary) -> void:
 			entries[id].root.queue_free()
 			entries.erase(id)
 
-func _vector(values: Array) -> Vector3:
-	return Vector3(values[0], values[1], values[2])
-
-func _opacity(node: MeshInstance3D, opacity: float) -> void:
+func _opacity(node: MeshInstance3D, opacity: float, disable_depth_write: bool = false) -> void:
 	for surface in range(node.mesh.get_surface_count()):
 		var material: StandardMaterial3D = node.mesh.surface_get_material(surface)
 		material.albedo_color.a = opacity
+		if disable_depth_write:
+			material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+			material.set_meta("source_depth_write", false)
 
 func _process(delta: float) -> void:
-	clock += delta
+	clock = float(wall_clock.call()) if wall_clock.is_valid() else clock + delta
 	var strength := EnvironmentRules.fire_multiplier(dynamics)
 	var wind := clampf(float(dynamics.get("wind", 0)) / 100, 0, 1)
 	var direction: Array = dynamics.get("windDir", [1, 0])
@@ -57,9 +58,9 @@ func _process(delta: float) -> void:
 				continue
 			var flicker := 0.82 + 0.18 * sin(clock * 8 + float(flame.phase)) + 0.1 * sin(clock * 19 + float(flame.phase) * 2)
 			var height := flicker * sqrt(strength)
-			var size := _vector(flame.scale)
-			node.scale = Vector3(size.x / sqrt(flicker), size.y * height, size.z / sqrt(flicker))
-			node.position = _vector(flame.origin) + Vector3.UP * float(flame.height) * (height - 1) / 2
+			var size: Array = flame.scale
+			node.scale = Vector3(float(size[0]) / sqrt(flicker), float(size[1]) * height, float(size[2]) / sqrt(flicker))
+			node.position = Vector3(flame.origin[0], float(flame.origin[1]) + float(flame.height) * (height - 1) / 2, flame.origin[2])
 			node.rotation.z = -float(direction[0]) * wind * 0.32
 			node.rotation.x = float(direction[1]) * wind * 0.32
 			_opacity(node, float(flame.opacity) * minf(1, strength * 2))
@@ -70,6 +71,8 @@ func _process(delta: float) -> void:
 			if not node.visible:
 				continue
 			var life := fmod(clock * 0.16 + index * 0.31, 1)
-			node.position = _vector(smoke.origin) + Vector3(float(direction[0]) * wind * life * 7, life * 6, float(direction[1]) * wind * life * 7)
-			node.scale = _vector(smoke.scale) * (0.65 + life * 0.9)
-			_opacity(node, float(smoke.opacity) * sin(life * PI) * minf(1, strength))
+			node.position = Vector3(float(smoke.origin[0]) + float(direction[0]) * wind * life * 7,
+				float(smoke.origin[1]) + life * 6, float(smoke.origin[2]) + float(direction[1]) * wind * life * 7)
+			var size := 0.65 + life * 0.9
+			node.scale = Vector3(float(smoke.scale[0]) * size, float(smoke.scale[1]) * size, float(smoke.scale[2]) * size)
+			_opacity(node, float(smoke.opacity) * sin(life * PI) * minf(1, strength), true)

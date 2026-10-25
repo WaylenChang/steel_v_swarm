@@ -148,6 +148,7 @@ func sync_fires(states: Array, now: float, dynamics: Dictionary) -> void:
 		return
 	if fire_visuals == null:
 		fire_visuals = FirePresentation.new()
+		fire_visuals.wall_clock = BodyPresentation.time_now
 		add_child(fire_visuals)
 	fire_visuals.sync(states, now, dynamics)
 

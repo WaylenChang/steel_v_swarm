@@ -102,6 +102,16 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   source wind/wave/gust/tide/ripple/vessel coupling. Bind the shared shader owner's
   accepted materials; certify weather style/low-power transitions and full
   seasonal rendered composition. Weather damage and hazards remain authority-owned.
+  Fire flicker/drift uses the same local wall clock as loot, independently of
+  incoming authority times and render deltas. Retain authored origin/scale doubles
+  until final native Float32 writes; extinguished nodes keep their prior pose.
+  The first visible smoke update disables depth writes and updates private source
+  material metadata, preserving that state across later quench/recovery.
+  `node tools/fire_clock_capture.mjs` and real-driver `tests/fire_clock.tscn`
+  retain the original client/animation/weather functions, large clock phases,
+  exact scalar/Float32 outputs and private packed-resource isolation. Their
+  declared node probes use imported FX records; they do not qualify original
+  constructor geometry, full shader pixels, populated worlds or transport delivery.
 - [ ] **S6 — Room resources/prebuild:** finish populated seasonal-world retention,
   cancellation/retry and tree transfer in offline, ENet and WebSocket sessions.
   Isolated lifecycle fixtures cannot establish complete-world dependency retention

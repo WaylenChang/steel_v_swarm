@@ -7,7 +7,7 @@ import {createReadStream,createWriteStream} from 'node:fs';
 import {pipeline} from 'node:stream/promises';
 import {writeSourceFile,publishSourceFile} from './fixture_json.mjs';
 
-async function bufferDigest(path) {
+export async function bufferDigest(path) {
   const hash=createHash('sha256');
   await pipeline(createReadStream(path),hash);
   return hash.digest('hex');
@@ -81,7 +81,7 @@ export class WorldSourceWriter {
       }
       const name=sha256+extension,target=join(this.directory,'buffers',name);
       if(await this._exists(target,sha256,bytes))await rm(candidate);
-      else {await publishSourceFile(candidate,target);this.verified.add(sha256);}
+      else {await publishSourceFile(candidate,target);this.verified.add(target);}
       this.temporary.delete(candidate);
       if(candidate!==part.temporary){await rm(part.temporary);this.temporary.delete(part.temporary);}
       descriptors.push({$sourceNumericArray:{path:this.resourceDirectory+'/buffers/'+name,sha256,bytes,
@@ -117,19 +117,23 @@ export class WorldSourceWriter {
     }
     await this.end(this.count);
   }
-  async _exists(path,sha256,bytes) {
-    if(this.verified.has(sha256))return true;
+  async _exists(path,sha256,bytes,kind='buffer') {
+    if(this.verified.has(path))return true;
     try {
-      if((await stat(path)).size!==bytes)throw new Error('Corrupt source buffer length: '+path);
-      if(await bufferDigest(path)!==sha256)throw new Error('Corrupt source buffer hash: '+path);
-      this.verified.add(sha256);return true;
+      if((await stat(path)).size!==bytes)throw new Error('Corrupt source '+kind+' length: '+path);
+      if(await bufferDigest(path)!==sha256)throw new Error('Corrupt source '+kind+' hash: '+path);
+      this.verified.add(path);return true;
     } catch(error) {if(error.code==='ENOENT')return false;throw error;}
   }
   async _flush() {
     if(!this.rows.length)return;
     const plain=Buffer.from('['+this.rows.join(',')+']'),packed=gzipSync(plain);
     const sha256=createHash('sha256').update(packed).digest('hex'),name=sha256+'.json.gz';
-    await writeSourceFile(join(this.directory,'mesh_chunks',name),packed);
+    const path=join(this.directory,'mesh_chunks',name);
+    if(!await this._exists(path,sha256,packed.length,'mesh chunk')) {
+      await writeSourceFile(path,packed);
+      this.verified.add(path);
+    }
     const start=this.chunks.reduce((sum,chunk)=>sum+chunk.count,0);
     this.chunks.push({path:this.resourceDirectory+'/mesh_chunks/'+name,sha256,bytes:packed.length,
       plainBytes:plain.length,start,count:this.rows.length});

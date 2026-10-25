@@ -15,6 +15,11 @@ var _verified := {}
 
 func _init(source: Dictionary, resource_root: String = "res://data/worlds") -> void:
 	_root = resource_root
+	if source.has("worldSourceVersion"):
+		var version: Variant = source.worldSourceVersion
+		if not (version is int or version is float) or float(version) != 2.0:
+			_fail("Unsupported source world mesh storage version")
+			return
 	if source.get("worldSourceVersion") == 2:
 		if not source.get("meshChunks") is Array or not _integer(source.get("meshCount")):
 			_fail("Invalid source world mesh manifest")
@@ -95,7 +100,7 @@ func _read_chunk(chunk: Dictionary) -> Array:
 
 func _read_bytes(spec: Dictionary, folder: String, extension: String) -> PackedByteArray:
 	var sha: Variant = spec.get("sha256")
-	if not sha is String or sha.length() != 64 or sha.hex_decode().size() != 32 or not _integer(spec.get("bytes")) or int(spec.bytes) <= 0 or int(spec.bytes) > 2147483647:
+	if not sha is String or sha.length() != 64 or not sha.lstrip("0123456789abcdef").is_empty() or not _integer(spec.get("bytes")) or int(spec.bytes) <= 0 or int(spec.bytes) > 2147483647:
 		_fail("Invalid source world buffer declaration")
 		return PackedByteArray()
 	var expected := _root + folder + str(sha) + extension
@@ -123,6 +128,9 @@ func _read_bytes(spec: Dictionary, folder: String, extension: String) -> PackedB
 
 func _decode(value: Variant, packed_metadata := false) -> Variant:
 	if value is Dictionary:
+		if value.has("$sourceArray"):
+			_fail("Unfinished source numeric transfer")
+			return null
 		if value.has("$sourceNumericArray"):
 			var spec: Variant = value["$sourceNumericArray"]
 			if value.size() != 1 or not spec is Dictionary or spec.get("encoding") not in ["float64le", "float64le-gzip"] or not spec.get("shape") is Array or spec.shape.size() not in [1, 2]:

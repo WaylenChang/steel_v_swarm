@@ -3,12 +3,19 @@ extends Node
 const WorldMeshes = preload("res://tools/source_world_meshes.gd")
 const FIXTURES := "res://artifacts/agy/oracle-validation/world-source-storage/"
 
+class RejectionReader extends WorldMeshes:
+	var rejections: Array[String] = []
+	func _fail(message: String) -> void:
+		valid = false
+		rejections.append(message)
+
 var assertions := 0
 var failures: Array[String] = []
 
 func _ready() -> void:
 	for name: String in ["native-raw-case.json", "native-case.json"]:
 		_run_case(name)
+	_rejections()
 	print("WORLD_STORAGE assertions=", assertions, " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)
 
@@ -56,6 +63,29 @@ func _run_case(name: String) -> void:
 			_check_bits(stored[0], fixture, name + ": reloaded")
 	_check(DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) == OK,
 		name + ": temporary native resource is released and removed")
+
+func _rejections() -> void:
+	for version: Variant in [null, false, "2", -1, 0, 2.5, 3]:
+		var reader := RejectionReader.new({"worldSourceVersion": version, "meshes": [{"name": "legacy"}]})
+		_check(not reader.valid and reader.rejections == ["Unsupported source world mesh storage version"],
+			"Explicit unsupported versions cannot fall through to legacy mesh storage: " + str(version))
+	var legacy := RejectionReader.new({"meshes": [{"name": "legacy", "positions": [0.0, 0.25, -1.5]}]})
+	var rows := []
+	for mesh: Dictionary in legacy:
+		rows.append(mesh)
+	_check(legacy.valid and legacy.rejections.is_empty() and rows.size() == 1 and rows[0].name == "legacy",
+		"Unversioned original legacy storage remains readable")
+	var empty := RejectionReader.new({"worldSourceVersion": 2, "meshCount": 0, "meshChunks": []})
+	_check(empty.valid and empty.rejections.is_empty(), "A completed empty storage manifest remains valid")
+	var marker := RejectionReader.new({"meshes": []})
+	var result: Variant = marker._decode({"nested": {"$sourceArray": 0}})
+	_check(not marker.valid and marker.rejections == ["Unfinished source numeric transfer"] and result.nested == null,
+		"Unfinished numeric transfer markers are rejected even in nested metadata")
+	for sha: String in ["g".repeat(64), "A".repeat(64), "0".repeat(63), "-".repeat(64), "-" + "0".repeat(63), "+" + "0".repeat(63)]:
+		var invalid := RejectionReader.new({"meshes": []})
+		var bytes := invalid._read_bytes({"sha256": sha, "bytes": 8}, "/buffers/", ".f64")
+		_check(not invalid.valid and bytes.is_empty() and invalid.rejections == ["Invalid source world buffer declaration"],
+			"Invalid SHA declarations fail without invoking a native decoder or file read: " + sha)
 
 func _check_bits(mesh: Dictionary, fixture: Dictionary, label: String) -> void:
 	for entry: Dictionary in fixture.checks:

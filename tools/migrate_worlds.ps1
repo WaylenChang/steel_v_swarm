@@ -60,6 +60,7 @@ $completed = 0
 foreach ($worldBundle in $worldBundles) {
     if ($worldBundle -notmatch '^[a-zA-Z0-9_]+$') { throw 'Invalid source world bundle identity' }
     Invoke-WorldTool "$worldBundle-capture" $migrationNode @('--max-old-space-size=8192', (Join-Path $PSScriptRoot 'bake_worlds.mjs'), '--reuse', "--bundle=$worldBundle") '(source geometry reused| meshes, \d+ decks, \d+ tunnels)'
+    Invoke-WorldTool "$worldBundle-storage" $migrationNode @((Join-Path $PSScriptRoot 'verify_world_source.mjs'), $worldBundle) 'WORLD_SOURCE_STORAGE_PASS '
     Invoke-WorldTool "$worldBundle-references" $migrationNode @((Join-Path $PSScriptRoot 'world_references.mjs'), $worldBundle) 'Source layered-deck query references generated'
     Invoke-WorldTool "$worldBundle-native" $migrationGodot @('--path', $migrationRoot, '--rendering-method', 'gl_compatibility', '--rendering-driver', 'opengl3', '--disable-render-loop', '--audio-driver', 'Dummy', '--position', '-32000,-32000', '--resolution', '1x1', 'res://tools/import_worlds.tscn', '--', "--bundle=$worldBundle") "WORLD_IMPORTED $([regex]::Escape($worldBundle))"
     $completed++

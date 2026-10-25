@@ -116,7 +116,9 @@ func sync_mines(states: Array) -> void:
 		return
 	if mine_visuals == null and states.is_empty():
 		return
-	if mine_visuals == null:
+	if not is_instance_valid(mine_visuals) or mine_visuals.retired or mine_visuals.is_queued_for_deletion():
+		if is_instance_valid(mine_visuals):
+			mine_visuals.queue_free()
 		mine_visuals = MinePresentation.new()
 		mine_visuals.wall_clock = BodyPresentation.time_now
 		add_child(mine_visuals)
@@ -130,7 +132,7 @@ func sync_mines(states: Array) -> void:
 	mine_visuals.sync(poses)
 
 func update_mine_view(observer: Vector3, now: float) -> void:
-	if mine_visuals != null:
+	if is_instance_valid(mine_visuals):
 		mine_visuals.update_view(observer, now)
 
 func sync_loots(states: Array, now: float) -> void:

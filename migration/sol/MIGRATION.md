@@ -436,6 +436,15 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   near-threshold states and world clock binding. Constructor geometry/shading and
   terrain height probes do not qualify original mine shape, imagery-derived
   camouflage, complete world coordinates, trigger settlement or transport delivery.
+  Mine owners retire terminally on detachment and reject queued/late calls before
+  clock providers, throttle reservation or model acquisition. Prepare private
+  meshes and world pose before admission; seal the entire roster before terminal
+  visibility callbacks. Reentrant synchronization and eligible view updates
+  supersede old opacity/visibility continuations. World reuse acquires fresh
+  owners. Real-driver `tests/mine_retirement.tscn` replays the original visibility
+  oracle and checks interrupted admission/removal, clock callbacks, nested view
+  updates and deferred private-resource release with closed owners retained.
+  It does not qualify the uncaptured imagery/geometry or populated round delivery.
   Missile retirement is terminal and idempotent. Seal it before fracture callbacks,
   stop interrupted observation/model continuations, and release packed models,
   persistent damage children, copied materials and private ray buffers even while

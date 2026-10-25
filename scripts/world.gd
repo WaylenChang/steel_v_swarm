@@ -202,7 +202,9 @@ func sync_fogs(states: Array, side: String, now: float) -> void:
 	skill_fields.sync_fogs(states, side, now)
 
 func ensure_projectile_visuals() -> ProjectilePresentation:
-	if projectile_visuals == null:
+	if not is_instance_valid(projectile_visuals) or projectile_visuals.retired or projectile_visuals.is_queued_for_deletion():
+		if is_instance_valid(projectile_visuals):
+			projectile_visuals.queue_free()
 		projectile_visuals = ProjectilePresentation.new()
 		add_child(projectile_visuals)
 	projectile_visuals.missile_collision = missile_view_collision

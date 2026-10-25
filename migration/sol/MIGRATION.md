@@ -921,9 +921,15 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for world/audio acceptance
 
-- **Opus — exact native source JSON numbers:** agree an accepted shared decoder
-  or typed-number contract under `scripts/source_*.gd` before Sol certifies native
-  inline world values. The original Chromium small sphere has 14 double-bit
+- **Opus — exact native source JSON numbers:** expose a reusable validated
+  numeric-tape boundary in `scripts/source_fixture_sections.gd` before Sol
+  certifies native inline world values. Its existing `load_part` honors
+  `numericEncoding: f64-le`, and `_restore_numbers` already restores source words;
+  avoid a second decimal parser. The public contract must accept a captured value
+  tree plus native float64 bytes, preserve tree shape, reject incomplete/extra
+  words and retain the fixture loader's hash/path validation. World callers
+  validate their own storage paths/hashes before restoration. The original
+  Chromium small sphere has 14 double-bit
   mismatches in each position/normal array after Godot JSON parsing; the large
   sphere has 928 per array on the direct JSON path, while its float64 sidecars
   remain exact. Native resource reload retains the already-decoded small-array

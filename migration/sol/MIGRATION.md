@@ -96,6 +96,20 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   phase cases also compare normalized orientation independently of tiny petal
   scale. Declared crown/quad probes do not qualify original foliage/flower meshes,
   material pixels or complete seasonal world composition.
+  Borrowed scenery pivots and train visuals retain their controllers across
+  staging detachment/reparenting, without rebuilding phases or private materials.
+  Native deletion closes the binding through a weak observer; match its binding
+  generation and instance identity so old or duplicated observers cannot retire
+  a replacement. Queued pivots/visuals reject later updates, and terminal
+  controllers release source/node/material references and reject reconfiguration.
+  Real-driver `tests/scenery_binding_retirement.tscn` replays original motion/train
+  programs and checks transfers, rebinding, duplication, paused deletion and
+  retained-controller material/curve release. Its waterfall quad and empty train
+  model isolate ownership; they do not qualify authored geometry, complete world
+  retention or populated transport/prebuild barriers.
+  Finish host-level `scripts/scenery_presentation.gd` retirement for camp/batch
+  caches and shared-clock admission after source-root deletion; leaf binding
+  retirement does not certify that host or its populated world lifecycle.
 - [ ] **S5 — Environment appearance:** finish cloud/fog-bank detail,
   precipitation, celestial bodies, deposits/scorch, contact effects,
   shoreline/underwater/waves/reflections and

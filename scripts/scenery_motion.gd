@@ -1,6 +1,8 @@
 class_name SceneryMotion
 extends RefCounted
 
+const BindingLifetime = preload("res://scripts/scenery_binding_lifetime.gd")
+
 var spec: Dictionary
 var pivot: Node3D
 var angles: Array = [0.0, 0.0, 0.0]
@@ -8,6 +10,45 @@ var angle := 0.0
 var paused := false
 var elapsed := 0.0
 var materials: Array[StandardMaterial3D] = []
+var retired := false
+var ready := false
+var generation := 0
+var revision := 0
+var lifetime: BindingLifetime
+var lifetime_id := 0
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
+
+func _active() -> bool:
+	return not retired and is_instance_valid(pivot) and not pivot.is_queued_for_deletion()
+
+func _current(token: int) -> bool:
+	return _active() and token == revision
+
+func _retire_binding(binding_generation: int, binding_instance: int) -> void:
+	if generation != binding_generation or lifetime_id != binding_instance:
+		return
+	lifetime = null
+	retire()
+
+func retire() -> void:
+	if retired:
+		return
+	retired = true
+	ready = false
+	generation += 1
+	revision += 1
+	if is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
+	lifetime = null
+	lifetime_id = 0
+	pivot = null
+	spec = {}
+	materials.clear()
 
 static func create_anchor(source: Dictionary) -> Node3D:
 	var anchor := Node3D.new()
@@ -34,12 +75,29 @@ static func _frame(source: Dictionary, position: Vector3, rotation: Array, size:
 	return Transform3D(SourceQuaternion.basis(q).scaled_local(local_scale), position)
 
 func configure(node: Node3D, source: Dictionary, phase: Variant = null) -> bool:
+	if retired or not is_instance_valid(node) or node.is_queued_for_deletion():
+		return false
+	generation += 1
+	revision += 1
+	var token := revision
+	ready = false
+	if is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
 	spec = source
 	pivot = node
 	angles = source.rotation.duplicate()
 	angle = float(source.get("angle", source.get("phase", 0)))
 	elapsed = float(source.get("start", 0)) if phase == null else float(phase) * float(source.range)
 	materials.clear()
+	lifetime = BindingLifetime.new()
+	lifetime_id = lifetime.get_instance_id()
+	lifetime.controller = weakref(self)
+	lifetime.generation = generation
+	# A tree transfer retains the binding; only native deletion closes it.
+	node.add_child(lifetime)
+	if not _current(token):
+		return false
 	if source.kind == "waterfall_sheet":
 		for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
 			# Opacity belongs to this waterfall, never to the saved shared scene.
@@ -51,17 +109,24 @@ func configure(node: Node3D, source: Dictionary, phase: Variant = null) -> bool:
 					return false
 				overrides.append(original.duplicate())
 			mesh.material_override = null
+			if not _current(token):
+				return false
 			for surface in range(overrides.size()):
 				mesh.set_surface_override_material(surface, overrides[surface])
+				if not _current(token):
+					return false
 				materials.append(overrides[surface])
 		if materials.is_empty():
 			push_error("Missing original waterfall sheet geometry")
 			return false
+	ready = true
 	return true
 
 func advance(delta: float, now: float, weather: Dictionary) -> void:
-	if not is_instance_valid(pivot) or (spec.kind == "part" and (paused or not is_finite(now))):
+	if not ready or not _active() or (spec.kind == "part" and (paused or not is_finite(now))):
 		return
+	revision += 1
+	var token := revision
 	var position := pivot.position
 	var wind := maxf(0, float(weather.get("windAmp", 1)))
 	var wave := maxf(0, float(weather.get("waveAmp", 1)))
@@ -104,6 +169,8 @@ func advance(delta: float, now: float, weather: Dictionary) -> void:
 				var color := material.albedo_color
 				color.a = (0.85 if index == 0 else 0.55) + sin(elapsed * (3 + index)) * 0.1
 				material.albedo_color = color
+				if not _current(token):
+					return
 		"waterfall_foam":
 			elapsed += delta
 			size = Vector3.ONE * (1 + sin(elapsed * 3.2) * 0.12)

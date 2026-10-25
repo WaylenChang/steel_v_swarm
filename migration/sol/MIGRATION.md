@@ -32,6 +32,14 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   that ignored/untracked sidecars are present. `tools/migrate_worlds.ps1` must stop
   before reference/native publication on any storage failure; this storage gate
   does not establish complete scenery, source provenance or rendered parity.
+  Run `tools/verify_world_provenance.mjs <bundle>` separately for declared original
+  input/asset bytes and both provenance fingerprints. Hash original files through
+  bounded streams, reject paths/links outside the source root, and preserve
+  declared missing-asset identity. `tools/migrate_worlds.ps1` runs this gate before
+  references and again before native packing; source changes must stop publication.
+  This gate does not establish generator freshness, extraction-helper/reference
+  semantics, native shader fidelity or match parity. Keep the dedicated
+  `tests/world_provenance.test.mjs` failure/immutability cases.
   Content-addressed mesh chunks also require length/hash validation before reuse;
   reject corrupt existing chunks without rewriting them. Cache verification by
   complete storage path: identical bytes can belong to both numeric and chunk
@@ -281,6 +289,7 @@ World workflow, from the repository root:
 node tools/bake_worlds.mjs --list-bundles
 node tools/world_publication_inventory.mjs --summary
 node tools/verify_world_source.mjs berlin_1_autumn
+node tools/verify_world_provenance.mjs berlin_1_autumn
 ./tools/migrate_worlds.ps1 -Godot C:/path/to/godot_console.exe -Bundle berlin_1_autumn
 godot --headless --path . res://tests/worlds.tscn -- --bundle=berlin_1_autumn
 node --test tests/world_source.test.mjs tests/world_selection.test.mjs
@@ -913,7 +922,8 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   generation preserve the original bundle byte-for-byte; matching inputs retain
   original endpoint tolerance and upper/lower deck query results. This reference
   generator includes authority query semantics and remains a separate shared-owner
-  change; Sol's storage/availability checks cannot discharge it.
+  change. Sol's wrapper rechecks declared world inputs before/after references;
+  it cannot certify the standalone oracle or extraction-helper contract.
 - **Opus — float vertex colors:** agree the native mesh/shader attribute contract
   in `scripts/source_cel_*.gd` and `shaders/` before Sol changes
   `tools/import_worlds.gd` to bind it. Original Berlin autumn `SourceMesh_5`

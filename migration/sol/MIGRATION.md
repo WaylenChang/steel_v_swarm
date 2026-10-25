@@ -498,6 +498,13 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   `node tools/loot_clock_capture.mjs`
   and real-driver `tests/loot_clock.tscn` cover the original methods and world
   binding, not complete loot geometry or populated pickup/transport settlement.
+  The clock producer executes only the captured original constants/functions;
+  do not import the entire source data module or its unrelated RNG dependencies.
+  Retain strict hashes for every executed source input and the fixture writer.
+  Run the same programs in Node and original Chromium, require matching double
+  phase/landing tapes, and publish the browser's pose outputs. Preserve the
+  declared constructor probes and all long-rotation/zero-clock cases; this gate
+  still cannot establish source constructor geometry or complete rendered pixels.
   Collectible owners close terminally on detachment; world reuse acquires fresh
   owners. Seal all entry references before visibility callbacks, prepare pose
   and private outline bindings before admission, and stop superseded sync/frame

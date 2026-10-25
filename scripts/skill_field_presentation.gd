@@ -55,24 +55,39 @@ func _add_surface(root: Node3D, mesh: ArrayMesh, color: Color, opacity: float, a
 	root.add_child(node)
 
 func _ring(inner: float, outer: float, segments: int) -> ArrayMesh:
-	var key := "%s/%s/%d" % [inner, outer, segments]
+	var key := [inner, outer, segments]
 	if meshes.has(key):
 		return meshes[key]
 	var vertices := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var points := PackedVector3Array()
+	var coordinates := PackedVector2Array()
+	if inner <= 0:
+		points.append(Vector3.ZERO)
+		coordinates.append(Vector2(.5, .5))
+	var radius := inner if inner > 0 else outer
+	for row in range(2 if inner > 0 else 1):
+		for index in range(segments + 1):
+			var angle := float(index) / segments * TAU
+			var x := radius * cos(angle)
+			var y := radius * sin(angle)
+			points.append(Vector3(x, 0, -y))
+			coordinates.append(Vector2((x / outer + 1) / 2, (y / outer + 1) / 2))
+		radius += outer - inner
 	for index in range(segments):
-		var first := index * TAU / segments
-		var last := (index + 1) * TAU / segments
-		var a_inner := Vector3(cos(first) * inner, 0, -sin(first) * inner)
-		var a_outer := Vector3(cos(first) * outer, 0, -sin(first) * outer)
-		var b_inner := Vector3(cos(last) * inner, 0, -sin(last) * inner)
-		var b_outer := Vector3(cos(last) * outer, 0, -sin(last) * outer)
-		if inner <= 0:
-			vertices.append_array(PackedVector3Array([Vector3.ZERO, a_outer, b_outer]))
-		else:
-			vertices.append_array(PackedVector3Array([a_inner, a_outer, b_inner, a_outer, b_outer, b_inner]))
+		var indices: Array = [index + 1, index + 2, 0] if inner <= 0 else [index, index + segments + 1, index + 1,
+			index + segments + 1, index + segments + 2, index + 1]
+		for vertex: int in indices:
+			vertices.append(points[vertex])
+			uv.append(coordinates[vertex])
+	var normals := PackedVector3Array()
+	normals.resize(vertices.size())
+	normals.fill(Vector3.UP)
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uv
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	meshes[key] = mesh

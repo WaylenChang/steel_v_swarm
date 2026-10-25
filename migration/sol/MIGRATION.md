@@ -419,6 +419,19 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   reading global transforms, model nodes or persistent damage geometry. Acceptance:
   ray queries during a reentrant terminal fracture callback, after retirement and
   after tree detachment return no hit without dereferencing released resources.
+  Fog circles/rings retain original expanded triangle order, normals and exact
+  Float32 UV writes, including native resource reload. Reuse immutable meshes by
+  exact radius parameters while retaining private per-fog opacity materials.
+  `node tools/fog_geometry_capture.mjs` and real-driver
+  `tests/fog_geometry.tscn` retain the actual source constructor and all six layers.
+  Buffer/material checks do not qualify composed pixels, clocks or capacity.
+  **Opus — `scripts/main.gd` fog delivery contract:** reconcile the current
+  snapshot-derived `BattleWorld.sync_fogs` age/expiry with original `fog_spawn`
+  receipt and render-frame effect deltas. Original fog visuals belong to the
+  same oldest-first `FX_MAX` list as tracers and other effects; authority duration
+  must not silently replace that client lifetime. Acceptance: zero/capped frame
+  deltas, paused authority clocks, late observation and mixed-effect eviction
+  retain the original birth/fade/removal sequence before full fog qualification.
   Keep loot bob/airdrop descent on the local wall clock, independent of incoming
   authority clocks; creation and frame updates must use that same time base while
   rotation still consumes the source frame delta. Accumulate rotation in double

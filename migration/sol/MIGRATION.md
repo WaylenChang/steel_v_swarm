@@ -78,6 +78,22 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   prefixes, full/low budgets, constructor activity boundaries and saved instance
   buffer isolation. Synthetic probe geometry does not qualify original animal
   meshes, rendered habitats or complete seasonal population/transport retention.
+  Wildlife bindings close on native root deletion while surviving staging
+  detachment and reparenting. Weak observers match generation and instance ID;
+  queued roots reject frames. Rebinding or retirement during terrain queries
+  cancels the old writer before subsequent queries or instance writes, releasing
+  private buffers and borrowed callbacks with closed owners retained.
+  `node tools/wildlife_writer_capture.mjs` and real-driver
+  `tests/wildlife_retirement.tscn` isolate the original writer with explicit
+  state/limb probes; they do not execute RNG, route construction or integration,
+  qualify authored animal geometry, or replace the full wildlife gate above.
+  **Opus handoff:** reconcile `data/provenance.json` through
+  `tools/import_source.mjs` with the original `public/js/rng.js` consumed by
+  wildlife initialization. The full capture genuinely executes that dependency;
+  retain its source guard and the failing `tests/wildlife_native.tscn` check.
+  Acceptance requires matching source provenance and the complete original
+  constructor, capacity, habitat and integration programs without dropping RNG
+  inputs or substituting the scoped writer oracle.
   Aquatic school headings retain an unbounded source double angle; derive the
   quaternion before native storage. `node tools/aquatic_native_capture.mjs` and
   real-driver `tests/aquatic_native.tscn` cover original bubbles, detritus, fish,

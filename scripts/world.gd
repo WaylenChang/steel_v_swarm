@@ -24,6 +24,7 @@ var projectile_visuals: ProjectilePresentation
 var missile_view_collision := Callable()
 var skill_fields: SkillFieldPresentation
 var weather_visuals: WeatherPresentation
+var weather_sync_revision := 0
 var water_y: Variant = null
 var water_meshes: Array[MeshInstance3D] = []
 var authority_height_grid: Dictionary = {}
@@ -186,21 +187,27 @@ func water_plane(x: float, z: float) -> Variant:
 func sync_weather(dynamics: Dictionary, _surface: Dictionary, hour: float, schedule: Dictionary, season: String, seed_value: int = 0) -> void:
 	if dynamics.is_empty():
 		return
+	weather_sync_revision += 1
+	var token := weather_sync_revision
 	visual_frozen = bool(dynamics.get("isFrozen", false))
 	if native_data != null and native_data.water_profile.get("baseY") != null:
 		var shift := EnvironmentRules.tide(hour, schedule.lunarDay, native_data.water_profile.isMarine)
 		water_y = float(native_data.water_profile.baseY) + shift
 		for mesh: MeshInstance3D in water_meshes:
 			mesh.position.y = shift
-	if weather_visuals == null:
+	if not is_instance_valid(weather_visuals) or weather_visuals.retired or weather_visuals.is_queued_for_deletion():
+		if is_instance_valid(weather_visuals):
+			weather_visuals.queue_free()
 		weather_visuals = WeatherPresentation.new()
-		add_child(weather_visuals)
 		weather_visuals.configure(seed_value)
+		add_child(weather_visuals)
+		if token != weather_sync_revision:
+			return
 	var span := maxf(float(bounds.maxX) - float(bounds.minX), float(bounds.maxZ) - float(bounds.minZ))
 	weather_visuals.sync(dynamics, hour, schedule, season, span)
 
 func present_lightning(points: Array) -> void:
-	if weather_visuals != null:
+	if is_instance_valid(weather_visuals):
 		weather_visuals.strike(points)
 
 func sync_fogs(states: Array, side: String, now: float) -> void:

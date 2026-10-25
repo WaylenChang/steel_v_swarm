@@ -102,6 +102,20 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   source wind/wave/gust/tide/ripple/vessel coupling. Bind the shared shader owner's
   accepted materials; certify weather style/low-power transitions and full
   seasonal rendered composition. Weather damage and hazards remain authority-owned.
+  Native weather owners configure once, then close terminally on detachment.
+  Prepare sky, light and private particle resources before world admission;
+  reentrant publications retain the newest weather and original construction
+  seed. Seal resource maps and lightning records before callbacks, stop stale
+  property/frame writes and preserve independent strike batches. Unbind retired
+  environments immediately, then drain queued sky resources through one native
+  `frame_post_draw` callback independently of the closed node before final release.
+  `node tools/weather_owner_capture.mjs` retains twelve original Node/Chromium
+  precipitation-profile cases; real-driver `tests/weather_retirement.tscn` checks
+  native profile bindings, interruption, expiry and retained-owner resource release.
+  Also run it with `-- --live-exit` for active-owner application shutdown. Setter
+  probes isolate property-boundary cancellation; these checks do not qualify
+  original sky/cloud/fog/precipitation pixels, particle trajectories, authored
+  lightning geometry or complete seasonal/transport acceptance.
   Fire flicker/drift uses the same local wall clock as loot, independently of
   incoming authority times and render deltas. Retain authored origin/scale doubles
   until final native Float32 writes; extinguished nodes keep their prior pose.

@@ -371,11 +371,15 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   Verify retired buffers and private materials after deferred destruction and a
   completed rendered frame, including lines that were actually visible.
   Original tracer prewarm/free-stack bounds remain unqualified until the pool
-  provenance contract below is resolved. Complete the shared oldest-first
-  `FX_MAX` budget across `ProjectilePresentation.traces` and `CombatEffects.effects`
-  through `scripts/world.gd`; separate per-owner caps cannot preserve original
-  mixed effect insertion/eviction order. Keep zero-delta culling and expiry order
-  in the source-based acceptance cases rather than inventing a tracer-only cap.
+  provenance contract below is resolved. Preserve the shared oldest-first
+  `FX_MAX` budget and reverse fade/expiry order across
+  `ProjectilePresentation.traces` and `CombatEffects.effects`, after visual-shell
+  movement. Source crowding gates count both owners. Regenerate the scoped oracle
+  with `node tools/effect_order_capture.mjs`; real-driver
+  `tests/presentation_effect_order.tscn` checks mixed insertion, zero-delta trimming,
+  exact lifetime/fade scalars, both quality gates and reentrant owner retirement.
+  Its unbuilt-world and callback probes do not qualify full effect pixels,
+  original tracer pool limits or populated transport behavior.
 - [ ] **S17 — Impact/particles:** certify muzzle/contact/explosion layers,
   source fire/smoke/embers, texture/opacity/depth rules, pooling/oldest-first
   budgets, victim first-observation/healing/re-entry gates and guard peak rules.
@@ -638,6 +642,10 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   resources; produce the selected original bundles before repeating populated
   acceptance. Root-suite failures in other owners' fixtures do not authorize
   changing their production code or shared reference registries here.
+  Root and selected NPC-shot suites also reject stale consumer dependencies.
+  Projectile transport timeouts and a rendered smoke timeout without `SMOKE_PASS`
+  leave integrated effect delivery unqualified; isolated effect-order acceptance
+  cannot discharge these gates.
   Native font/codec caches can be generated in an isolated minimal Godot project
   from identical source assets and import descriptors, then copied into the
   ignored `.godot/imported` directory. Avoid broad editor imports that rewrite

@@ -215,6 +215,7 @@ func ensure_combat_effects() -> CombatEffects:
 		combat_effects = CombatEffects.new()
 		combat_effects.low_power = Controls.low_power()
 		add_child(combat_effects)
+	combat_effects.effect_count = _presentation_effect_count
 	return combat_effects
 
 func clip_shot(origin: Vector3, target: Vector3) -> Dictionary:
@@ -226,10 +227,15 @@ func sync_projectile_view(states: Array, clock: float = NAN) -> void:
 	ensure_projectile_visuals().sync_rounds(states, clock)
 
 func step_projectile_visuals(delta: float) -> void:
-	if projectile_visuals != null:
-		projectile_visuals.advance(delta, visual_collision, _visual_shell_impact)
-	if combat_effects != null:
-		combat_effects.advance(delta)
+	if is_instance_valid(projectile_visuals):
+		projectile_visuals.advance_shells(delta, visual_collision, _visual_shell_impact)
+	preload("res://scripts/presentation_effects.gd").advance([projectile_visuals, combat_effects], delta)
+
+func _presentation_effect_count() -> int:
+	var count := combat_effects.effects.size() if is_instance_valid(combat_effects) else 0
+	if is_instance_valid(projectile_visuals):
+		count += projectile_visuals.presentation_effects().size()
+	return count
 
 func _visual_shell_impact(point: Vector3, radius: float, color: int) -> void:
 	ensure_combat_effects().spark(point, radius, color)

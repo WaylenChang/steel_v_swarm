@@ -1,6 +1,8 @@
 class_name ProjectilePresentation
 extends Node3D
 
+const EffectOrder = preload("res://scripts/presentation_effects.gd")
+
 var rounds: Dictionary = {}
 var shells: Array[Dictionary] = []
 var free_models: Dictionary = {}
@@ -88,9 +90,14 @@ func tracer(start: Vector3, end: Vector3, color: Color, ttl: float = 0.35) -> vo
 	line.visible = true
 	if not _active():
 		return
-	traces.append({"line": line, "ttl": ttl, "duration": ttl, "age": 0.0})
+	traces.append({"line": line, "ttl": ttl, "duration": ttl, "age": 0.0, "order": EffectOrder.stamp()})
 
 func advance(delta: float, collision: Callable, impact: Callable = Callable()) -> void:
+	advance_shells(delta, collision, impact)
+	if _active():
+		EffectOrder.advance([self], delta)
+
+func advance_shells(delta: float, collision: Callable, impact: Callable = Callable()) -> void:
 	if not _active() or not is_finite(delta) or delta <= 0:
 		return
 	for index in range(shells.size() - 1, -1, -1):
@@ -118,22 +125,30 @@ func advance(delta: float, collision: Callable, impact: Callable = Callable()) -
 		state.model.place(state.position, direction, state.age, state.velocity.length())
 		if not _active():
 			return
-	for index in range(traces.size() - 1, -1, -1):
-		var trace: Dictionary = traces[index]
-		trace.ttl -= delta
-		trace.age += delta
-		var material: StandardMaterial3D = trace.line.material_override
-		var color := material.albedo_color
-		color.a = 0.9 * maxf(0, trace.ttl / (trace.ttl + trace.age))
-		material.albedo_color = color
-		if not _active():
-			return
-		if trace.ttl <= 0:
-			traces.remove_at(index)
-			_release_trace(trace)
-			if not _active():
-				return
-			continue
+
+func presentation_effects() -> Array[Dictionary]:
+	return traces if _active() else []
+
+func discard_effect(trace: Dictionary) -> void:
+	if not _active():
+		return
+	var index := traces.find(trace)
+	if index < 0:
+		return
+	traces.remove_at(index)
+	_release_trace(trace)
+
+func advance_effect(trace: Dictionary, delta: float) -> void:
+	if not _active() or not traces.has(trace):
+		return
+	trace.ttl -= delta
+	trace.age += delta
+	var material: StandardMaterial3D = trace.line.material_override
+	var color := material.albedo_color
+	color.a = 0.9 * maxf(0, trace.ttl / (trace.ttl + trace.age))
+	material.albedo_color = color
+	if _active() and trace.ttl <= 0:
+		discard_effect(trace)
 
 func _make_trace() -> MeshInstance3D:
 	if not _active():

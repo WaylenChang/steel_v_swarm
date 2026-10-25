@@ -1,6 +1,8 @@
 class_name CombatEffects
 extends Node3D
 
+const EffectOrder = preload("res://scripts/presentation_effects.gd")
+
 signal blast_requested(point: Vector3, radius: float)
 
 var effects: Array[Dictionary] = []
@@ -10,6 +12,7 @@ var free_authored := 0
 var visual_random := RandomNumberGenerator.new()
 var low_power := false
 var random_sample := Callable()
+var effect_count := Callable()
 
 static func available() -> bool:
 	var rules: Dictionary = Content.balance.get("npcShots", {})
@@ -62,7 +65,8 @@ func _ready() -> void:
 
 func crowded() -> bool:
 	var rules: Dictionary = Content.balance.npcShots.limits
-	return effects.size() >= int(rules.low if low_power else rules.normal)
+	var count := int(effect_count.call()) if effect_count.is_valid() else effects.size()
+	return count >= int(rules.low if low_power else rules.normal)
 
 func npc(origin: Vector3, target: Vector3, kind: String, wid: Variant, side: String, collision: Callable,
 		velocity: Variant = null, gravity: float = 0, flight: float = 0) -> Dictionary:
@@ -530,24 +534,32 @@ func _authored_key(definition: Dictionary, family: String) -> String:
 	return Content.balance.get("weaponEffects", {}).get("characters", {}).get(definition.get("ch"), {}).get("shapes", {}).get(slot, {}).get(family, "")
 
 func advance(delta: float) -> void:
-	if not is_finite(delta) or delta < 0:
+	EffectOrder.advance([self], delta)
+
+func presentation_effects() -> Array[Dictionary]:
+	return effects
+
+func discard_effect(effect: Dictionary) -> void:
+	var index := effects.find(effect)
+	if index < 0:
 		return
-	var over := effects.size() - int(Content.balance.npcShots.limits.maximum)
-	for index in range(maxi(0, over)):
-		_drop(effects.pop_front())
-	for index in range(effects.size() - 1, -1, -1):
-		var effect: Dictionary = effects[index]
-		effect.ttl -= delta
-		effect.age += delta
-		_pose(effect, maxf(0, float(effect.ttl) / (float(effect.ttl) + float(effect.age))), delta)
-		if float(effect.ttl) <= 0:
-			_drop(effect)
-			effects.remove_at(index)
+	effects.remove_at(index)
+	_drop(effect)
+
+func advance_effect(effect: Dictionary, delta: float) -> void:
+	if not effects.has(effect):
+		return
+	effect.ttl -= delta
+	effect.age += delta
+	_pose(effect, maxf(0, float(effect.ttl) / (float(effect.ttl) + float(effect.age))), delta)
+	if float(effect.ttl) <= 0:
+		discard_effect(effect)
 
 func _push(effect: Dictionary, ttl: float) -> void:
 	effect.ttl = ttl
 	effect.duration = ttl
 	effect.age = 0.0
+	effect.order = EffectOrder.stamp()
 	effects.append(effect)
 	if effect.type not in ["projectile", "lance_projectile", "authored_discharge", "authored_fan", "sprite_gravity", "sprite_drift", "mechanical", "comic"]:
 		_pose(effect, 1.0)

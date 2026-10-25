@@ -11,6 +11,13 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   authored campaign seasons. Enumerate current requirements and existing outputs
   from the tools; road-only resources cannot satisfy seasonal availability.
   Missing captures must never select an invented map or fallback season.
+  Use `node tools/world_publication_inventory.mjs --summary` to compare exact
+  seasonal bundle names against the imported catalog. Detailed JSON includes
+  per-bundle source identity, LFS/malformed/missing states and native binary
+  presence; legacy names remain unselected. This availability inventory never
+  qualifies sidecars, source provenance, native reload, rendered content or full
+  match parity. Cover it with `tests/world_publication_inventory.test.mjs` and
+  the existing `tests/world_selection.test.mjs`.
 - [ ] **S2 — World storage/packing acceptance:** verify ordered chunk/numeric
   sidecars, exact float64 bits, raw/GZIP shapes/hashes, complete feature tables,
   cancellation and atomic publication. Bound peak memory through traversal and
@@ -272,6 +279,7 @@ World workflow, from the repository root:
 
 ```powershell
 node tools/bake_worlds.mjs --list-bundles
+node tools/world_publication_inventory.mjs --summary
 node tools/verify_world_source.mjs berlin_1_autumn
 ./tools/migrate_worlds.ps1 -Godot C:/path/to/godot_console.exe -Bundle berlin_1_autumn
 godot --headless --path . res://tests/worlds.tscn -- --bundle=berlin_1_autumn
@@ -892,6 +900,20 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for world/audio acceptance
 
+- **Opus — layered-deck reference provenance:**
+  `tools/world_references.mjs` executes the live original `makeDeckIndex` without
+  checking the selected world's captured `source.inputs`. It can overwrite
+  `collision.deckEndTolerance` and `deckProbes` using different source while
+  retaining the old source fingerprint and reporting success. An isolated
+  reproduction is retained in `artifacts/sol/deck-provenance-reproduction.json`;
+  it never edits an actual captured bundle. Bind the deck-reference producer and
+  native-import consumer to matching original biomes/extraction-helper inputs,
+  and reject missing or mismatched selected bundles before publication.
+  Acceptance: changed/missing source hashes and source changes during reference
+  generation preserve the original bundle byte-for-byte; matching inputs retain
+  original endpoint tolerance and upper/lower deck query results. This reference
+  generator includes authority query semantics and remains a separate shared-owner
+  change; Sol's storage/availability checks cannot discharge it.
 - **Opus — float vertex colors:** agree the native mesh/shader attribute contract
   in `scripts/source_cel_*.gd` and `shaders/` before Sol changes
   `tools/import_worlds.gd` to bind it. Original Berlin autumn `SourceMesh_5`

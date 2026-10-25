@@ -310,6 +310,16 @@ player's position when pausing/resuming.
   Unknown remote magazines and movement resources remain null. These checks do
   not qualify populated ray queries, actor pixels, recipient publication or the
   shared main-to-camera angle transfer contract below.
+  Lock-glow hit decay retains millisecond subtraction before division by 200;
+  ring rotation derives its quaternion from the double phase before native
+  storage. `node tools/lock_glow_capture.mjs` executes the original constructor
+  and render callback under Node and Chromium, retaining both numeric results;
+  Chromium is the browser-state oracle. Real-driver `tests/lock_glow.tscn`
+  compares exact double states, native Float32 poses/material values, ring
+  orientation and private resource release. Keep its strict scalar gate open
+  until the shared pulse-sine contract below is accepted. The shared texture
+  probe, measured-dimension probe and component states do not qualify glow
+  texture pixels, actor bounds, populated targeting or full frame composition.
 - [ ] **S13 — Minimap:** certify full/vicinity windows, warmup/draw deadlines,
   original baked pixels, lane grades/dash/miter rules, labels, remembered bunkers,
   neutral exclusions and public entity markers. Finish persistent exploration,
@@ -793,6 +803,21 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   bypassing provenance, and the root suite accepts the current audio consumers.
 
 ### Shared-owner contracts required for local feedback
+
+- **Opus — browser pulse sine:** provide an accepted shared binding in
+  `scripts/source_trigonometry.gd` for original browser `Math.sin` before Sol
+  certifies bit-identical lock-glow scalar states. `tests/fixtures/lock_glow.json`
+  retains original Node and Chromium constructor/callback outputs, runtime
+  identities, pulse inputs and sine bits. Current native phase bits agree, but
+  the native sine differs at large inputs and changes 249 halo-size/opacity and
+  ring-scale double results; the strict scene deliberately remains failing.
+  `artifacts/sol/lock-glow-differences.json` records each input and both sine
+  bit patterns. The sampled native Float32 outputs and ring orientations agree;
+  those checks cannot establish scalar parity. Acceptance: all captured scalar
+  bits and additional argument-reduction boundaries agree with the original
+  Chromium execution, without baked input tables, angle wrapping or tolerance
+  changes. Node and Chromium sine bits also differ in part of this corpus;
+  Node-only capture is insufficient to choose the shared browser binding.
 
 - **Opus — spectator angle transfer:** `scripts/main.gd::_advance_spectator`
   packs double `yaw`/`pitch` into `Vector2` before calling

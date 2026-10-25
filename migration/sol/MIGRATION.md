@@ -242,6 +242,19 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   Seal transfer ownership before native reparent callbacks, so a callback's fresh
   request cannot be cleared by the preceding transfer. Run
   `tests/prebuild_retirement.tscn` alongside existing room lifecycle checks.
+  Recheck destination admission after synchronous reparent callbacks. A queued
+  or detached destination cancels the transfer before processing is enabled;
+  restore the same disabled world and its identity to staging only while the
+  original cache generation remains current. Publish rollback ownership before
+  reparent/readiness callbacks so fresh requests, clears and retirement win.
+  Superseded cancelled transfers release their obsolete tree and viewport.
+  Real-driver `tests/prebuild_transfer_cancellation.tscn` checks reuse without
+  rebuilding, zero early process/physics ticks and replacement callbacks at
+  destination entry, staging re-entry and rollback readiness. Its existing held
+  fixture world does not certify seasonal geometry or populated transport barriers.
+  Destination loss probes queue deletion at destination entry or detach during
+  source exit. Removing an ancestor while its child is entering violates native
+  tree notifications; use deferred deletion at that boundary.
   Held build signals exercise retirement without qualifying seasonal geometry.
 
 World workflow, from the repository root:

@@ -202,7 +202,9 @@ func present_lightning(points: Array) -> void:
 func sync_fogs(states: Array, side: String, now: float) -> void:
 	if skill_fields == null and states.is_empty():
 		return
-	if skill_fields == null:
+	if not is_instance_valid(skill_fields) or skill_fields.retired or skill_fields.is_queued_for_deletion():
+		if is_instance_valid(skill_fields):
+			skill_fields.queue_free()
 		skill_fields = SkillFieldPresentation.new()
 		add_child(skill_fields)
 	skill_fields.sync_fogs(states, side, now)

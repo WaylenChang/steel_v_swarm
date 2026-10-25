@@ -445,6 +445,14 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   `node tools/fog_geometry_capture.mjs` and real-driver
   `tests/fog_geometry.tscn` retain the actual source constructor and all six layers.
   Buffer/material checks do not qualify composed pixels, clocks or capacity.
+  Fog owners close terminally on tree exit and reject late geometry acquisition.
+  Complete all layers, pose and membership before native admission; seal removals
+  before visibility callbacks and stop superseded synchronization after admission,
+  removal or ally replacement. Retirement clears the immutable mesh cache while
+  deferring native child destruction; world reuse requires a fresh owner.
+  Real-driver `tests/fog_retirement.tscn` reuses the original geometry oracle and
+  checks reentrant interruption plus root/material/cache release with retained
+  owners. These lifecycle checks do not resolve the delivery contract below.
   **Opus — `scripts/main.gd` fog delivery contract:** reconcile the current
   snapshot-derived `BattleWorld.sync_fogs` age/expiry with original `fog_spawn`
   receipt and render-frame effect deltas. Original fog visuals belong to the

@@ -112,6 +112,20 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   phase cases also compare normalized orientation independently of tiny petal
   scale. Declared crown/quad probes do not qualify original foliage/flower meshes,
   material pixels or complete seasonal world composition.
+  Petal controllers preserve their captured clock/population and private material
+  bindings across staging transfers. Native root deletion closes the weak binding;
+  generation/observer identity guards isolate replacements and duplicated roots.
+  Queued roots and retired owners reject later frames, and interrupted landing
+  queries stop before later callbacks, cached landing writes or instance updates.
+  Real-driver `tests/petal_retirement.tscn` checks these ownership boundaries with
+  explicit grounded/quad probes and retained closed owners. It does not qualify
+  source planning, motion, animal/foliage geometry or rendered seasonal worlds.
+  **Opus handoff:** reconcile the original `public/js/rng.js` provenance through
+  `tools/import_source.mjs` before full petal qualification. Both
+  `public/js/petals.js::petalRnd` and the original field constructor consume that
+  dependency; retain the full capture and `tests/petal_native.tscn` source guard.
+  Acceptance requires the original seasonal/full-low planning, prewarm and all
+  frame/transition programs without omitting RNG or loosening existing tolerances.
   Borrowed scenery pivots and train visuals retain their controllers across
   staging detachment/reparenting, without rebuilding phases or private materials.
   Native deletion closes the binding through a weak observer; match its binding

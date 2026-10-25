@@ -142,7 +142,7 @@ func dispose() -> void:
 	disposed = true
 	fading = false
 	grace_scene = null
-	if preferences.changed.is_connected(_preference_changed):
+	if preferences != null and preferences.changed.is_connected(_preference_changed):
 		preferences.changed.disconnect(_preference_changed)
 	command.emit({"op": "cancel_timers"})
 	command.emit({"op": "fallback_stop"})

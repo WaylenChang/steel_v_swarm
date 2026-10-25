@@ -10,26 +10,33 @@ var disposed := false
 func start(clip: NativeAudioClip, routing: AudioBuses, gain: float, pan: float, rate: float = 1) -> Error:
 	if not players.is_empty() or disposed:
 		return ERR_ALREADY_IN_USE
-	if not is_inside_tree() or routing == null or not routing.available():
+	if not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
 		return ERR_UNCONFIGURED
 	if clip == null or not clip.valid() or not is_finite(gain) or gain < 0 or not is_finite(pan) or not is_finite(rate) or rate <= 0:
 		return ERR_INVALID_PARAMETER
 	buses = routing
+	buses.retiring.connect(dispose, CONNECT_ONE_SHOT)
 	var matrix: Array[Dictionary] = AudioPan.routes(pan, clip.channel_count) if clip.channel_count > 0 else []
 	for index in range(clip.panned.size()):
 		var bus := buses.voice_bus(float(matrix[index].pan))
+		if bus == &"" or not _active():
+			if bus != &"" and is_instance_valid(buses):
+				buses.release_voice(bus)
+			return ERR_UNCONFIGURED
 		routes.append(bus)
 		var normalization := clip.panned_gains[index] if not clip.panned_gains.is_empty() else 1.0
-		_player(clip.panned[index], bus, gain * float(matrix[index].gain) * normalization, rate)
+		if not _player(clip.panned[index], bus, gain * float(matrix[index].gain) * normalization, rate):
+			return ERR_UNCONFIGURED
 	if clip.centered != null:
-		_player(clip.centered, buses.sfx, gain * clip.centered_gain, rate)
+		if not _player(clip.centered, buses.sfx, gain * clip.centered_gain, rate):
+			return ERR_UNCONFIGURED
 	_play()
 	return OK
 
 func start_synthesis(stems: Array[Dictionary], routing: AudioBuses, pan: float) -> Error:
 	if not players.is_empty() or disposed:
 		return ERR_ALREADY_IN_USE
-	if not is_inside_tree() or routing == null or not routing.available():
+	if not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
 		return ERR_UNCONFIGURED
 	if stems.is_empty() or not is_finite(pan):
 		return ERR_INVALID_PARAMETER
@@ -55,16 +62,24 @@ func start_synthesis(stems: Array[Dictionary], routing: AudioBuses, pan: float) 
 			normalization *= float(matrix.gain)
 		prepared.append({"stream": stream, "gain": normalization, "effects": effects})
 	buses = routing
+	buses.retiring.connect(dispose, CONNECT_ONE_SHOT)
 	for stem: Dictionary in prepared:
 		var bus := buses.sfx
 		if not stem.effects.is_empty():
 			bus = buses.effect_bus(stem.effects)
+			if bus == &"" or not _active():
+				if bus != &"" and is_instance_valid(buses):
+					buses.release_voice(bus)
+				return ERR_UNCONFIGURED
 			routes.append(bus)
-		_player(stem.stream, bus, stem.gain, 1)
+		if not _player(stem.stream, bus, stem.gain, 1):
+			return ERR_UNCONFIGURED
 	_play()
 	return OK
 
 func _play() -> void:
+	if not _active():
+		return
 	pending = players.size()
 	# Native WAV starts do not lock the driver; submit all stems in one mix boundary.
 	AudioServer.lock()
@@ -72,7 +87,12 @@ func _play() -> void:
 		player.play()
 	AudioServer.unlock()
 
-func _player(stream: AudioStream, bus: StringName, gain: float, rate: float) -> void:
+func _active() -> bool:
+	return not disposed and is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(buses) and buses.available()
+
+func _player(stream: AudioStream, bus: StringName, gain: float, rate: float) -> bool:
+	if not _active():
+		return false
 	var player := AudioStreamPlayer.new()
 	player.process_mode = Node.PROCESS_MODE_ALWAYS
 	player.stream = stream
@@ -83,6 +103,7 @@ func _player(stream: AudioStream, bus: StringName, gain: float, rate: float) -> 
 	player.finished.connect(_finished)
 	players.append(player)
 	add_child(player)
+	return _active()
 
 func _finished() -> void:
 	if disposed:
@@ -95,11 +116,16 @@ func dispose() -> void:
 	if disposed:
 		return
 	disposed = true
+	if is_instance_valid(buses) and buses.retiring.is_connected(dispose):
+		buses.retiring.disconnect(dispose)
 	for player: AudioStreamPlayer in players:
 		player.stop()
 	queue_free()
 
 func _exit_tree() -> void:
+	disposed = true
+	if is_instance_valid(buses) and buses.retiring.is_connected(dispose):
+		buses.retiring.disconnect(dispose)
 	for player: AudioStreamPlayer in players:
 		if is_instance_valid(player):
 			player.stop()

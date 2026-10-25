@@ -32,7 +32,11 @@ func run() -> void:
 		mutex.unlock()
 		if done:
 			return
-		for index in range(active.size() - 1, -1, -1):
-			if not active[index].pump():
+		# Players start in admission order, so their earlier buffers expire first.
+		var index := 0
+		while index < active.size():
+			if active[index].pump():
+				index += 1
+			else:
 				active.remove_at(index)
-		OS.delay_usec(2000)
+		OS.delay_usec(1000)

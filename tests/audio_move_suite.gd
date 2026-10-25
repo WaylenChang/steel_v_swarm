@@ -43,10 +43,7 @@ static func run(h: Node, fixtures: Dictionary, metadata: Dictionary) -> void:
 	_bank(h)
 
 static func _bank(h: Node) -> void:
-	if not ResourceLoader.exists(NativeAudioMoveBank.PATH):
-		h._check(false, "Import original movement noise and oscillator periods")
-		return
-	var bank := load(NativeAudioMoveBank.PATH) as NativeAudioMoveBank
+	var bank := preload("res://scripts/audio_resource_snapshot.gd").new().movement()
 	var data: Dictionary = Content.read_json("res://data/audio_move.json")
 	h._check(bank != null and bank.valid(), "Native movement bank contains one shared looping noise source and captured oscillator periods")
 	if bank == null or not bank.valid():

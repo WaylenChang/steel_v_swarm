@@ -3,6 +3,10 @@ extends AudioStream
 
 var playback: AudioStreamGeneratorPlayback
 
+static func startup_frames(interval: float, rate: float) -> int:
+	# Godot 4.7.2's AudioStreamPlaybackResampled refills whole 128-frame blocks.
+	return clampi(ceili(interval * rate / 128.0) * 128, 128, 4096) * 2
+
 func configure(rate: float) -> void:
 	var generator := AudioStreamGenerator.new()
 	generator.mix_rate = rate

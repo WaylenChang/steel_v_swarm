@@ -34,6 +34,7 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		return ERR_UNAVAILABLE
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	buses = routing
+	buses.retiring.connect(retire, CONNECT_ONE_SHOT)
 	context_origin = origin
 	var rate := AudioServer.get_mix_rate()
 	mixer.configure(category, plan, bank, initial, rate, 0)
@@ -61,8 +62,10 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 		player.volume_linear = correction * (bank.noise_gain if branch.kind == "noise" else 1.0)
 		player.stream = bank.noise if branch.kind == "noise" else _generator(rate)
-		add_child(player)
 		input_players.append(player)
+		add_child(player)
+		if not _admitting():
+			return ERR_UNCONFIGURED
 		var input := {"branch": branch, "capture": capture, "filters": filters}
 		if branch.kind == "oscillator":
 			var feed := player.stream as AudioGeneratorFeed
@@ -74,17 +77,22 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 	output_player.bus = buses.sfx
 	output_player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	add_child(output_player)
+	if not _admitting():
+		return ERR_UNCONFIGURED
 	mixer.output = (output_player.stream as AudioGeneratorFeed).playback
 	configured = true
 	return OK
+
+func _admitting() -> bool:
+	return not disposed and is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(buses) and buses.available()
 
 func activate() -> Error:
 	if not configured or disposed or activated or not is_inside_tree() or is_queued_for_deletion():
 		return ERR_UNCONFIGURED
 	mixer.origin = buses.context_seconds() - context_origin
 	var interval := AudioServer.get_time_to_next_mix() + AudioServer.get_time_since_last_mix()
-	var quantum := clampi(roundi(interval * AudioServer.get_mix_rate()), 128, 4096)
-	if not mixer.prime_output(mini(quantum * 2, mixer.output.get_frames_available())):
+	var frames := AudioGeneratorFeed.startup_frames(interval, AudioServer.get_mix_rate())
+	if not mixer.prime_output(mini(frames, mixer.output.get_frames_available())):
 		return ERR_CANT_CREATE
 	if not mixer.prepare():
 		return ERR_CANT_CREATE
@@ -116,9 +124,13 @@ func _stream_failed(operation: String, error: Error) -> void:
 		player.stop()
 	failed.emit(operation, error)
 
-func _exit_tree() -> void:
+func retire() -> void:
+	if disposed:
+		return
 	configured = false
 	disposed = true
+	if is_instance_valid(buses) and buses.retiring.is_connected(retire):
+		buses.retiring.disconnect(retire)
 	mixer.stop()
 	if is_instance_valid(output_player):
 		output_player.stop()
@@ -127,3 +139,7 @@ func _exit_tree() -> void:
 	if is_instance_valid(buses):
 		for route: StringName in routes:
 			buses.release_voice(route)
+	routes.clear()
+
+func _exit_tree() -> void:
+	retire()

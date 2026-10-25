@@ -27,6 +27,9 @@ var lfo_scaled := false
 var lfo_phase := 0.0
 var diagnostics: Dictionary = {}
 var has_oscillator_input := false
+var last_pump_usec := 0
+var max_service_gap_usec := 0
+var pump_started_usec := 0
 
 func configure(name: String, graph_plan: Dictionary, wave_bank: NativeAudioMoveBank, initial: Dictionary, rate: float, start_time: float) -> void:
 	category = name
@@ -108,6 +111,10 @@ func prime_output(frames: int) -> bool:
 	return output.push_buffer(silence)
 
 func pump() -> bool:
+	pump_started_usec = Time.get_ticks_usec()
+	if last_pump_usec > 0:
+		max_service_gap_usec = maxi(max_service_gap_usec, pump_started_usec - last_pump_usec)
+	last_pump_usec = pump_started_usec
 	if not _commands() or not prime_inputs():
 		return false
 	if output.get_skips() > 0:
@@ -135,6 +142,8 @@ func pump() -> bool:
 		return true
 	var frames := PackedVector2Array()
 	frames.resize(count)
+	var pan_value := NAN
+	var pan_coefficients := Vector2.ZERO
 	for index in range(count):
 		controls.begin_frame()
 		var modulation := 0.0
@@ -153,8 +162,10 @@ func pump() -> bool:
 			elif branch.weight == "wet":
 				sample *= controls.values[3]
 			value += sample
-		var pan := AudioPan.mono_coefficients(controls.values[1])
-		frames[index] = pan * value * controls.values[0]
+		if controls.values[1] != pan_value:
+			pan_value = controls.values[1]
+			pan_coefficients = AudioPan.mono_coefficients(pan_value)
+		frames[index] = pan_coefficients * value * controls.values[0]
 		controls.end_frame()
 	AudioServer.lock()
 	for input: Dictionary in inputs:
@@ -177,11 +188,17 @@ func snapshot() -> Dictionary:
 	return result
 
 func _publish() -> void:
+	var source_frames: Array[int] = []
+	for input: Dictionary in inputs:
+		source_frames.append(input.capture.get_frames_available())
 	mutex.lock()
 	diagnostics = {"frames": controls.frame, "input_frames": input_controls.frame,
 		"startup_frames": startup_frames, "late_control_frames": late_control_frames,
 		"lfo_phase": lfo_phase, "ready": announced, "output_skips": output.get_skips(),
-		"gain": controls.values[0], "rate": controls.values[2], "wet": controls.values[3]}
+		"gain": controls.values[0], "rate": controls.values[2], "wet": controls.values[3],
+		"output_position": output.get_playback_position(), "output_available": output.get_frames_available(),
+		"source_frames": source_frames, "max_service_gap_usec": max_service_gap_usec,
+		"pump_usec": Time.get_ticks_usec() - pump_started_usec}
 	mutex.unlock()
 
 static func _lookup(waveform: PackedFloat32Array, phase: float) -> float:
@@ -190,11 +207,22 @@ static func _lookup(waveform: PackedFloat32Array, phase: float) -> float:
 	return lerpf(waveform[index], waveform[(index + 1) % waveform.size()], position - index)
 
 func _fault(operation: String, error: Error) -> bool:
+	var source_frames: Array[int] = []
+	for input: Dictionary in inputs:
+		source_frames.append(input.capture.get_frames_available())
 	mutex.lock()
 	stopping = true
 	commands.clear()
 	diagnostics.failure = operation
 	diagnostics.error = error
+	diagnostics.frames = controls.frame
+	diagnostics.source_frames = source_frames
+	diagnostics.max_service_gap_usec = max_service_gap_usec
+	diagnostics.pump_usec = Time.get_ticks_usec() - pump_started_usec
+	if output != null:
+		diagnostics.output_skips = output.get_skips()
+		diagnostics.output_position = output.get_playback_position()
+		diagnostics.output_available = output.get_frames_available()
 	mutex.unlock()
 	failed.emit(operation, error)
 	return false

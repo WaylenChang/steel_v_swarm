@@ -1,5 +1,29 @@
 extends Node
 
+class Admissions extends RefCounted:
+	var worker: AudioMoveWorker
+	var entries: Array[String] = []
+	var entered := Semaphore.new()
+	var release := Semaphore.new()
+	var mutex := Mutex.new()
+	func record(label: String) -> void:
+		mutex.lock()
+		entries.append(label)
+		mutex.unlock()
+
+class OrderedMixer extends AudioMoveMixer:
+	var admission: Admissions
+	var calls := 0
+	func pump() -> bool:
+		calls += 1
+		admission.record(category + str(calls))
+		if category == "A" and calls == 1:
+			admission.entered.post()
+			admission.release.wait()
+		if category == "D":
+			admission.worker.stop()
+		return category not in ["B", "D"]
+
 var assertions := 0
 var failures: Array[String] = []
 
@@ -13,6 +37,7 @@ func _ready() -> void:
 	_run.call_deferred()
 
 func _run() -> void:
+	await _admissions()
 	var stopped := AudioMoveWorker.new()
 	var pending := AudioMoveMixer.new()
 	var pending_reference: WeakRef = weakref(pending)
@@ -143,3 +168,34 @@ func _run() -> void:
 		AudioServer.remove_bus(index)
 	print("AUDIO_MOVE_RETIREMENT assertions=", assertions, " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+func _admissions() -> void:
+	var admission := Admissions.new()
+	admission.worker = AudioMoveWorker.new()
+	for category: String in ["A", "B", "C"]:
+		var mixer := OrderedMixer.new()
+		mixer.category = category
+		mixer.admission = admission
+		_check(admission.worker.add(mixer), "Admit a voice before worker startup")
+	var thread := Thread.new()
+	var error := thread.start(admission.worker.run)
+	_check(error == OK, "Start the real admission worker")
+	if error != OK:
+		admission.worker.stop()
+		return
+	var deadline := Time.get_ticks_msec() + 3000
+	var entered := admission.entered.try_wait()
+	while not entered and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+		entered = admission.entered.try_wait()
+	_check(entered, "The first admitted voice is confirmed active before another submission")
+	var later := OrderedMixer.new()
+	later.category = "D"
+	later.admission = admission
+	_check(admission.worker.add(later), "Admit a new voice during an existing service pass")
+	admission.release.post()
+	if not entered:
+		admission.worker.stop()
+	thread.wait_to_finish()
+	_check(admission.entries == ["A1", "B1", "C1", "A2", "C2", "D1"],
+		"Service active voices in admission order, remove a failed middle voice without skipping, and append later voices on the next pass")

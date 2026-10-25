@@ -7,6 +7,7 @@ const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 var catalogue: NativeAudioCatalogue
 var buffers: Dictionary = {}
 var loaded := false
+var resources := preload("res://scripts/audio_resource_snapshot.gd").new()
 
 func load_samples(low_power: bool) -> Error:
 	# Low-power startup never loads the PCM catalogue or marks it registered.
@@ -34,7 +35,7 @@ func load_samples(low_power: bool) -> Error:
 	return OK
 
 func _load_catalogue() -> NativeAudioCatalogue:
-	return ResourceLoader.load(CATALOGUE_PATH, "", ResourceLoader.CACHE_MODE_IGNORE) as NativeAudioCatalogue if ResourceLoader.exists(CATALOGUE_PATH) else null
+	return resources.snapshot()
 
 func _load_clip(path: String) -> NativeAudioClip:
 	return load(path) as NativeAudioClip if ResourceLoader.exists(path) else null

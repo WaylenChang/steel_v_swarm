@@ -1,6 +1,8 @@
 class_name AudioBuses
 extends Node
 
+signal retiring
+
 var sfx: StringName
 var bgm: StringName
 var owned: Array[StringName] = []
@@ -117,9 +119,15 @@ static func _retire(tree: SceneTree, names: Array[StringName]) -> void:
 		if index > 0:
 			AudioServer.remove_bus(index)
 
-func _exit_tree() -> void:
+func retire() -> void:
+	if disposed:
+		return
 	disposed = true
+	retiring.emit()
 	var names: Array[StringName] = owned.duplicate()
 	owned.clear()
 	if not names.is_empty():
 		_retire(get_tree(), names)
+
+func _exit_tree() -> void:
+	retire()

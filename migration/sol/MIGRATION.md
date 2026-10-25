@@ -406,6 +406,19 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
   source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
+  Missile retirement is terminal and idempotent. Seal it before fracture callbacks,
+  stop interrupted observation/model continuations, and release packed models,
+  persistent damage children, copied materials and private ray buffers even while
+  the closed owner remains retained. Reattachment requires a fresh owner.
+  `node tools/missile_owner_capture.mjs` and real-driver
+  `tests/missile_owner_retirement.tscn` retain original interpolation/smoke/removal
+  programs plus native admission, damaged-owner and deferred-resource checks.
+  Declared source geometry/damage probes do not qualify missile shape, damage
+  semantics, complete pixels, ray triangles or populated transport delivery.
+  **Models — `scripts/missile_view_ray.gd`:** reject retired/queued owners before
+  reading global transforms, model nodes or persistent damage geometry. Acceptance:
+  ray queries during a reentrant terminal fracture callback, after retirement and
+  after tree detachment return no hit without dereferencing released resources.
   Keep loot bob/airdrop descent on the local wall clock, independent of incoming
   authority clocks; creation and frame updates must use that same time base while
   rotation still consumes the source frame delta. Accumulate rotation in double

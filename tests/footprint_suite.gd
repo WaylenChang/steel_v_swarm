@@ -32,15 +32,14 @@ static func run(h: Node, fixtures: Array) -> void:
 static func authority(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
+	sim.set_physics_process(false)
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
 	var map_data := Content.map_variant(0, 1)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [{"peer": 901, "side": "STEEL", "character": "t09", "bot": false}], {"time": "day", "weather": "clear"}, true)
-	sim.set_physics_process(false)
-	var actor: BattleUnit = sim.pilots[901]
-	for unit: BattleUnit in sim.units.values():
-		if unit != actor:
-			unit.hp = 0
-	actor.position = Vector3(0, 80, 0)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	var actor := sim.spawn({"peer": 901, "side": "STEEL", "character": "t09", "kind": Content.heroes.t09.kind, "position": Vector3(0, 80, 0)})
+	sim.pilots[901] = actor
 	actor.input_state = {"aim": true, "slot": "heavy"}
 	var front := sim.spawn({"kind": "soldier", "side": "SWARM", "position": Vector3(0, 80, -30)})
 	var rear := sim.spawn({"kind": "soldier", "side": "SWARM", "position": Vector3(0, 80, -35)})

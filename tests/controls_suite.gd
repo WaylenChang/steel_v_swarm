@@ -137,7 +137,8 @@ static func context(h: Node) -> ReferenceSimulation:
 static func actor(simulation: BattleSimulation, character: String) -> BattleUnit:
 	var unit := BattleUnit.new()
 	simulation.add_child(unit)
-	unit.configure({"id": 1, "peer": 1, "character": character, "side": "STEEL", "kind": Content.heroes[character].kind, "position": Vector3.ZERO})
+	var side := "SWARM" if Content.heroes[character].side == "SWARM" else "STEEL"
+	unit.configure({"id": 1, "peer": 1, "character": character, "side": side, "kind": Content.heroes[character].kind, "position": Vector3.ZERO})
 	simulation.pilots[1] = unit
 	simulation.units[1] = unit
 	return unit

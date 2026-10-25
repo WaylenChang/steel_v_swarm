@@ -69,7 +69,7 @@ func _receive_state(state: Dictionary) -> void:
 		get_tree().quit(1)
 		return
 	if reference_sequence.is_empty():
-		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["superLevels"])
 		reference_sequence = fixtures.superLevels.filter(func(item): return item.character == pilot.character and not item.dead)[0]
 	var level := int(pilot.upgrades["super"])
 	var matches: Array = reference_sequence.steps.filter(func(step): return int(step.state.level) == level)

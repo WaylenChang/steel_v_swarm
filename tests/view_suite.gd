@@ -71,8 +71,10 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 					return Vector3(INF, INF, INF)
 				var change := state.advance(step.delta, step.now, angles, view_frame.origin, item.reach, paused, acquire, point_at)
 				angles = InputRules.look(angles.x, angles.y, change, frozen, true, true, true)
+			var expected_state: Dictionary = step.result.duplicate()
+			expected_state.erase("basis")
 			Helper.compare(h, {"hold": state.hold, "cycle": state.cycle, "target": state.target, "previous": state.previous,
-				"last_seek": state.last_seek, "lit": state.lit, "angles": [angles.x, angles.y]}, step.result,
+				"last_seek": state.last_seek, "lit": state.lit, "angles": [angles.x, angles.y]}, expected_state,
 				"Original press/hold/release/cycle/hidden/paused/death view lock")
 			Helper.compare(h, notices, step.notices, "Original cycle count and empty-view feedback")
 			var basis := recoil.basis(angles.x, angles.y)

@@ -35,7 +35,7 @@ func _physics_process(delta: float) -> void:
 			fixture_pilot.pitch = 0
 			fixture_pilot.rotation.y = 0
 			fixture_pilot.sync_view_camera()
-			var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+			var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["bossSync"])
 			for item: Dictionary in fixtures.bossSync:
 				if item.initial.character == "s01":
 					reference = item
@@ -76,7 +76,7 @@ func _receive_state(state: Dictionary) -> void:
 	var stage_state: Dictionary = state.get("siege", {})
 	stages_seen = stages_seen or stage_state.get("enabled", false) and stage_state.get("defender") == "SWARM" and int(stage_state.open.SWARM) == 0
 	if reference.is_empty():
-		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["bossSync"])
 		for item: Dictionary in fixtures.bossSync:
 			if item.initial.character == "s01":
 				reference = item

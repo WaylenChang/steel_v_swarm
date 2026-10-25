@@ -93,7 +93,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 				preferences.set_low_power(step.on)
 			h._check(preferences.low_power() == step.result and preferences.power_pref == step.saved,
 				"Original low-power unset, explicit-off, strict saved strings and touch-scheme transitions")
-			h._check(notifications.count("controls") == 0 and notifications.count("power") == int(before != preferences.power_pref),
+			h._check(notifications.count("controls") == 0 and notifications.count("power") == int(not is_same(before, preferences.power_pref)),
 				"Presentation preference changes never reset held controls or publish room settings")
 		preferences.persist = true
 		h._check(preferences.save(path) == OK, "Persist explicit low-power preference using native ConfigFile")

@@ -81,11 +81,24 @@ func reset() -> void:
 func load_save() -> Error:
 	if not persist:
 		return OK
-	var file := ConfigFile.new()
-	var error := file.load(save_path)
-	if error == ERR_FILE_NOT_FOUND:
+	if not FileAccess.file_exists(save_path):
 		configure(rules)
 		return OK
+	var reader := FileAccess.open(save_path, FileAccess.READ)
+	if reader == null:
+		configure(rules)
+		return FileAccess.get_open_error()
+	var text := reader.get_as_text()
+	reader.close()
+	for raw_line: String in text.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.is_empty() or line.begins_with(";") or line.begins_with("#"):
+			continue
+		if line.begins_with("[") and not line.ends_with("]"):
+			configure(rules)
+			return ERR_PARSE_ERROR
+	var file := ConfigFile.new()
+	var error := file.parse(text)
 	if error != OK:
 		configure(rules)
 		return error

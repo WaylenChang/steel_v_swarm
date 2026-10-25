@@ -11,7 +11,7 @@ func _ready() -> void:
 	Controls.persist = false
 	server_fixture = OS.get_cmdline_user_args().has("--quick-restart")
 	if server_fixture:
-		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["quickRestartPrograms"])
 		var program: Dictionary = fixtures.quickRestartPrograms[0]
 		var game: Dictionary = program.frames.filter(func(frame): return frame.phase == "game")[0]
 		expected = MatchRecipe.capture(program.settings, game.players, 1)

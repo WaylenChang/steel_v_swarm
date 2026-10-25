@@ -96,7 +96,7 @@ func _receive_state(state: Dictionary) -> void:
 	mode_seen = mode_seen or aiming and selected_slot == "heavy" and int(state.get("aim_control", {}).get("request", 0)) >= 1
 	cast_seen = cast_seen or pilot.defending and pilot.cast_state.get("slot") == InputRules.hold_slot(true)
 	if trace.is_empty():
-		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+		var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["recoilSequences"])
 		trace = fixtures.recoilSequences.filter(func(item): return item.name == "pulse" and item.character == pilot.character and not item.flight)[0]
 	var current: Dictionary = state.get("recoil", {})
 	if current.is_empty() or float(current.get("pitch", 0)) <= 0:

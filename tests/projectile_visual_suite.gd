@@ -108,10 +108,14 @@ static func integration(h: Node) -> void:
 	h.add_child(sim)
 	var map_data := Content.map_variant(0, 2)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [{"peer": 993, "side": "STEEL", "character": "t06", "bot": false},
-		{"peer": 994, "side": "SWARM", "character": "s01", "bot": false},
-		{"peer": 1, "side": "STEEL", "character": "t08", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	sim.authoritative = true
 	sim.set_physics_process(false)
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	sim.pilots[993] = sim.spawn({"kind": Content.heroes.t06.kind, "peer": 993, "side": "STEEL", "character": "t06", "bot": false, "position": Vector3(0, 100, 0), "yaw": 0.0})
+	sim.pilots[994] = sim.spawn({"kind": Content.heroes.s01.kind, "peer": 994, "side": "SWARM", "character": "s01", "bot": false, "position": Vector3(0, 100, 10), "yaw": 0.0})
+	sim.pilots[1] = sim.spawn({"kind": Content.heroes.t08.kind, "peer": 1, "side": "STEEL", "character": "t08", "bot": false, "position": Vector3(5, 100, 40), "yaw": 0.0})
 	var actor: BattleUnit = sim.pilots[993]
 	actor.position = Vector3(0, 100, 0)
 	actor.input_state = {"slot": "light"}

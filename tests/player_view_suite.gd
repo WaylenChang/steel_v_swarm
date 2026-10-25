@@ -180,7 +180,7 @@ static func integration(h: Node) -> void:
 	simulation.add_child(obstacle)
 	obstacle.kind = "aasite"
 	obstacle.special = {"role": "hazard", "scale": 2.0}
-	obstacle.position = unit.position + Vector3(0, 0, -2)
+	obstacle.position = Vector3(unit.position.x, 0, unit.position.z - 2)
 	obstacle.hp = 1
 	obstacle.hit_area = Area3D.new()
 	obstacle.add_child(obstacle.hit_area)

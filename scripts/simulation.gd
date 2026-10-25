@@ -5918,7 +5918,7 @@ func _hero_group(owner: BattleUnit) -> Array[BattleUnit]:
 
 func _hero_representative(id: int, peer: int = 0) -> BattleUnit:
 	var owner: BattleUnit = units.get(id)
-	if owner != null and owner.presentation_visible and (owner.body_presentation == null or not owner.body_presentation.report.is_empty()):
+	if owner != null and owner.presentation_visible and (owner.body_presentation == null or not owner.body_presentation.report.is_empty() or (owner.is_pilot() and owner.peer_id == Session.player_id())):
 		return owner
 	if peer == 0 and owner != null:
 		peer = owner.peer_id

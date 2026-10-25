@@ -4,8 +4,16 @@ extends RefCounted
 var material: ShaderMaterial
 var wind_rules: Dictionary
 var heading := Vector2.ZERO
+var retired := false
+
+func retire() -> void:
+	retired = true
+	material = null
+	wind_rules = {}
 
 func sync_visuals(preferences: VisualPreferences, appearance: Dictionary) -> void:
+	if retired:
+		return
 	var surface: Dictionary = preferences.selected_preset().surface
 	if appearance.school == "b":
 		material.set_shader_parameter("uCelCutWidth", float(surface.cutWidth))
@@ -23,6 +31,8 @@ func sync_visuals(preferences: VisualPreferences, appearance: Dictionary) -> voi
 	material.set_shader_parameter("uRenderStyle", float(appearance.renderStyles.get(preferences.value("renderStyle"), 0)))
 
 func configure_geometry(values: Array, receive_shadow: bool) -> bool:
+	if retired:
+		return false
 	if values.size() != 16:
 		push_error("Missing original marine model matrix")
 		return false
@@ -37,7 +47,7 @@ func configure_geometry(values: Array, receive_shadow: bool) -> bool:
 	return true
 
 func sync_lighting(presentation: WeatherPresentation) -> void:
-	if presentation == null or presentation.light == null or presentation.environment == null:
+	if retired or presentation == null or presentation.light == null or presentation.environment == null:
 		return
 	var environment := presentation.environment
 	var strength := environment.ambient_light_energy + presentation.flash * 3.5
@@ -50,6 +60,8 @@ func sync_lighting(presentation: WeatherPresentation) -> void:
 	material.set_shader_parameter("uNativeKeyDirection", presentation.light.global_basis.z)
 
 func configure(original: ShaderMaterial, parameters: Dictionary, source: Dictionary, depth_field: Texture2D, initial_ripples := PackedVector4Array()) -> bool:
+	if retired:
+		return false
 	if original == null or original.shader == null or depth_field == null or not parameters.get("uniforms") is Dictionary or not parameters.get("vectors") is Dictionary:
 		push_error("Missing original native marine shader/material binding")
 		return false
@@ -88,6 +100,8 @@ func configure(original: ShaderMaterial, parameters: Dictionary, source: Diction
 	return true
 
 func advance(weather: Dictionary, waves: MarineWaveSources, ripples: MarineRippleState) -> void:
+	if retired:
+		return
 	var direction: Variant = weather.get("windDir")
 	if direction is Array and direction.size() >= 2:
 		heading = Vector2(direction[0], direction[1])

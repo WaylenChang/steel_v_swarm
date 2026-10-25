@@ -170,6 +170,21 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   source wind/wave/gust/tide/ripple/vessel coupling. Bind the shared shader owner's
   accepted materials; certify weather style/low-power transitions and full
   seasonal rendered composition. Weather damage and hazards remain authority-owned.
+  Marine surface hosts close on native root deletion while staging transfers
+  preserve private materials and incremental scan progress. Retain the unbound
+  scan-only source-fixture contract; queued bound roots and retired owners reject
+  updates. Root generation/observer identity guards isolate replacements. Water
+  and ground-code callbacks may replace or retire the scanner; stop old row/cell
+  continuations and global ripple updates after either boundary. Reflection
+  visibility callbacks also stop later opacity writes and revision commits.
+  Retirement releases terrain callbacks, wave buffers and private child bindings,
+  but never resets module-global ripple slots, packets or cooldown.
+  `node tools/marine_native_capture.mjs` captures the original extracted packet,
+  hash and six scanner/ripple programs with their actual source dependencies;
+  real-driver `tests/marine_retirement.tscn` replays them alongside native
+  root/material ownership checks. Declared shader/quad probes isolate lifetime;
+  they do not certify original marine shader pixels, authored surface geometry,
+  full seasonal retention or transport/prebuild barriers.
   Native weather owners configure once, then close terminally on detachment.
   Prepare sky, light and private particle resources before world admission;
   reentrant publications retain the newest weather and original construction

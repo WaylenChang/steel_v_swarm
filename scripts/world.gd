@@ -153,7 +153,9 @@ func sync_fires(states: Array, now: float, dynamics: Dictionary) -> void:
 		return
 	if fire_visuals == null and states.is_empty():
 		return
-	if fire_visuals == null:
+	if not is_instance_valid(fire_visuals) or fire_visuals.retired or fire_visuals.is_queued_for_deletion():
+		if is_instance_valid(fire_visuals):
+			fire_visuals.queue_free()
 		fire_visuals = FirePresentation.new()
 		fire_visuals.wall_clock = BodyPresentation.time_now
 		add_child(fire_visuals)

@@ -112,6 +112,15 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   exact scalar/Float32 outputs and private packed-resource isolation. Their
   declared node probes use imported FX records; they do not qualify original
   constructor geometry, full shader pixels, populated worlds or transport delivery.
+  Fire owners also close terminally on detachment. Complete private meshes,
+  node indices, outline bindings and world pose before admission; reject late
+  commands before sampling clocks. Sync/frame generations stop interrupted
+  visibility, opacity and smoke-depth continuations. Retirement clears weather
+  ownership without mutating the caller's dictionary, and world reuse acquires
+  a fresh owner. Real-driver `tests/fire_retirement.tscn` replays the original
+  frame oracle and checks reentrant cancellation plus deferred private-resource
+  release while owners remain retained. It does not qualify the missing full
+  constructor/shader/world or populated transport acceptance.
 - [ ] **S6 — Room resources/prebuild:** finish populated seasonal-world retention,
   cancellation/retry and tree transfer in offline, ENet and WebSocket sessions.
   Isolated lifecycle fixtures cannot establish complete-world dependency retention

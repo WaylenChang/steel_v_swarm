@@ -47,6 +47,18 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   dispose its writer on failure while retaining the original manifest and any
   already-published sidecars. Keep the child-process failure cases in
   `tests/world_source.test.mjs` alongside native reload coverage.
+  Browser transfer, inline mesh chunks and final metadata publication must retain
+  signed zero. `tools/source_json.mjs` uses native `JSON.rawJSON` and a copy-on-write
+  adapter for the shared streaming publisher; reject unavailable native support
+  instead of falling back to ordinary `JSON.stringify`. Capture fingerprints
+  include the serialization helpers/storage writer, so prior captures require
+  regeneration. Keep `tests/source_json.test.mjs` alongside storage regression tests.
+  `node tools/source_json_capture.mjs` records original Chromium sphere-buffer bits;
+  real-driver `tests/source_json.tscn` checks JSON, sidecar and native resource
+  roundtrips. Retain its strict inline-number failures until the shared native
+  number-decoding contract below is accepted; binary-sidecar success does not
+  certify complete source numerics or full worlds. Interrupted capture chunks
+  without a completed manifest never count as a published seasonal bundle.
   Publish marine shader includes through the native atomic publisher before the
   containing world, retaining their final content-addressed paths. Reuse requires
   byte-hash verification and a fresh native load; corrupt existing includes must
@@ -909,6 +921,18 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for world/audio acceptance
 
+- **Opus — exact native source JSON numbers:** agree an accepted shared decoder
+  or typed-number contract under `scripts/source_*.gd` before Sol certifies native
+  inline world values. The original Chromium small sphere has 14 double-bit
+  mismatches in each position/normal array after Godot JSON parsing; the large
+  sphere has 928 per array on the direct JSON path, while its float64 sidecars
+  remain exact. Native resource reload retains the already-decoded small-array
+  differences. `artifacts/sol/source-json/report.json` records authoritative
+  expected/actual bytes; for example `0000004026a681bc` becomes `ffffff3f26a681bc`.
+  Sol binds the accepted contract in `tools/source_world_meshes.gd` and
+  `tools/import_worlds.gd`. Acceptance: every original JSON/inline/sidecar/reloaded
+  field in `tests/source_json.tscn`, signed zero and difficult finite doubles,
+  without numeric retuning, decimal correction tables or tolerance widening.
 - **Opus — layered-deck reference provenance:**
   `tools/world_references.mjs` executes the live original `makeDeckIndex` without
   checking the selected world's captured `source.inputs`. It can overwrite
@@ -924,6 +948,10 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   generator includes authority query semantics and remains a separate shared-owner
   change. Sol's wrapper rechecks declared world inputs before/after references;
   it cannot certify the standalone oracle or extraction-helper contract.
+  Preserve signed zero when rewriting the complete bundle as well: ordinary
+  `JSON.stringify(data)` erases corrected inline metadata even when the oracle
+  itself leaves that data unchanged. Bind the accepted source-number publication
+  helper and retain reference results plus all unrelated captured numeric bits.
 - **Opus — float vertex colors:** agree the native mesh/shader attribute contract
   in `scripts/source_cel_*.gd` and `shaders/` before Sol changes
   `tools/import_worlds.gd` to bind it. Original Berlin autumn `SourceMesh_5`

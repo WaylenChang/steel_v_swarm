@@ -6,6 +6,7 @@ import {gzipSync,createGzip} from 'node:zlib';
 import {createReadStream,createWriteStream} from 'node:fs';
 import {pipeline} from 'node:stream/promises';
 import {writeSourceFile,publishSourceFile} from './fixture_json.mjs';
+import {stringifySourceJson} from './source_json.mjs';
 
 export async function bufferDigest(path) {
   const hash=createHash('sha256');
@@ -97,14 +98,14 @@ export class WorldSourceWriter {
       for(const key of Object.keys(value))value[key]=restore(value[key]);
       return value;
     };
-    const text=JSON.stringify(restore(pending.header));
+    const text=stringifySourceJson(restore(pending.header));
     if(this.rows.length&&this.rowBytes+text.length>8*1024*1024)await this._flush();
     this.rows.push(text);this.rowBytes+=text.length;this.count++;this.pending=null;
     if(this.rows.length>=256)await this._flush();
   }
   async append(mesh) {
     const parts=[];
-    const header=JSON.parse(JSON.stringify(mesh,(_key,value)=>{
+    const header=JSON.parse(stringifySourceJson(mesh,(_key,value)=>{
       if(value&&typeof value==='object'&&(Object.hasOwn(value,'$sourceArray')||Object.hasOwn(value,'$sourceNumericArray')))
         throw new Error('Reserved source mesh storage property');
       if(Array.isArray(value)&&value.length>4096){parts.push(value);return {$sourceArray:parts.length-1};}

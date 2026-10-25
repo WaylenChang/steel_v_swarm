@@ -107,9 +107,18 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   retained-controller material/curve release. Its waterfall quad and empty train
   model isolate ownership; they do not qualify authored geometry, complete world
   retention or populated transport/prebuild barriers.
-  Finish host-level `scripts/scenery_presentation.gd` retirement for camp/batch
-  caches and shared-clock admission after source-root deletion; leaf binding
-  retirement does not certify that host or its populated world lifecycle.
+  Scenery hosts also close on source-root deletion, sealing aliased owned-node
+  lists, landmark records, private batch caches and child controllers before
+  callbacks. Late frame/camp commands cannot advance shared clocks or revive the
+  host; retirement never resets the module-global wind/wave/gust phases.
+  Independent camp events retain both removals, while replacement roots stop old
+  cache/frame continuations. World stepping rejects queued/deleted source roots
+  and stops subordinate updates when a callback replaces the host binding.
+  Real-driver `tests/scenery_host_retirement.tscn` retains source-program replay,
+  staging/duplicate/rebind checks, native private-buffer isolation and resource
+  release with closed hosts retained. Cache/geometry/callback probes and the
+  fresh clock-only fixture contract do not establish complete scenery pixels,
+  seasonal publication or populated world/transport/prebuild acceptance.
 - [ ] **S5 — Environment appearance:** finish cloud/fog-bank detail,
   precipitation, celestial bodies, deposits/scorch, contact effects,
   shoreline/underwater/waves/reflections and

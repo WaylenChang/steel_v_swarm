@@ -483,7 +483,12 @@ func climb_query() -> Callable:
 	return climb_index.at if native_data != null and native_data.climbs_captured else Callable()
 
 func step_scenery(delta: float, weather: Dictionary) -> void:
+	if not scenery_view.can_advance():
+		return
+	var generation := scenery_view.generation
 	scenery_view.advance(delta, weather)
+	if not scenery_view.can_advance() or scenery_view.generation != generation:
+		return
 	if wildlife_view != null:
 		wildlife_view.advance(delta, SceneryPresentation.wind_time, {"activity": WeatherRules.wildlife_activity(weather)})
 	if petal_view != null:

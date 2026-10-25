@@ -10,8 +10,8 @@ func _run() -> void:
 	if not fixtures.is_empty():
 		_sequences(fixtures)
 		DeathSequenceTests._overlay(self, fixtures)
-	print("DEATH_NATIVE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DEATH_NATIVE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)
 
 func _sequences(fixtures: Dictionary) -> void:
 	for item: Dictionary in fixtures.deathSequences:

@@ -10,7 +10,7 @@ func _run() -> void:
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Cinematic pose retains original camera functions and CSS identity")
 	_check(data.source == capture.source and data.rules == capture.rules, "Native foreground transition resource equals original source")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_pose()
 		return
 	var imported: Array = []
@@ -57,5 +57,5 @@ func _run() -> void:
 	_finish_pose()
 
 func _finish_pose() -> void:
-	print("CAMPAIGN_POSE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_POSE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

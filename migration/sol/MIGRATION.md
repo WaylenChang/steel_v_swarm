@@ -777,6 +777,14 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for particle acceptance
 
+- **Opus — current particle provenance:** reconcile the original source inputs
+  through `tools/import_source.mjs` and `data/provenance.json` before publishing
+  another `tests/fixtures/destruction.json`. Its current capture disagrees with
+  shared provenance for `public/js/rng.js`, `public/js/pool.js`,
+  `public/js/lookPrefs.js` and `public/js/movePrefs.js`. Keep all four source
+  guards and the strict particle comparisons. Acceptance: regenerate from the
+  agreed original inputs, then execute both particle families on the real driver;
+  a compiling fixture adapter does not qualify debris, comics or imported pixels.
 - **Opus — debris source random contract:** the original default
   `vfx.debrisBurst()` path captured by `tools/destruction_references.mjs` consumes
   `Math.random` while constructing Three.js groups/materials/instance batches,

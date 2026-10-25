@@ -4,7 +4,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/dialogue_native.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("programs") is Array,
 		"Capture original automatic dialogue methods")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_dialogue()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -14,7 +14,7 @@ func _run() -> void:
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Dialogue oracle matches imported source: " + path)
 	_check(Content.campaign.get("talk") == capture.get("talk"), "Imported campaign radio scenarios match original source content")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_dialogue()
 		return
 	for program: Dictionary in capture.programs:
@@ -64,5 +64,5 @@ func _compare(view: CampaignDialogue, expected: Dictionary) -> void:
 				"Native portrait binding loads the exact original character/mech asset")
 
 func _finish_dialogue() -> void:
-	print("DIALOGUE_NATIVE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DIALOGUE_NATIVE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

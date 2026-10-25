@@ -21,7 +21,7 @@ func _run() -> void:
 	var decoded := plate.load_png_from_buffer(FileAccess.get_file_as_bytes(capture.rules.plate)) == OK
 	_check(decoded and texture != null and texture.get_image().get_data() == plate.get_data(),
 		"Native hold publication preserves transparent source pixels without alpha-border retuning")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_hold()
 		return
 	for program: Dictionary in capture.programs:
@@ -89,5 +89,5 @@ func _run() -> void:
 	_finish_hold()
 
 func _finish_hold() -> void:
-	print("CAMPAIGN_HOLD assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_HOLD assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

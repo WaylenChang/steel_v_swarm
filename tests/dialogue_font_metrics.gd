@@ -21,5 +21,5 @@ func _run() -> void:
 	if file != null:
 		file.store_string(JSON.stringify(report, "  "))
 		file.close()
-	print("DIALOGUE_FONT_METRICS assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DIALOGUE_FONT_METRICS assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

@@ -13,7 +13,7 @@ func _run() -> void:
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Transcript retains original scene, CSS and asset bindings")
 	_check(data.source == capture.source and data.motion == capture.motion, "Transcript motion resource retains original CSS values")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_transcript()
 		return
 	for program: Dictionary in capture.programs:
@@ -170,5 +170,5 @@ func _run() -> void:
 	_finish_transcript()
 
 func _finish_transcript() -> void:
-	print("DIALOGUE_TRANSCRIPT assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DIALOGUE_TRANSCRIPT assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

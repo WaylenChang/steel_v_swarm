@@ -462,6 +462,16 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   `node tools/loot_clock_capture.mjs`
   and real-driver `tests/loot_clock.tscn` cover the original methods and world
   binding, not complete loot geometry or populated pickup/transport settlement.
+  Collectible owners close terminally on detachment; world reuse acquires fresh
+  owners. Seal all entry references before visibility callbacks, prepare pose
+  and private outline bindings before admission, and stop superseded sync/frame
+  continuations. Existing IDs retain their original first-observation metadata;
+  removal and later reuse create fresh objects. `node tools/collectible_owner_capture.mjs`
+  executes the original constructors and snapshot/frame methods for eighteen
+  programs; real-driver `tests/collectible_retirement.tscn` checks those states,
+  reentrant replacement/retirement and deferred root/private-material release.
+  Declared source geometry/toon/outline and terrain probes do not qualify shape,
+  shading, complete world coordinates, pickup settlement or transport delivery.
 - [ ] **S20 — Campaign presentation:** certify original crawl/pan/zoom/skip,
   portrait/art fallbacks, UTF-16 radio timing, stable portrait ties, timer
   cancellation, transitions and victory transcript/replay. Campaign maps and

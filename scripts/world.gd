@@ -96,7 +96,9 @@ func sync_airdrops(states: Array, now: float) -> void:
 		return
 	if airdrop_visuals == null and states.is_empty():
 		return
-	if airdrop_visuals == null:
+	if not is_instance_valid(airdrop_visuals) or airdrop_visuals.retired or airdrop_visuals.is_queued_for_deletion():
+		if is_instance_valid(airdrop_visuals):
+			airdrop_visuals.queue_free()
 		airdrop_visuals = AirdropPresentation.new()
 		airdrop_visuals.wall_clock = BodyPresentation.time_now
 		add_child(airdrop_visuals)
@@ -136,7 +138,9 @@ func sync_loots(states: Array, now: float) -> void:
 		return
 	if loot_visuals == null and states.is_empty():
 		return
-	if loot_visuals == null:
+	if not is_instance_valid(loot_visuals) or loot_visuals.retired or loot_visuals.is_queued_for_deletion():
+		if is_instance_valid(loot_visuals):
+			loot_visuals.queue_free()
 		loot_visuals = LootPresentation.new()
 		loot_visuals.wall_clock = BodyPresentation.time_now
 		add_child(loot_visuals)

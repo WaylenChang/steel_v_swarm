@@ -1,12 +1,13 @@
 class_name AirdropPresentation
-extends Node3D
-
-var entries: Dictionary = {}
-var clock := 0.0
-var wall_clock := Callable()
+extends "res://scripts/collectible_presentation.gd"
 
 func sync(states: Array, now: float) -> void:
-	clock = float(wall_clock.call()) if wall_clock.is_valid() else now
+	if not _active():
+		return
+	revision += 1
+	var token := revision
+	if not _sample_clock(now, token):
+		return
 	var seen := {}
 	for state: Dictionary in states:
 		var id := int(state.id)
@@ -19,7 +20,6 @@ func sync(states: Array, now: float) -> void:
 			push_error("Missing original airdrop scene; regenerate and pack loot content: " + path)
 			continue
 		var root: Node3D = load(path).instantiate()
-		add_child(root)
 		root.position = state.position
 		var entry := {"root": root, "ground": float(state.position.y), "born": clock, "landing": state.landing,
 			"root_yaw": float(root.rotation.y)}
@@ -27,14 +27,23 @@ func sync(states: Array, now: float) -> void:
 			entry[name] = root.find_child("n_%d" % int(Content.balance.loot_visuals[key][name]), true, false)
 		entry.crate_yaw = float(entry.crate.rotation.y)
 		SourceOutlineBinding.install(root)
+		if not _current(token):
+			root.queue_free()
+			return
 		entries[id] = entry
+		add_child(root)
+		if not _current(token):
+			return
 	for id: int in entries.keys():
 		if not seen.has(id):
-			entries[id].root.queue_free()
-			entries.erase(id)
+			_release_entry(id)
+			if not _current(token):
+				return
 
 func _process(delta: float) -> void:
-	clock = float(wall_clock.call()) if wall_clock.is_valid() else clock + delta
+	var token := revision
+	if not _sample_clock(clock + delta, token):
+		return
 	var cfg: Dictionary = Content.constants.AIRDROP
 	for entry: Dictionary in entries.values():
 		var root: Node3D = entry.root
@@ -44,8 +53,14 @@ func _process(delta: float) -> void:
 		var landed: bool = not entry.landing or progress >= 1
 		root.position.y = float(entry.ground) + (float(cfg.DROP_H) * (1 - progress) * (1 - progress) if entry.landing else 0.0)
 		entry.chute.visible = not landed
+		if not _current(token):
+			return
 		entry.groundChute.visible = landed
+		if not _current(token):
+			return
 		entry.halo.visible = landed
+		if not _current(token):
+			return
 		if landed:
 			entry.crate_yaw += delta * 0.6
 			entry.crate.quaternion = SourceQuaternion.axis_angle(Vector3.UP, float(entry.crate_yaw))

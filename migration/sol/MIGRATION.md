@@ -18,6 +18,25 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   and populated lifecycle checks on the full set, including actual tunnel cases.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
+  Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference
+  publication. It verifies the selected identity, contiguous chunks, every numeric
+  dependency, streamed hashes and bounded GZIP extents without decoding complete
+  numeric buffers into memory. A matching generator fingerprint never establishes
+  that ignored/untracked sidecars are present. `tools/migrate_worlds.ps1` must stop
+  before reference/native publication on any storage failure; this storage gate
+  does not establish complete scenery, source provenance or rendered parity.
+  Content-addressed mesh chunks also require length/hash validation before reuse;
+  reject corrupt existing chunks without rewriting them. Cache verification by
+  complete storage path: identical bytes can belong to both numeric and chunk
+  namespaces. Legacy packing must
+  dispose its writer on failure while retaining the original manifest and any
+  already-published sidecars. Keep the child-process failure cases in
+  `tests/world_source.test.mjs` alongside native reload coverage.
+  Publish marine shader includes through the native atomic publisher before the
+  containing world, retaining their final content-addressed paths. Reuse requires
+  byte-hash verification and a fresh native load; corrupt existing includes must
+  remain untouched. `tests/world_shader_publication.tscn` checks dependency reload
+  and retained-reader isolation, not marine shader pixels or complete worlds.
   Existing Berlin spring/summer/autumn resources are partial inputs, not world-set
   certification. Refresh stale generator fingerprints before source reuse.
   Stop browser producers before disposing an interrupted mesh writer. Close its
@@ -113,6 +132,7 @@ World workflow, from the repository root:
 
 ```powershell
 node tools/bake_worlds.mjs --list-bundles
+node tools/verify_world_source.mjs berlin_1_autumn
 ./tools/migrate_worlds.ps1 -Godot C:/path/to/godot_console.exe -Bundle berlin_1_autumn
 godot --headless --path . res://tests/worlds.tscn -- --bundle=berlin_1_autumn
 node --test tests/world_source.test.mjs tests/world_selection.test.mjs
@@ -135,22 +155,48 @@ The wrapper runs capture, source references and native packing sequentially.
   catalogue last through the atomic native resource publisher; never overwrite
   an existing fingerprint path or remove a prior catalogue's referenced clips.
   New sample libraries read a fresh catalogue snapshot and verify every clip
-  before registering the complete batch. Legacy catalogues without fingerprints
-  require regeneration with `tools/import_audio.tscn -- --samples-only`.
+  before registering the complete batch. Synthesis, music fallback and movement
+  also use verified content-addressed resources behind the same catalogue switch.
+  One `BattleAudio` owner shares a lazy index snapshot across all consumers;
+  late loads retain that generation, while acquisition can retry until a valid
+  index exists. Regenerate legacy catalogues with `tools/import_audio.tscn`.
+  Samples-only publication retains a complete index only when its source agrees
+  and every retained dependency verifies; it cannot establish a missing full index.
   `tests/audio_catalogue.tscn` covers native reload, staged replacement and
   retained-reader isolation; `tests/audio_resources.tscn` checks original PCM and
-  take order. The samples-only publication does not certify atomic updates of
-  synthesis/music/movement resources, codec parity or complete audible output.
+  take order. `tests/audio_resource_catalogue.tscn` covers staged interruption,
+  complete index replacement, delayed reads, exact resource identities, partial
+  import retention and corruption rejection. These checks do not establish codec
+  parity, actual device suspension, audible waveform parity or transport delivery.
 - [ ] **S8 — Mixer and voice lifecycle:** certify native SFX/BGM settings,
   panning, bus/filter order, initial dedup timestamp, cap reservation grace and
   playing-stream lifetime. Malformed legacy negative SFX polarity stays explicitly
   unavailable; do not convert it into positive gain. Music envelope correctness
   is an Opus-owned blocker, not a tolerance adjustment here.
+  Music, ambience, fallback and loop-player detachment is terminal: stop timers,
+  release streams, disconnect envelopes and reject reattachment or late commands.
+  Routing retirement must stop every live consumer before removing native buses,
+  including SFX and movement workers. Track admitted children before callbacks;
+  reentrant disposal cannot resume configuration or allocate another voice.
+  `tests/audio_owner_retirement.tscn` checks native routing loss, paused detachment,
+  held-decoder drainage and isolated original music/ambience/movement programs.
+  Its isolated source gate does not replace full lifecycle provenance acceptance.
+  Manager configuration and unlock must stop after synchronous retirement;
+  queued owners/routes reject playback before touching deduplication or RNG.
+  Reentrant voice/player admission cannot continue allocating, consume a take
+  after cancellation or reserve a partially started voice. Manager retirement
+  closes all consumers and emits one routing retirement notification.
+  `tests/audio_manager_retirement.tscn` combines these native interruption cases
+  with isolated original gate/count/sample programs from
+  `data/audio_manager/fixtures.json`. Keep its exact numeric tapes and producer
+  fingerprints; this dedicated capture does not discharge shared fixture gates.
 - [ ] **S9 — Movement/location audio:** certify lazy permanent location beds,
   source channel allocation, noise/oscillator reconstruction, synchronized frame
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.
   Verify fade-out retention, driver suspension, buffer latency, thread shutdown,
   scheduling/performance and threaded Web export with actual mixer output.
+  Reuse panning coefficients only for an exactly unchanged double control value;
+  retain per-sample evaluation during automation and the existing buffer latency.
   Movement owners and voices retire permanently on tree exit; reattachment must
   reject configuration rather than reconnecting signals to stopped DSP state.
   Use a fresh owner for new playback. Stopped workers release pending mixer
@@ -160,10 +206,33 @@ The wrapper runs capture, source references and native packing sequentially.
   Run WASAPI `tests/audio_move_retirement.tscn` and `tests/audio_move_render.tscn`
   alongside source lifecycle checks. Native frames and shutdown probes do not
   certify audible waveform parity, device suspension or threaded Web delivery.
+  Service permanent voices in admission order with a one-millisecond worker
+  poll. Failed middle voices must not skip later voices; submissions during a
+  service pass join its next pass. `tests/audio_move_retirement.tscn` verifies
+  these races with a real worker. Run `tests/audio_move_render.tscn -- --stress`
+  for 32 repeated 150 ms UI interruptions with unchanged continuity/skip checks.
+  One WASAPI device configuration does not certify other drivers/rates, sustained
+  CPU contention or platform delivery. Keep the two-period startup budget aligned
+  to Godot's native 128-frame resampler refills instead of truncating it to the
+  driver period. `tests/audio_generator_buffers.tscn` reproduces the former
+  480-frame driver's 64-frame shortfall at an off-block cursor and verifies
+  native refills across driver sizes. Do not hide scheduling failures by
+  increasing the budget, changing coefficient math,
+  branch order or automation clocks, or relaxing strict underrun checks.
+  Requalify the block size against the installed engine's native
+  [resampler contract](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_stream.h)
+  on engine upgrades; failure diagnostics must retain current output skips,
+  playback position, free ring frames, unread source captures and maximum service
+  gaps. Keep measured per-call time alongside those cursors in native captures.
 - [ ] **S10 — Event/frame audio integration:** certify immediate local fire,
   cast/purchase reports, death/leave and remote events in their source order.
   Cover deduplication across snapshot/RPC delivery and all offline/ENet/WebSocket
   lifecycles, including source clock suspension and independent wall deadlines.
+  `tests/audio_context_clock.tscn` compares the silent SFX context against an
+  independent, active native PCM bus beyond bus auto-disable, through paused
+  zero/slow/fast SceneTree scales and bounded capture overflow. Preserve exact
+  native frame deltas. This does not qualify physical driver suspension, rate
+  changes or event delivery; retain the distinct source-context and wall clocks.
 
 Relevant existing checks include `audio_*_suite.gd`,
 `tests/audio_pan_render.tscn` and `tests/audio_move_render.tscn`. Source capture
@@ -174,10 +243,13 @@ Audio workflow, from the repository root:
 ```powershell
 node tools/audio_mixer_references.mjs C:/path/to/steel_vs_swarm
 node tools/audio_lifecycle_references.mjs C:/path/to/steel_vs_swarm
+node tools/audio_manager_references.mjs C:/path/to/steel_vs_swarm
 godot --headless --path . res://tools/import_audio.tscn
 godot --headless --path . res://tests/audio_resources.tscn
 godot --headless --path . res://tests/audio_lifecycle.tscn
 godot --headless --audio-driver WASAPI --path . res://tests/audio_loop_loading.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_owner_retirement.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_manager_retirement.tscn
 godot --headless --audio-driver WASAPI --path . res://tests/audio_pan_render.tscn
 godot --headless --audio-driver WASAPI --path . res://tests/audio_move_render.tscn
 ```
@@ -273,12 +345,37 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   reports, local fan/remote plasma/lance/ion fallbacks, nearest current muzzle
   callbacks and private versus public shot cadence. Preserve pre-fire initial
   emitters, compressed reverse-order bursts, source crowding limits and contact
-  star gates. Complete moving-shot interpolation, terminal owner-shell retirement,
-  geographic collision and immediate
+  star gates. Complete moving-shot interpolation, geographic collision and immediate
   impact/prediction timing. These effects never repeat damaging settlement.
   Keep owner-pose clocks monotonic and terminal deadlines nondecreasing;
   `tests/projectile_lifecycle.tscn` covers stale/equal-clock packets before and
   after terminal-guard reclamation. Populated transports still require acceptance.
+  Native owner exit must clear active rounds, visual-shell model references,
+  tracers and every model pool; late calls cannot resume that owner. Reattached
+  worlds acquire a fresh presentation owner. Seal record removal before native
+  visibility callbacks and stop continuations after collision/impact retirement.
+  Keep the original per-variant pool bound and LIFO order, dispose overflow and
+  reset root scale on reuse. Regenerate `data/projectile_presentation.json` with
+  `node tools/projectile_owner_capture.mjs`; never manually retune its bound.
+  Real-driver `tests/projectile_owner_retirement.tscn` verifies current original
+  acquisition/drop programs, ordinary/hit/range flight, actual packed models and
+  interrupted native ownership. These cases do not qualify all projectile styles,
+  moving snapshot interpolation, complete pixels or populated transport behavior.
+  Tracers retain one two-vertex dynamic ArrayMesh and private material across
+  reuse. Update its culling override with the vertex buffer; native raster probes
+  must still draw after endpoints move outside the original surface bounds.
+  Release clears the old trace record before visibility callbacks and may return
+  a line only once. Preserve original double TTL/age accumulation and fade order.
+  The ownership scene includes source endpoint/frame programs, exact scalar bits
+  and real-driver buffer/culling-pixel checks. It requires a rendered session.
+  Verify retired buffers and private materials after deferred destruction and a
+  completed rendered frame, including lines that were actually visible.
+  Original tracer prewarm/free-stack bounds remain unqualified until the pool
+  provenance contract below is resolved. Complete the shared oldest-first
+  `FX_MAX` budget across `ProjectilePresentation.traces` and `CombatEffects.effects`
+  through `scripts/world.gd`; separate per-owner caps cannot preserve original
+  mixed effect insertion/eviction order. Keep zero-delta culling and expiry order
+  in the source-based acceptance cases rather than inventing a tracer-only cap.
 - [ ] **S17 — Impact/particles:** certify muzzle/contact/explosion layers,
   source fire/smoke/embers, texture/opacity/depth rules, pooling/oldest-first
   budgets, victim first-observation/healing/re-entry gates and guard peak rules.
@@ -507,6 +604,22 @@ switches for `-Loading`, `-Mobile`, `-Controls`, `-View`, `-Tps`, `-Pips`,
 Cross-owner changes stay as exact requests in this file until their owner pulls
 them. Remove completed items; no dated checkpoints or copied validation history.
 
+### Shared-owner contract required for world publication
+
+- **Opus — source publisher temporary ownership:**
+  `tools/fixture_json.mjs::writeSourceFile` uses PID plus `Date.now()` for its
+  temporary path and removes that path after a failed exclusive write, including
+  `EEXIST`. Two same-process writes to one chunk within one clock tick therefore
+  collide; the rejected opener deletes the first writer's temporary file.
+  Isolated concurrent 8 MiB writes with a fixed clock both reject (`ENOENT` and
+  `EEXIST`) and leave no publication. Give each invocation a unique temporary
+  identity and remove only successfully opened files. Preserve atomic rename,
+  completed-capture retention and existing retry semantics for both source-file
+  and fixture-JSON writers. Acceptance: fixed-clock concurrent writes cannot
+  delete another writer's staging file; rejected exclusive opens retain foreign
+  bytes, and failed encodes clean up only their own incomplete output. Sol's
+  serial chunk hash/reuse checks do not discharge this shared publisher contract.
+
 ### Local execution constraints
 
 - In this worktree, source tools need
@@ -514,6 +627,9 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   sibling source checkout does not exist. The required/output presence inventory
   is [world-inventory.json](../../artifacts/sol/world-inventory.json). Presence
   does not establish source fingerprints, dependency integrity or native parity.
+  Browser captures also need process-local `PW_CHROME` pointing to
+  `C:/Users/user/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe`;
+  the sandbox's default Playwright browser cache is empty.
 - Godot 4.7.2 is available at
   `C:/Users/user/AppData/Local/Temp/steel-v-swarm-godot/Godot_v4.7.2-stable_win64_console.exe`.
   Set process-local `APPDATA` to this worktree's `build/sol-user` and
@@ -522,6 +638,11 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   resources; produce the selected original bundles before repeating populated
   acceptance. Root-suite failures in other owners' fixtures do not authorize
   changing their production code or shared reference registries here.
+  Native font/codec caches can be generated in an isolated minimal Godot project
+  from identical source assets and import descriptors, then copied into the
+  ignored `.godot/imported` directory. Avoid broad editor imports that rewrite
+  the shared project settings. An automatic `--quit-after` exit without
+  `SMOKE_PASS` is not a passing smoke test.
 - `tests/world_storage.tscn` consumes the artifacts generated by
   `node --test tests/world_source.test.mjs`. Its float64 decode/disk-reload checks
   do not establish complete world geometry, rendered appearance or delivery.
@@ -537,16 +658,24 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   explicitly rejects these active channels until the shared shader accepts
   lossless storage. Acceptance: regenerate `berlin_1_autumn`, pass original
   surface-color checks in `tests/worlds.tscn` and source/native pixel comparison.
+  The freshly recaptured, completely storage-verified Berlin spring bundle also
+  stops on mesh 5: 4,944 of its 22,537,287 RGB components exceed one. The first
+  is blue at vertex 146,852 (component 440,558), with the same maximum above.
+  Exact source buffer identity and surface declarations are retained in
+  [world-color-inventory.json](../../artifacts/sol/world-color-inventory.json);
+  the current real-driver rejection is in `build/sol-berlin-spring-import.log`.
+  Require lossless native disk reload and colored/uncolored source/native pixels
+  in both quality modes before Sol binds the accepted storage contract.
 - **Opus — cel resource metadata:** resolve the source/native material-table
   mismatch through `scripts/source_cel_data.gd` or its serialized consumer
   contract. Acceptance: `SourceCelData.material_source(material)` equals the
   captured per-surface `cel` declaration after native resource reload;
   `tests/worlds.tscn -- --bundle=berlin_1_autumn` must retain its exact material
-  checks. The full failure evidence is in `tests/sol-world-qualified.log`.
-- The rejected candidate is retained at
-  `artifacts/sol/unqualified-worlds/berlin_1_autumn.res`, outside normal world
-  selection. Its successful prebuild transfer/lifecycle does not discharge the
-  failed geometry/material qualification. Keep unqualified candidates unavailable.
+  checks. Passing isolated material metadata probes does not qualify full worlds.
+- Keep rejected candidates outside normal world selection, for example under
+  `artifacts/sol/unqualified-worlds/`. The current worktree has no qualified
+  seasonal native bundle. Prebuild transfer/lifecycle checks cannot discharge
+  failed geometry/material qualification or establish absent candidate resources.
 - **Opus — shared audio fixtures:** refresh the existing audio routing/state
   fields in `data/fixtures.json` through `tools/import_source.mjs` and
   `tools/model_references.mjs`. In particular, `tests/audio_suite.gd` still needs
@@ -555,6 +684,26 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   `tools/audio_references.mjs` and `tools/audio_pan_capture.mjs`; do not invent
   outputs or relax the entry guard. The independent native resource/mixer scenes
   use Sol-owned captures and cannot certify the missing shared decision fixtures.
+  The shared gate/count/sample sections still declare producer input
+  `tools/audio_references.mjs` as
+  `d1a87b6357256bf6059f017f3eee3f2bea8e4f6ccf74b445402d0b35cec084d1`,
+  while the current normalized module is
+  `3de024594ab66b555c6df2e54a2def16c957981acd4bd5c2666aaabc278df245`.
+  Refresh those shared producer declarations through the importer; Sol's separate
+  manager capture reuses the current recorder without editing this registry.
+- **Opus — shared audio provenance/consumer publication:** refresh
+  `data/provenance.json` and the shared fixture consumer manifests through
+  `tools/import_source.mjs`. Original `public/js/rng.js` and Sol's
+  `data/audio_lifecycle.json` agree on SHA-256
+  `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`, while
+  runtime provenance still declares
+  `c46913b415a75aa5f0d2366dd7bfcb4f8f26c1db913ecea2a74b40695dd78aaa`.
+  The lifecycle generator correctly refuses to overwrite this mismatch. Refresh
+  dependency declarations for `tests/audio_clip_suite.gd` and
+  `tests/audio_move_suite.gd` after their catalogue-based resource binding; preserve
+  the original expected samples, control programs and strict fingerprint guards.
+  Acceptance: `tests/audio_lifecycle.tscn` reaches its original programs without
+  bypassing provenance, and the root suite accepts the current audio consumers.
 
 ### Shared-owner contracts required for local feedback
 
@@ -591,6 +740,32 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   boundaries retain source behavior. Repeated true snapshots emit one notice,
   false then true emits another, and replayed snapshots emit none. Do not infer
   this flag from `unbalLeft` alone or add client resource settlement.
+
+### Shared-owner contracts required for projectile acceptance
+
+- **Opus — original presentation pool provenance:** refresh `data/provenance.json`
+  through `tools/import_source.mjs` before Sol captures original `_initFxPools`,
+  `_releaseFxLine` and `Pool.release` together. Current original
+  `public/js/pool.js` hashes to
+  `58b938ad46b8c4afd0036612f143a4bdb52be72af6b9d45eb73ae229a690b84b`,
+  while imported metadata declares
+  `5040958ee9974e92e7cf25ad784bb92b0c76f02a6f8d9de60baa13b1cd5b987e`.
+  The guard must reject this mixed identity; do not reuse an invented Pool or
+  relax the fingerprint check. Acceptance: original prewarm, bounded LIFO release,
+  overflow disposal and reentrant shell retirement execute against one accepted
+  source snapshot. Sol's current supplied-line probes certify vertex/fade writes,
+  not the absent pool qualification. The exact identities are retained in
+  [tracer-pool-source.json](../../artifacts/sol/tracer-pool-source.json).
+- **Opus — shared projectile fixture publication:** refresh `data/fixtures.json`
+  through `tools/import_source.mjs` before full projectile acceptance. The shared
+  `visualShells`, `projectileGeometry` and `tracerPresentation` sections declare
+  `tools/projectile_references.mjs` as
+  `44d833f86189b5e8a394249b3b7c4988144bb3093a2cc6014d9ea73602af2cd0`,
+  while the current normalized producer is
+  `9a8545ae29e9c1a51ab5fed6d35050028cbe78ff767a2125f24a8d5169c3ca35`.
+  Preserve original flight, geometry, material and tracer expectations and the
+  source fingerprint guards. Acceptance: the shared projectile suites consume
+  current producers/consumers without substituting Sol's narrower ownership oracle.
 
 ### Shared-owner contracts required for particle acceptance
 

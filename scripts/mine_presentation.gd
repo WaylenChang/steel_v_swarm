@@ -2,7 +2,8 @@ class_name MinePresentation
 extends Node3D
 
 var entries: Dictionary = {}
-var last_check := -100.0
+var last_check := 0.0
+var wall_clock := Callable()
 
 func sync(states: Array) -> void:
 	var seen := {}
@@ -26,12 +27,13 @@ func sync(states: Array) -> void:
 			entries.erase(id)
 
 func update_view(observer: Vector3, now: float) -> void:
-	if now - last_check < 0.12:
+	var observed_at := float(wall_clock.call()) if wall_clock.is_valid() else now
+	if observed_at - last_check < 0.12:
 		return
-	last_check = now
+	last_check = observed_at
 	var cfg: Dictionary = Content.constants.GAME.MINES
 	for visual: MeshInstance3D in entries.values():
-		var distance := observer.distance_to(visual.position)
+		var distance := _distance(observer, visual.position)
 		visual.visible = distance <= float(cfg.SEE_M)
 		if not visual.visible:
 			continue
@@ -39,3 +41,25 @@ func update_view(observer: Vector3, now: float) -> void:
 		for surface in range(visual.mesh.get_surface_count()):
 			var material: StandardMaterial3D = visual.mesh.surface_get_material(surface)
 			material.albedo_color.a = opacity
+
+static func _distance(first: Vector3, second: Vector3) -> float:
+	# V8's three-argument Math.hypot compensates the normalized sum before sqrt.
+	# https://github.com/nodejs/node/blob/v24.16.0/deps/v8/src/builtins/math.tq
+	var a := absf(float(first.x) - float(second.x))
+	var b := absf(float(first.y) - float(second.y))
+	var c := absf(float(first.z) - float(second.z))
+	if is_inf(a) or is_inf(b) or is_inf(c):
+		return INF
+	if is_nan(a) or is_nan(b) or is_nan(c):
+		return NAN
+	var largest := maxf(maxf(a, b), c)
+	if largest == 0:
+		return 0.0
+	a /= largest
+	b /= largest
+	c /= largest
+	var power_a := a * a
+	var power_b := b * b
+	var compensation := (power_a + power_b) - power_a - power_b
+	var power_c := c * c - compensation
+	return sqrt(power_a + power_b + power_c) * largest

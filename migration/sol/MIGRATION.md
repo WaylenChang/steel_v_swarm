@@ -416,6 +416,16 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
   source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
+  Mine visibility retains the original zero-initialized absolute throttle clock,
+  strict 0.12 s wall-time interval and three-argument compensated distance before
+  sight/opacity decisions. Native Float32 observer/anchor components enter double
+  subtraction directly; a Float32 vector length changes edge behavior. Preserve
+  hidden opacity and per-instance material isolation. `node tools/mine_view_capture.mjs`
+  executes the original controller under both Node and the original Chromium
+  runtime; real-driver `tests/mine_view.tscn` retains exact distance/time bits,
+  near-threshold states and world clock binding. Constructor geometry/shading and
+  terrain height probes do not qualify original mine shape, imagery-derived
+  camouflage, complete world coordinates, trigger settlement or transport delivery.
   Missile retirement is terminal and idempotent. Seal it before fracture callbacks,
   stop interrupted observation/model continuations, and release packed models,
   persistent damage children, copied materials and private ray buffers even while

@@ -116,6 +116,7 @@ func sync_mines(states: Array) -> void:
 		return
 	if mine_visuals == null:
 		mine_visuals = MinePresentation.new()
+		mine_visuals.wall_clock = BodyPresentation.time_now
 		add_child(mine_visuals)
 	var poses: Array = []
 	for state: Dictionary in states:

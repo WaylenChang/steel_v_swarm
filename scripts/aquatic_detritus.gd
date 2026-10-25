@@ -1,10 +1,52 @@
 class_name AquaticDetritus
 extends RefCounted
 
+const BindingLifetime = preload("res://scripts/scenery_binding_lifetime.gd")
+
 var particles: Array = []
 var seeds: PackedFloat32Array
 var positions: PackedFloat32Array
 var mesh: ArrayMesh
+var source_node: MeshInstance3D
+var retired := false
+var ready := false
+var generation := 0
+var lifetime: BindingLifetime
+var lifetime_id := 0
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
+
+func _active() -> bool:
+	return not retired and is_instance_valid(source_node) and not source_node.is_queued_for_deletion()
+
+func _release_binding() -> void:
+	particles.clear()
+	seeds.clear()
+	positions.clear()
+	mesh = null
+	ready = false
+	source_node = null
+	if is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
+	lifetime = null
+	lifetime_id = 0
+
+func _retire_binding(binding_generation: int, binding_instance: int) -> void:
+	if generation != binding_generation or lifetime_id != binding_instance:
+		return
+	lifetime = null
+	retire()
+
+func retire() -> void:
+	if retired:
+		return
+	retired = true
+	generation += 1
+	_release_binding()
 
 static func create_node(source: Dictionary) -> MeshInstance3D:
 	var vertices := PackedVector3Array()
@@ -35,6 +77,19 @@ static func create_node(source: Dictionary) -> MeshInstance3D:
 	return node
 
 func configure(node: MeshInstance3D, source: Dictionary) -> bool:
+	if retired or not is_instance_valid(node) or node.is_queued_for_deletion():
+		return false
+	generation += 1
+	var token := generation
+	_release_binding()
+	source_node = node
+	lifetime = BindingLifetime.new()
+	lifetime_id = lifetime.get_instance_id()
+	lifetime.controller = weakref(self)
+	lifetime.generation = generation
+	node.add_child(lifetime)
+	if not _active() or token != generation:
+		return false
 	var original := node.mesh as ArrayMesh
 	if original == null or original.get_surface_count() != 1 or original.surface_get_primitive_type(0) != Mesh.PRIMITIVE_POINTS:
 		push_error("Missing original aquatic point primitive")
@@ -47,14 +102,19 @@ func configure(node: MeshInstance3D, source: Dictionary) -> bool:
 	if stride != 12:
 		push_error("Original aquatic points require uncompressed native float32 vertex storage")
 		return false
-	node.mesh = mesh
-	RenderingServer.instance_set_ignore_culling(node.get_instance(), true)
 	particles = source.particles.duplicate(true)
 	seeds = PackedFloat32Array(source.seeds)
 	positions = PackedFloat32Array(source.positions)
+	node.mesh = mesh
+	if not _active() or token != generation:
+		return false
+	RenderingServer.instance_set_ignore_culling(node.get_instance(), true)
+	ready = true
 	return true
 
 func advance(delta: float, now: float) -> void:
+	if not ready or not _active():
+		return
 	for index in range(particles.size()):
 		var part: Dictionary = particles[index]
 		if float(part.surfaceY) <= float(part.floorY):

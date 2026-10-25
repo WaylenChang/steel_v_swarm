@@ -1,14 +1,77 @@
 class_name AquaticPresentation
 extends RefCounted
 
+const BindingLifetime = preload("res://scripts/scenery_binding_lifetime.gd")
+
 var systems: Array = []
 var meshes: Dictionary = {}
 var point_nodes: Dictionary = {}
+var source_root: Node3D
+var retired := false
+var ready := false
+var generation := 0
+var revision := 0
+var lifetime: BindingLifetime
+var lifetime_id := 0
 
-func configure(root: Node3D, source: Dictionary) -> bool:
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
+
+func _active() -> bool:
+	return not retired and is_instance_valid(source_root) and not source_root.is_queued_for_deletion()
+
+func _current(token: int) -> bool:
+	return _active() and token == revision
+
+func _release_binding() -> void:
+	var previous := systems.duplicate()
 	systems.clear()
 	meshes.clear()
 	point_nodes.clear()
+	ready = false
+	source_root = null
+	if is_instance_valid(lifetime):
+		lifetime.controller = null
+		lifetime.queue_free()
+	lifetime = null
+	lifetime_id = 0
+	for system: Dictionary in previous:
+		var motion: AquaticDetritus = system.get("motion")
+		system.clear()
+		if motion != null:
+			motion.retire()
+
+func _retire_binding(binding_generation: int, binding_instance: int) -> void:
+	if generation != binding_generation or lifetime_id != binding_instance:
+		return
+	lifetime = null
+	retire()
+
+func retire() -> void:
+	if retired:
+		return
+	retired = true
+	generation += 1
+	revision += 1
+	_release_binding()
+
+func configure(root: Node3D, source: Dictionary) -> bool:
+	if retired or not is_instance_valid(root) or root.is_queued_for_deletion():
+		return false
+	generation += 1
+	revision += 1
+	var token := revision
+	_release_binding()
+	source_root = root
+	lifetime = BindingLifetime.new()
+	lifetime_id = lifetime.get_instance_id()
+	lifetime.controller = weakref(self)
+	lifetime.generation = generation
+	root.add_child(lifetime)
+	if not _current(token):
+		return false
 	for node: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
 		if node.has_meta("source_aquatic_points"):
 			point_nodes[int(node.get_meta("source_aquatic_points"))] = node
@@ -26,10 +89,12 @@ func configure(root: Node3D, source: Dictionary) -> bool:
 				push_error("Missing original suspended detritus point mesh")
 				return false
 			var motion := AquaticDetritus.new()
-			if not motion.configure(node, system):
-				return false
 			system.motion = motion
 			systems.append(system)
+			if not motion.configure(node, system):
+				return false
+			if not _current(token):
+				return false
 			continue
 		var batches := {}
 		for batch: Dictionary in system.batches:
@@ -38,6 +103,8 @@ func configure(root: Node3D, source: Dictionary) -> bool:
 				push_error("Missing original aquatic MultiMesh")
 				return false
 			node.multimesh = node.multimesh.duplicate()
+			if not _current(token):
+				return false
 			RenderingServer.instance_set_ignore_culling(node.get_instance(), true)
 			batches[batch.role] = node.multimesh
 		system.meshes = batches
@@ -47,10 +114,16 @@ func configure(root: Node3D, source: Dictionary) -> bool:
 				random.next()
 			system.random = random
 		systems.append(system)
+	ready = true
 	return true
 
 func advance(delta: float, now: float) -> void:
+	if not ready or not _active():
+		return
+	var token := revision
 	for system: Dictionary in systems:
+		if not _current(token):
+			return
 		match system.kind:
 			"bubble":
 				_bubbles(system, delta, now)

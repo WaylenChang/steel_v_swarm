@@ -99,6 +99,21 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   real-driver `tests/aquatic_native.tscn` cover original bubbles, detritus, fish,
   jellies, vessel/wake frames and private buffers, including large environment
   clocks. Their probe geometry does not qualify source model pixels or full worlds.
+  Aquatic hosts and independent detritus controllers retain private buffers,
+  particle phases and bubble RNG across staging transfers. Physical root/leaf
+  deletion closes the matching weak binding; obsolete or duplicated observers
+  cannot retire replacements. Queued owners reject updates, and retirement seals
+  aliased system dictionaries before releasing owned point controllers, native
+  vertex/instance buffers and RNG references. Real-driver
+  `tests/aquatic_retirement.tscn` uses explicit state/point/sphere probes to check
+  those lifetimes with closed controllers retained. It does not replace original
+  factory/frame qualification, material pixels or full seasonal-world acceptance.
+  **Opus handoff:** reconcile `public/js/rng.js` in shared provenance through
+  `tools/import_source.mjs`. Aquatic constructors and original bubble recycling
+  genuinely execute that dependency; retain the full producer and failing
+  `tests/aquatic_native.tscn` guard. Acceptance includes all original aquatic
+  initialization, reset RNG, large-clock motion and vessel/wake programs without
+  omitting source inputs or changing the existing transform tolerances.
   `node tools/aquatic_point_capture.mjs` captures original PointsMaterial pixels
   through locally fulfilled, fingerprinted source modules. Run real-driver
   `tests/aquatic_render.tscn -- --source-capture` for the independent six-case

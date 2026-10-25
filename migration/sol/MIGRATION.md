@@ -164,6 +164,17 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   release with closed hosts retained. Cache/geometry/callback probes and the
   fresh clock-only fixture contract do not establish complete scenery pixels,
   seasonal publication or populated world/transport/prebuild acceptance.
+  Climb-arrow owners preserve their source flow phase and private instance buffers
+  across staging transfers, then close terminally on native root deletion.
+  Generation/observer identity guards isolate replaced and duplicated roots;
+  queued roots and retired owners reject later updates. Release borrowed route
+  references without clearing the authority caller's accepted roster.
+  `node tools/climb_arrow_capture.mjs` runs the original arrow constructor,
+  unit-bar geometry and update callback with declared route probes. Real-driver
+  `tests/climb_arrow_retirement.tscn` retains its initial/long-clock transforms,
+  unchanged matrix tolerance and native private-buffer ownership checks. This
+  presentation-only capture executes no authority route planner and cannot
+  qualify route admission, populated traversal, material pixels or complete worlds.
 - [ ] **S5 — Environment appearance:** finish cloud/fog-bank detail,
   precipitation, celestial bodies, deposits/scorch, contact effects,
   shoreline/underwater/waves/reflections and

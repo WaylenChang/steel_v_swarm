@@ -1,8 +1,9 @@
 class_name FootprintSuite
 extends RefCounted
 
-static func run(h: Node, fixtures: Array) -> void:
-	for fixture: Dictionary in fixtures:
+static func run(h: Node, fixtures: Variant) -> void:
+	var cases: Array = fixtures.shotFootprints if fixtures is Dictionary else fixtures
+	for fixture: Dictionary in cases:
 		var targets: Array = fixture.targets.duplicate(true)
 		for target: Dictionary in targets:
 			target.position = h._reference_vector(target.position)

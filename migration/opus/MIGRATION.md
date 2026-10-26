@@ -216,7 +216,7 @@ runtime acceptance remain incomplete. Component results do not certify the build
   a `BattleSimulation` before `CockpitRig.update_view` consumes their authority
   context. Retain all original burst frames and serial/kick/muzzle assertions;
   a parent-type script error cannot establish a presentation difference.
-  Models handoff: `scripts/view_occlusion.gd` must copy `MultiMesh` format flags and `instance_count` before `buffer` instead of calling `MultiMesh.duplicate()`, and match `expandByObject` descendant bounds, nine TPS body samples and instanced fade restoration in `tests/view_occlusion_suite.gd` (`tests/player_view_suite.gd`).
+  Models handoff: `scripts/view_occlusion.gd` must copy `MultiMesh` format flags and `instance_count` before `buffer` instead of calling `MultiMesh.duplicate()`, and match `expandByObject` descendant bounds, nine TPS body samples and instanced fade restoration in `tests/view_occlusion_suite.gd` (`tests/player_view_suite.gd`). `scripts/civilian_body_builder.gd` must unset `owner` before reparenting instantiated template nodes in `configure` so `tests/snapshot_suite.gd` does not emit inconsistent-owner engine warnings.
 - [ ] **O24 — Delivery:** certify native exports, mobile sensors/safe areas,
   Compatibility rendering, memory/performance, threaded audio on Web, browser
   single-player, Pages artifact contents and production native hosting. Complete

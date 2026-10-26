@@ -1,11 +1,12 @@
 class_name ModelSuite
 extends RefCounted
 
-static func run(h: Node, fixtures: Array) -> void:
+static func run(h: Node, fixtures: Variant) -> void:
+	var cases: Array = fixtures.modelCentres if fixtures is Dictionary else fixtures
 	var actor: BattleUnit
 	var previous := ""
 	var changed_centres := {}
-	for fixture: Dictionary in fixtures:
+	for fixture: Dictionary in cases:
 		var key: String = fixture.character + fixture.kind + fixture.side
 		if key != previous:
 			if actor != null:
@@ -13,8 +14,12 @@ static func run(h: Node, fixtures: Array) -> void:
 			actor = BattleUnit.new()
 			h.add_child(actor)
 			var special := {}
-			if Content.balance.get("companions", {}).has(fixture.side.to_lower() + "_" + fixture.kind):
-				special.role = "hologram" if fixture.kind == "decoy_beacon" else "summon"
+			var companion_key: String = fixture.side.to_lower() + "_" + fixture.kind
+			if Content.balance.get("companions", {}).has(companion_key):
+				if fixture.kind in ["decoy", "hyper"]:
+					special = {"role": "carrier", "model_key": companion_key, "hp": Content.balance.carrier.hp[fixture.kind]}
+				else:
+					special.role = "hologram" if fixture.kind == "decoy_beacon" else "summon"
 			actor.configure({"id": 99001, "kind": fixture.kind, "character": fixture.character,
 				"side": fixture.side, "position": Vector3.ZERO, "special": special})
 			previous = key
@@ -35,16 +40,16 @@ static func run(h: Node, fixtures: Array) -> void:
 static func acquisition(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
+	sim.set_physics_process(false)
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
 	var map_data := Content.map_variant(0, 1)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [
-		{"peer": 801, "side": "STEEL", "character": "t09", "bot": false},
-		{"peer": 802, "side": "SWARM", "character": "m08", "bot": false}], {"time": "day", "weather": "clear"}, true)
-	sim.set_physics_process(false)
-	var actor: BattleUnit = sim.pilots[801]
-	var target: BattleUnit = sim.pilots[802]
-	actor.position = Vector3(0, 80, 0)
-	target.position = Vector3(0, 80, -100)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	var actor := sim.spawn({"peer": 801, "side": "STEEL", "character": "t09", "kind": Content.heroes.t09.kind, "position": Vector3(0, 80, 0)})
+	var target := sim.spawn({"peer": 802, "side": "SWARM", "character": "m08", "kind": Content.heroes.m08.kind, "position": Vector3(0, 80, -100)})
+	sim.pilots[801] = actor
+	sim.pilots[802] = target
 	actor.input_state = {"aim": true, "slot": "heavy"}
 	var offset := target.aim_point() - actor.view_origin()
 	actor.yaw = 0

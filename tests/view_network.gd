@@ -14,7 +14,7 @@ var accepted := false
 func _ready() -> void:
 	Controls.persist = false
 	Controls.configure(Content.balance.mobile)
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["viewLocks"])
 	for item: Dictionary in fixtures.viewLocks:
 		if item.yaw == 0 and item.pitch == 0:
 			trace = item

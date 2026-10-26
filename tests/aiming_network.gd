@@ -35,7 +35,7 @@ func _physics_process(delta: float) -> void:
 			fixture_observer = simulation.spawn({"kind": Content.heroes.s01.kind, "character": "s01", "peer": 3301, "side": "SWARM",
 				"position": fixture_pilot.position + Vector3(30, 0, 0)})
 			# Use an executed original-helper oracle input; this does not enable a gameplay skill.
-			var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+			var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["skillFootprints"])
 			var references: Array = fixtures.skillFootprints.filter(func(item): return item.character == "helper" and item.slot == "enemy" and not item.result.is_empty())
 			if references.is_empty():
 				push_error("NETWORK_AIMING_SOURCE_REFERENCE_MISSING")

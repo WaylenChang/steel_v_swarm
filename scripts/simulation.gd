@@ -331,7 +331,7 @@ func _match_world_error(map_data: Dictionary, env: Dictionary) -> String:
 	return ""
 
 func _populate_heroes(map_data: Dictionary, roster: Array) -> bool:
-	if not authoritative or world == null:
+	if not authoritative or world == null or world.paths.is_empty():
 		return false
 	var slots := {"SWARM": 0, "STEEL": 0, "SUPER": 0}
 	var bot_index := 0

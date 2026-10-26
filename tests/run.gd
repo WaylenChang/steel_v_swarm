@@ -354,7 +354,10 @@ func _run_fixture_suite(suite: Variant) -> void:
 		return
 	var data: Dictionary = Content.read_json("res://data/fixtures.json", keys)
 	print("SOURCE_SUITE_BEGIN ", suite.resource_path)
-	await suite.run(self, data)
+	if suite in [RoomWorldResourceTests, RoomWorldPrebuildTests]:
+		await suite.run(self)
+	else:
+		await suite.run(self, data)
 	data.clear()
 	await get_tree().process_frame
 	print("SOURCE_SUITE_END ", suite.resource_path, " assertions=", assertions - previous_assertions, " failures=", failures - previous_failures)

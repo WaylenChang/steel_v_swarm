@@ -1,8 +1,9 @@
 class_name ReachabilitySuite
 extends RefCounted
 
-static func run(h: Node, fixtures: Array) -> void:
-	for fixture: Dictionary in fixtures:
+static func run(h: Node, fixtures: Variant) -> void:
+	var cases: Array = fixtures.reachability if fixtures is Dictionary else fixtures
+	for fixture: Dictionary in cases:
 		var definition := Content.weapon(fixture.character, fixture.slot, int(fixture.level))
 		var geometry: Node3D = null
 		var collision: Callable

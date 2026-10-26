@@ -29,9 +29,9 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   acceptance. Their source
   storage/provenance gates do not qualify native numbers, material fidelity,
   layered-deck references, tunnel pixels or full seasonal-world availability.
-  Also qualify the larger `taroko_3_spring` input with its 248 captured tunnels
-  and 46 decks; smaller team-size recipes cannot stand in for its full geometry
-  and feature tables.
+  Also qualify all four seasons of `taroko_3_*` and `taroko_swap_3_*`, each with
+  248 captured tunnels and 46 decks; smaller team-size recipes cannot stand in
+  for their full geometry and feature tables.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
   Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference

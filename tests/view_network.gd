@@ -56,7 +56,7 @@ func _physics_process(delta: float) -> void:
 			_fail("Shop entry must release the actual native view-lock pointer")
 			return
 		_overlay(shop, false)
-		var aim := touch_controls.buttons.aim.get_global_rect().get_center()
+		var aim: Vector2 = touch_controls.buttons.aim.get_global_rect().get_center()
 		_touch(1, aim, true)
 		_touch(1, aim, false)
 		phase = 3

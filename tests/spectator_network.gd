@@ -18,9 +18,10 @@ func _ready() -> void:
 func _receive_state(packet: Dictionary) -> void:
 	if observer:
 		if explicit_observer:
+			var member := Session.local_member()
 			if member.get("mode") != "spectator" or not String(member.side).is_empty():
 				_fail("NETWORK_SPECTATOR_MODE_IDENTITY")
-			return
+				return
 		for actor: Dictionary in packet.units:
 			for key: String in ActorSnapshot.OWNER_FIELDS:
 				if actor.has(key):

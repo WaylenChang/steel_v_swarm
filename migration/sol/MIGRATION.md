@@ -49,6 +49,12 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   dispose its writer on failure while retaining the original manifest and any
   already-published sidecars. Keep the child-process failure cases in
   `tests/world_source.test.mjs` alongside native reload coverage.
+  Native numeric/chunk GZIP must consume the complete single member emitted by
+  the source writer. Godot's whole-buffer decoder ignores trailing data; retain
+  the bounded `StreamPeerGZIP` input-consumption/extent check before native
+  member validation. Reject second members, garbage tails and expanded output
+  beyond the declared extent without changing the source files. Keep valid
+  high-ratio/multi-window and numeric/chunk tail cases in `tests/world_storage.tscn`.
   Browser transfer, inline mesh chunks and final metadata publication must retain
   signed zero. `tools/source_json.mjs` uses native `JSON.rawJSON` and a copy-on-write
   adapter for the shared streaming publisher; reject unavailable native support

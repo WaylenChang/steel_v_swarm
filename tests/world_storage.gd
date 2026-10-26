@@ -17,6 +17,7 @@ func _ready() -> void:
 		_run_case(name)
 	_rejections()
 	_path_verification()
+	_gzip_boundaries()
 	print("WORLD_STORAGE assertions=", assertions, " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)
 
@@ -139,6 +140,72 @@ func _path_verification() -> void:
 		_check(DirAccess.remove_absolute(path) == OK, "Storage verification probe file is released")
 	for suffix: String in ["/buffers", "/mesh_chunks", ""]:
 		_check(DirAccess.remove_absolute(root + suffix) == OK, "Storage verification probe directory is released")
+
+func _gzip_boundaries() -> void:
+	var root := "user://world-storage-gzip-%d" % Time.get_ticks_usec()
+	for folder: String in ["buffers", "mesh_chunks"]:
+		_check(DirAccess.make_dir_recursive_absolute(root + "/" + folder) == OK,
+			"GZIP boundary probe directory is created")
+	var plain := PackedFloat64Array([1.25, -2.5]).to_byte_array()
+	var mesh := "[{\"name\":\"complete\"}]".to_utf8_buffer()
+	var expanded := PackedByteArray()
+	expanded.resize(1024 * 1024)
+	var overflow := RejectionReader.new({"meshes": []}, root)
+	var excessive := overflow._decompress_gzip(expanded.compress(FileAccess.COMPRESSION_GZIP), 16)
+	_check(not overflow.valid and excessive.is_empty() and overflow.rejections == ["Source world GZIP extent exceeded"],
+		"High-ratio GZIP stops when bounded output exceeds the declared extent")
+	var complete := RejectionReader.new({"meshes": []}, root)
+	_check(complete._decompress_gzip(expanded.compress(FileAccess.COMPRESSION_GZIP), expanded.size()) == expanded and complete.valid,
+		"Valid high-ratio GZIP drains multiple bounded output windows")
+	var random := RandomNumberGenerator.new()
+	random.seed = 730241
+	var numbers := PackedFloat64Array()
+	for offset in range(32768):
+		numbers.append(random.randf())
+	var wide := numbers.to_byte_array()
+	var packed := wide.compress(FileAccess.COMPRESSION_GZIP)
+	_check(packed.size() > 65536, "Wide GZIP probe spans multiple compressed input windows")
+	var wide_reader := RejectionReader.new({"meshes": []}, root)
+	_check(wide_reader._decompress_gzip(packed, wide.size()) == wide and wide_reader.valid,
+		"Bounded input/output windows preserve every original numeric bit")
+	var wide_tail := RejectionReader.new({"meshes": []}, root)
+	_check(wide_tail._decompress_gzip(packed + PackedByteArray([1]), wide.size()).is_empty() and not wide_tail.valid and wide_tail.rejections == ["Trailing source world GZIP data"],
+		"Trailing bytes remain rejected after multiple compressed input windows")
+	for numeric: bool in [false, true]:
+		var original := plain if numeric else mesh
+		var compressed := original.compress(FileAccess.COMPRESSION_GZIP)
+		for tail: PackedByteArray in [PackedByteArray(), compressed, PackedByteArray([1, 2, 3])]:
+			var stored := compressed + tail
+			var hash := HashingContext.new()
+			hash.start(HashingContext.HASH_SHA256)
+			hash.update(stored)
+			var sha := hash.finish().hex_encode()
+			var path := root + ("/buffers/" if numeric else "/mesh_chunks/") + sha + (".f64.gz" if numeric else ".json.gz")
+			var output := FileAccess.open(path, FileAccess.WRITE)
+			_check(output != null, "GZIP boundary probe file opens")
+			if output == null:
+				return
+			output.store_buffer(stored)
+			output.close()
+			var spec := {"sha256": sha, "bytes": stored.size(), "path": path}
+			var reader := RejectionReader.new({"meshes": []}, root)
+			var decoded: Variant
+			if numeric:
+				spec.merge({"encoding": "float64le-gzip", "shape": [2]})
+				decoded = reader._decode({"$sourceNumericArray": spec})
+			else:
+				spec.merge({"plainBytes": original.size(), "count": 1})
+				decoded = reader._read_chunk(spec)
+			if tail.is_empty():
+				_check(reader.valid and reader.rejections.is_empty() and decoded == ([1.25, -2.5] if numeric else [{"name": "complete"}]),
+					"A complete single-member GZIP retains the original numeric/chunk content")
+			else:
+				_check(not reader.valid and reader.rejections == ["Trailing source world GZIP data"] and (decoded == null if numeric else decoded.is_empty()),
+					"Numeric/chunk GZIP rejects a second member or unrelated trailing bytes")
+			_check(FileAccess.get_file_as_bytes(path) == stored, "Rejected GZIP input remains unchanged")
+			_check(DirAccess.remove_absolute(path) == OK, "GZIP boundary probe file is released")
+	for suffix: String in ["/buffers", "/mesh_chunks", ""]:
+		_check(DirAccess.remove_absolute(root + suffix) == OK, "GZIP boundary probe directory is released")
 
 func _check_bits(mesh: Dictionary, fixture: Dictionary, label: String) -> void:
 	for entry: Dictionary in fixture.checks:

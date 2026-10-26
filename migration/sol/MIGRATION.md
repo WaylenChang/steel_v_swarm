@@ -464,6 +464,17 @@ The wrapper runs capture, source references and native packing sequentially.
   Preserve the original context's shared noise across synthesis, movement and
   music; do not silently combine an isolated rate profile with another capture's
   noise generation when publishing a complete native catalogue.
+  `node tools/capture_audio_move_rate.mjs <rate>` extends an existing SFX rate
+  archive with original movement graphs, oscillator periods and filter impulses.
+  Reuse its exact archived noise buffer without another `_buildNoise` call;
+  bind the parent archive bytes, source/producer fingerprints and Chromium
+  version/flags before publication. `tools/audio_move_import.gd` is the shared
+  native bank factory for the existing importer and explicit rate captures.
+  `tests/audio_move_rate_import.tscn` checks matching-rate native reload and
+  unchanged legacy resource identity. Keep `tests/audio_move_rate.test.mjs`
+  alongside the SFX capture tests. These captures/imports do not qualify complete
+  movement waveforms or switch the runtime catalogue; finish device mixer
+  comparisons and a compatible shared-noise music cohort before that switch.
   Full publication and samples-only retention must load and verify every
   synthesis/movement/music dependency and reject missing or differing shared
   noise fingerprints/context rates before changing the catalogue. Oscillator

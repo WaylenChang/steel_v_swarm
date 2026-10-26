@@ -5,7 +5,7 @@ const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 const ResourceIdentity = preload("res://scripts/audio_resource_identity.gd")
 const SynthesisImport = preload("res://tools/audio_synthesis_import.gd")
 const ResourceSnapshot = preload("res://scripts/audio_resource_snapshot.gd")
-const NoiseImport = preload("res://tools/audio_noise_import.gd")
+const MoveImport = preload("res://tools/audio_move_import.gd")
 var catalogue_path := AudioSampleLibrary.CATALOGUE_PATH
 
 func _ready() -> void:
@@ -217,54 +217,10 @@ func _resource_cohort(catalogue: NativeAudioCatalogue) -> bool:
 
 func _movement(provenance: Dictionary, catalogue: NativeAudioCatalogue) -> bool:
 	var data: Dictionary = Content.read_json("res://data/audio_move.json")
-	if data.get("formatVersion") != 1 or data.get("source") != provenance or not data.get("noise") is Dictionary or not data.get("oscillators") is Array:
-		_fail("Regenerate original movement noise and oscillator periods")
+	var bank := MoveImport.build(data, provenance, Content.balance.audio.moveGraphs)
+	if bank == null:
+		_fail("Invalid original movement noise or oscillator periods")
 		return false
-	var bank := NativeAudioMoveBank.new()
-	bank.source = provenance.duplicate(true)
-	var noise_values := NoiseImport.decode(data.noise, data.get("noiseSha256"))
-	if noise_values.is_empty():
-		_fail("Invalid original shared movement noise buffer")
-		return false
-	bank.source.noiseSha256 = data.noiseSha256
-	var stem := NativeAudioStem.new()
-	stem.values = noise_values
-	stem.envelope.assign([{"operation": "setValueAtTime", "time": 0.0, "constant": 1.0}])
-	var rendered := stem.render(1, int(data.noise.sampleRate))
-	if rendered.is_empty():
-		_fail("Cannot convert original movement noise to native PCM")
-		return false
-	bank.noise = rendered.stream
-	bank.noise_gain = rendered.gain
-	bank.noise.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	bank.noise.loop_begin = 0
-	bank.noise.loop_end = int(data.noise.frames)
-	for captured: Dictionary in data.oscillators:
-		var values := Marshalls.base64_to_raw(captured.values)
-		if values.size() != int(captured.frames) * 4:
-			_fail("Invalid original movement oscillator period")
-			return false
-		if not bank.oscillators.has(captured.category):
-			bank.oscillators[captured.category] = {}
-		var node := str(int(captured.node))
-		if bank.oscillators[captured.category].has(node):
-			_fail("Duplicate original movement oscillator period")
-			return false
-		bank.oscillators[captured.category][node] = values.to_float32_array()
-	if bank.oscillators.size() != Content.balance.audio.moveGraphs.size():
-		_fail("Unexpected original movement oscillator category")
-		return false
-	for category: String in Content.balance.audio.moveGraphs:
-		var expected := []
-		for node: Dictionary in Content.balance.audio.moveGraphs[category].nodes:
-			if node.kind == "createOscillator":
-				expected.append(str(int(node.id)))
-		var actual: Array = bank.oscillators.get(category, {}).keys()
-		expected.sort()
-		actual.sort()
-		if actual != expected:
-			_fail("Incomplete original movement oscillator periods: " + category)
-			return false
 	return await _publish_resource(catalogue, "movement", bank)
 
 func _clip(id: String, sample: Dictionary) -> NativeAudioClip:

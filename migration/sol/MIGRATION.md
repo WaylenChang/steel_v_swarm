@@ -52,6 +52,11 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   capture. Keep `tests/world_capture_publication.test.mjs` with provenance and
   storage regression coverage. Publication-helper fingerprints participate in
   source identity; archived captures need regeneration before current-tool reuse.
+  Capture/reuse publication also authenticates every referenced mesh chunk and
+  numeric sidecar before replacing the manifest, then rechecks original provenance
+  after that storage pass. Missing/corrupt dependencies or inconsistent chunk
+  counts leave the previous manifest and cache files untouched. Keep raw and GZIP
+  publication-boundary cases in `tests/world_capture_publication.test.mjs`.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
   Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference

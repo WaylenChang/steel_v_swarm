@@ -60,7 +60,8 @@ const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), '
 const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+encodeSourceNumericPart.toString()+'\n'+decodeSourceNumericPart.toString()+'\n'+WorldSourceWriter.toString()+'\n'+captureWorldAttribute.toString()+'\n'+createWorldMeshTransport.toString());
 const elevationCaptureSha256 = sha256(worldElevationFrames.toString()+'\n'+captureWorldElevation.toString());
 const publicationSha256 = sha256(JSON.stringify(await Promise.all(
-  ['world_capture_publication.mjs','world_provenance.mjs','fixture_json.mjs'].map(async name=>
+  ['world_capture_publication.mjs','world_provenance.mjs','world_source.mjs','world_source_writer.mjs',
+    'fixture_json.mjs','source_json.mjs','source_mesh_transfer.mjs','source_numeric_transfer.mjs'].map(async name=>
     [name,sha256(await readFile(new URL(name,import.meta.url)))]))));
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');

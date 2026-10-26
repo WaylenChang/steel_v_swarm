@@ -23,10 +23,11 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   cancellation and atomic publication. Bound peak memory through traversal and
   ResourceSaver publication; finish resource reload, complete rendered appearance
   and populated lifecycle checks on the full set, including actual tunnel cases.
-  Use all four seasons of both `taroko_1_*` and `taroko_swap_1_*` as original
-  populated tunnel inputs: retain each world's 198 captured tunnel records, their geometry and source
-  metadata through native packing/reload before rendered and traversal integration
-  acceptance. Their source
+  Use all four seasons of `taroko_1_*`, `taroko_swap_1_*`, `taroko_2_*` and
+  `taroko_swap_2_*` as original populated tunnel inputs: retain each freshly
+  sampled world's 200 tunnel records and six decks, their geometry and source
+  metadata through native packing/reload before rendered and traversal
+  integration acceptance. Their source
   storage/provenance gates do not qualify native numbers, material fidelity,
   layered-deck references, tunnel pixels or full seasonal-world availability.
   Also qualify all four seasons of `taroko_3_*` and `taroko_swap_3_*`, each with
@@ -134,9 +135,9 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   divider-band classification order, image-colour/border-band classifiers,
   slab/roof/portal metadata and pad anchors. Reject uncaptured classifiers.
   World geometry production stays here; authority LOS/support/traversal is Opus.
-  Regenerate seasonal captures with per-variant elevation frames, including
-  swapped layouts; older captures reused the largest variant's raw grid for
-  smaller team sizes. Source provenance/storage cannot establish the sampled
+  Regenerate remaining seasonal captures with per-variant elevation frames,
+  including swapped layouts; older captures reused the largest variant's raw
+  grid for smaller team sizes. Source provenance/storage cannot establish the sampled
   frame. Preserve each selected configuration's original `battleRect`, elevation
   layer center, Float32 writes and resampling order, including the matching source
   cache key; acquire coverage only for selected sizes. Keep

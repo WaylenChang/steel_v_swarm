@@ -100,6 +100,22 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   and retained-reader isolation, not marine shader pixels or complete worlds.
   Existing Berlin and Taroko seasonal source captures are partial inputs, not
   world-set certification. Refresh stale generator fingerprints before source reuse.
+  Decode elevation mosaics only for selected source venue IDs; base-swapped and
+  campaign aliases retain their original `source_id` mapping and candidate order.
+  Capture provenance includes Chromium version and JavaScript execution flags;
+  reuse requires that same runtime identity as well as current source/generator
+  fingerprints. Flat world-attribute capture retains normalized/interleaved
+  getters, source scalar order and signed zero without temporary per-vertex
+  arrays. Float64 capture buffers keep large copies outside the ordinary object
+  heap; plain and typed scalar buffers retain identical inline JSON, f64-le
+  frames, alias/rank decisions and raw/GZIP publication bytes. Transfer large
+  meshes individually; batch inline records within 16 rows/4 MiB, sending an
+  oversized row whole. Collect retired copies after their producer frame returns
+  using a 64 MiB wire budget, retaining original mesh/chunk order and publication
+  bytes. Keep both transport/attribute helpers in serialization fingerprints and
+  `tests/world_mesh_transport.test.mjs`/`tests/world_attribute_capture.test.mjs` alongside binary
+  transfer/storage cases. These bounds do not waive complete storage/provenance,
+  resource reload or source/native appearance acceptance.
   Stop browser producers before disposing an interrupted mesh writer. Close its
   live numeric handles and remove only its successfully opened raw/GZIP temporary
   paths; retain published content-addressed sidecars and rejected existing files.
@@ -118,6 +134,15 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   divider-band classification order, image-colour/border-band classifiers,
   slab/roof/portal metadata and pad anchors. Reject uncaptured classifiers.
   World geometry production stays here; authority LOS/support/traversal is Opus.
+  Regenerate seasonal captures with per-variant elevation frames, including
+  swapped layouts; older captures reused the largest variant's raw grid for
+  smaller team sizes. Source provenance/storage cannot establish the sampled
+  frame. Preserve each selected configuration's original `battleRect`, elevation
+  layer center, Float32 writes and resampling order, including the matching source
+  cache key; acquire coverage only for selected sizes. Keep
+  `tests/world_elevation_capture.test.mjs` and the elevation-helper fingerprint:
+  every source query and complete Float32 grid must match the original terrain
+  sampling loop. This does not qualify complete terrain or populated worlds.
 - [ ] **S4 — Animated scenery:** certify trains, articulated pivots, boundary
   facilities and waterfalls against source frame order, endpoints, parent frames,
   wind and capped/zero deltas. Finish wildlife, petals/leaves and aquatic
@@ -658,6 +683,23 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
   source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
+  Water conformance consumes explicit original immediate-child water flags,
+  geometry parameters and double positions. Preserve `radiusTop ?? radius ?? 6`,
+  zero radii, the source 28-triangle fan, per-add Float32 normal accumulation and
+  retained non-water poses. Flagged water without geometry parameters follows
+  the prop-height branch; current flood `brokenGroundGeometry` has no parameters,
+  while pothole's cylinder is rebuilt. Never infer either branch from bounds.
+  `node tools/water_conformance_capture.mjs` captures the original method and
+  fixed unit-ring geometry under Node and original Chromium; runtime
+  `data/water_conformance.json` retains Chromium's float64 radial words before
+  radius multiplication. Keep the recorded cross-runtime query differences;
+  native trigonometric quadrant residues are not the original geometry.
+  Real-driver `tests/water_conformance.tscn` checks strict source query/vertex/
+  normal words, material/shared-mesh isolation, populated PackedScene reload and
+  interrupted construction. Controlled surface responses and primitive/prop
+  probes do not qualify original entity constructors, world surface admission,
+  conformed material pixels, damage/outline binding or populated transports.
+  The component remains unconnected until the owner contracts below are accepted.
   Mine visibility retains the original zero-initialized absolute throttle clock,
   strict 0.12 s wall-time interval and three-argument compensated distance before
   sight/opacity decisions. Native Float32 observer/anchor components enter double
@@ -863,6 +905,18 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   paused zero/slow/fast timers and bar retirement; the original dialogue fixture
   retains every automatic line duration. These clock checks do not qualify radio
   mount/unmount CSS curves, transcript reveal motion or complete overlay pixels.
+  Dialogue detachment cancels pending radio/transcript deadlines and native
+  animations; reattachment requires fresh playback. Seal old radio references
+  before visibility callbacks, and cancel superseded construction or clock
+  continuations before admitting nodes or timers. A queued/detached transcript
+  host must not reveal or scroll from a pending deadline. Preserve replacement
+  state during clear/dispose/expiry callbacks and release unadmitted portraits.
+  `node tools/dialogue_owner_capture.mjs` executes original `_after`, `clear`
+  and `dispose` with declared timer/DOM probes; real-driver
+  `tests/dialogue_owner_retirement.tscn` checks these programs and native
+  admission, reentrancy, paused detachment and retained-owner resource release.
+  This scoped cancellation oracle does not qualify the full original dialogue
+  dependency graph, layout, art/filter pixels or populated campaign delivery.
   Radio mount/unmount retains the original 320/400 ms ease-out/ease-in curves,
   14/10 px offsets and separate 420 ms removal deadline. Animate an isolated
   premultiplied SubViewport through Sprite2D so fractional translation samples
@@ -969,7 +1023,7 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   is [world-inventory.json](../../artifacts/sol/world-inventory.json). Presence
   does not establish source fingerprints, dependency integrity or native parity.
   Browser captures also need process-local `PW_CHROME` pointing to
-  `C:/Users/user/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe`;
+  `C:/Users/user/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe`;
   the sandbox's default Playwright browser cache is empty.
 - Godot 4.7.2 is available at
   `C:/Users/user/AppData/Local/Temp/steel-v-swarm-godot/Godot_v4.7.2-stable_win64_console.exe`.
@@ -1237,6 +1291,25 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for loot frame integration
 
+- **Models/Opus — original water hazard bindings:** preserve original
+  `userData.water`, geometry-parameter presence/nullish radius fields and double
+  `source_trs.p` for every immediate source child through
+  `tools/model_references.mjs`, `tools/import_cockpits.gd` and the shared import
+  publication. The existing packed flood/pothole scenes omit the water flag and
+  parameters. Publish actual constructor seed/radius identity as well: current
+  hazard profiles use seed 0 and one default radius; uniform root scaling cannot
+  replace `buildHazard(kind, entityId, scaledRadius)` because prop sizes and water
+  offsets remain independent of that radius. Opus then binds
+  `WaterConformance.apply(group, bindings, cx, cz, cy, surface)` in
+  `scripts/unit.gd::_build_model` after original world placement and before
+  pristine dimensions, damage, collapse and outline/material geometry binding.
+  `surface(x,z)` must execute original `_surf(x,z,terrain.heightAt(x,z))` ordering
+  and retain the bridge/terrain admission contract, rather than selecting the
+  highest deck unconditionally. Acceptance: populated original flood/pothole
+  models, multiple IDs/radii and sloped/raised-deck cases retain exact query and
+  geometry words, source prop/offset behavior, bounds and damage/outline binding
+  without mutating another instance; then run smoke and both transports. Keep
+  the synthetic conformance gate separate from that complete integration.
 - **Opus — capped/hitstop frame delivery:** `scripts/main.gd::_process` obtains
   the accepted delta from `PresentationFrame.advance`, while the independently
   processing loot/airdrop nodes receive raw engine deltas. Original
@@ -1260,6 +1333,17 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for campaign art
 
+- **Opus — automatic dialogue/transcript provenance:** reconcile the original
+  `public/js/rng.js` dependency through `tools/import_source.mjs` and
+  `data/provenance.json` before full dialogue qualification. Both
+  `tests/fixtures/dialogue_native.json` and `tests/fixtures/dialogue_transcript.json`
+  declare `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`,
+  while shared provenance declares
+  `c46913b415a75aa5f0d2366dd7bfcb4f8f26c1db913ecea2a74b40695dd78aaa`.
+  Preserve the full captures and their source guards. Acceptance: original
+  automatic radio and transcript programs pass with the agreed complete source
+  inputs and unchanged timing/asset comparisons; the narrower cancellation
+  oracle cannot substitute for these checks or certify populated delivery.
 - **Flash — settlement transcript host:** `scripts/campaign_ui.gd::show_result`
   owns the outer expandable transcript ScrollContainer and the result
   title/statistics/buttons. Bind the source settlement host width, outer overflow

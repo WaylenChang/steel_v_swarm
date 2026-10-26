@@ -18,12 +18,12 @@ for(const compressed of [false,true])test('binary and JSON numeric parts publish
   const flat=Array.from({length:98304},(_,index)=>index%3===0?-0:index/7);
   const matrix=Array.from({length:4100},(_,index)=>[flat[index],0,-0]);
   const arrays=[flat,matrix];
-  async function capture(binary) {
+  async function capture(binary,typed=false) {
     const root=await directory(),writer=new WorldSourceWriter(root,'res://binary',compressed);let manifest;
     try {
       await writer.begin(0,{name:'source',positions:{$sourceArray:0},matrix:{$sourceArray:1},inline:[-0,0]},arrays.map(array=>array.length));
       for(let index=0;index<arrays.length;index++) {
-        const array=arrays[index],size=index===0?65536:64;
+        const array=typed&&index===0?new Float64Array(arrays[index]):arrays[index],size=index===0?65536:64;
         for(let offset=0;offset<array.length;offset+=size) {
           const values=array.slice(offset,offset+size);
           if(binary)await writer.partEncoded(index,offset,encodeSourceNumericPart(values));
@@ -42,6 +42,14 @@ for(const compressed of [false,true])test('binary and JSON numeric parts publish
   const saved=await mesh(binary.root,binary.manifest);
   assert.deepEqual(await numeric(binary.root,saved.positions.$sourceNumericArray),Buffer.from(new Float64Array(flat).buffer));
   assert.deepEqual(await numeric(binary.root,saved.matrix.$sourceNumericArray),Buffer.from(new Float64Array(matrix.flat()).buffer));
+  for(const encoded of [false,true]) {
+    const typed=await capture(encoded,true);
+    assert.deepEqual(typed.manifest,baseline.manifest);
+    assert.deepEqual(await readFile(local(typed.root,typed.manifest.meshChunks[0].path)),
+      await readFile(local(baseline.root,baseline.manifest.meshChunks[0].path)));
+    const meshRecord=await mesh(typed.root,typed.manifest);
+    assert.deepEqual(await numeric(typed.root,meshRecord.positions.$sourceNumericArray),Buffer.from(new Float64Array(flat).buffer));
+  }
 });
 
 test('rejected binary parts retain admitted numeric state and never publish malformed input',async()=>{

@@ -8,6 +8,7 @@ test('binary source transfer retains every finite double bit and signed zero',()
   assert.deepEqual(decoded.bytes,Buffer.from(new Float64Array(values).buffer));
   assert.deepEqual([decoded.rows,decoded.width,decoded.matrix],[values.length,1,false]);
   assert.ok(Object.is(values[0],-0));
+  assert.deepEqual(encodeSourceNumericPart(new Float64Array(values)),frame);
 });
 
 test('matrix rank and row widths remain distinct from flat and single-column shapes',()=>{
@@ -26,6 +27,7 @@ test('binary transfer retains both signs of every finite IEEE-754 exponent',()=>
     values.push(expected.readDoubleLE(offset));
   }
   assert.deepEqual(decodeSourceNumericPart(encodeSourceNumericPart(values)).bytes,expected);
+  assert.deepEqual(decodeSourceNumericPart(encodeSourceNumericPart(new Float64Array(values))).bytes,expected);
 });
 
 test('standalone browser encoder preserves complete multi-window numeric arrays',()=>{
@@ -36,7 +38,7 @@ test('standalone browser encoder preserves complete multi-window numeric arrays'
 });
 
 test('binary encoding rejects coercion, empty, ragged and nonfinite input',()=>{
-  for(const values of [[],new Array(2),new Float64Array([1]),[NaN],[Infinity],[-Infinity],['1'],[null],[[1],[2,3]],[[]],[1,[2]],[new Array(268435456)]])
+  for(const values of [[],new Array(2),new Float32Array([1]),new Int32Array([1]),new Float64Array(),new Float64Array([NaN]),[NaN],[Infinity],[-Infinity],['1'],[null],[[1],[2,3]],[[]],[1,[2]],[new Array(268435456)]])
     assert.throws(()=>encodeSourceNumericPart(values),/source numeric transfer/);
 });
 

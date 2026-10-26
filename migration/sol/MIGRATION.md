@@ -72,6 +72,12 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   Writer temporary identities must remain unique within one process and clock
   tick. Keep `tests/world_source.test.mjs` disposal/ownership checks alongside
   native reload coverage; they do not qualify world content or publication.
+  Retirement drains admitted directory preparation, numeric opens/writes and
+  atomic chunk publication before cleanup, including a still-running sibling
+  after initialization fails. Concurrent callers share one retirement promise;
+  cancelled operations cannot return a completed manifest. Retain completed
+  manifests, published cache files and foreign temporary paths. Keep the delayed
+  I/O cases in `tests/world_source_retirement.test.mjs` with storage acceptance.
 - [ ] **S3 — Terrain/scenery content:** finish source triangular terrain,
   dry-band/wet-grid, water/swamp, imagery, OSM facilities/buildings, habitat,
   complete biome orchestration and edge geometry capture. Retain original

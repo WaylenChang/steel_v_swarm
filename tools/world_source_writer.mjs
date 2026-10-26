@@ -21,18 +21,38 @@ export class WorldSourceWriter {
     this.directory=directory;this.resourceDirectory=resourceDirectory;
     this.compressNumeric=compressNumeric;
     this.disposed=false;this.temporary=new Set();
+    this.operations=new Set();this.disposal=null;
     this.count=0;this.chunks=[];this.rows=[];this.rowBytes=0;this.pending=null;this.verified=new Set();
-    this.ready=Promise.all(['buffers','mesh_chunks'].map(folder=>mkdir(join(directory,folder),{recursive:true})));
+    const preparation=['buffers','mesh_chunks'].map(folder=>mkdir(join(directory,folder),{recursive:true}));
+    this.ready=Promise.all(preparation);
+    this.initialization=Promise.allSettled(preparation);
+    // Retirement may precede the first mesh; callers still observe initialization errors through ready/operations.
+    this.ready.catch(()=>{});
   }
-  async begin(index,header,lengths) {
-    if(this.disposed)throw new Error('Source writer is disposed');
-    await this.ready;
+  _run(action) {
+    if(this.disposed)return Promise.reject(new Error('Source writer is disposed'));
+    const work=this.ready.then(async()=>{
+      if(this.disposed)throw new Error('Source writer is disposed');
+      const result=await action();
+      if(this.disposed)throw new Error('Source writer is disposed');
+      return result;
+    });
+    this.operations.add(work);
+    work.then(()=>this.operations.delete(work),()=>this.operations.delete(work));
+    return work;
+  }
+  begin(index,header,lengths){return this._run(()=>this._begin(index,header,lengths));}
+  part(index,offset,values){return this._run(()=>this._part(index,offset,values));}
+  end(index){return this._run(()=>this._end(index));}
+  append(mesh){return this._run(()=>this._append(mesh));}
+  finish(){return this._run(()=>this._finish());}
+
+  async _begin(index,header,lengths) {
     if(this.pending||index!==this.count||!header||typeof header!=='object'||!Array.isArray(lengths)
       ||lengths.some(length=>!Number.isInteger(length)||length<=0))throw new Error('Invalid source mesh boundary');
     this.pending={header,parts:lengths.map(length=>({length,rows:0,width:0,hash:createHash('sha256'),handle:null}))};
   }
-  async part(index,offset,values) {
-    if(this.disposed)throw new Error('Source writer is disposed');
+  async _part(index,offset,values) {
     const part=this.pending?.parts[index];
     if(!part||!Array.isArray(values)||!values.length||offset!==part.rows||offset+values.length>part.length)
       throw new Error('Out-of-order source numeric part');
@@ -59,8 +79,7 @@ export class WorldSourceWriter {
     }
     part.rows+=values.length;
   }
-  async end(index) {
-    if(this.disposed)throw new Error('Source writer is disposed');
+  async _end(index) {
     const pending=this.pending;
     if(!pending||index!==this.count||pending.parts.some(part=>part.rows!==part.length))throw new Error('Incomplete source mesh');
     const descriptors=[];
@@ -103,7 +122,7 @@ export class WorldSourceWriter {
     this.rows.push(text);this.rowBytes+=text.length;this.count++;this.pending=null;
     if(this.rows.length>=256)await this._flush();
   }
-  async append(mesh) {
+  async _append(mesh) {
     const parts=[];
     const header=JSON.parse(stringifySourceJson(mesh,(_key,value)=>{
       if(value&&typeof value==='object'&&(Object.hasOwn(value,'$sourceArray')||Object.hasOwn(value,'$sourceNumericArray')))
@@ -140,15 +159,20 @@ export class WorldSourceWriter {
       plainBytes:plain.length,start,count:this.rows.length});
     this.rows=[];this.rowBytes=0;
   }
-  async finish() {
-    if(this.disposed)throw new Error('Source writer is disposed');
+  async _finish() {
     if(this.pending)throw new Error('Unfinished original source mesh');
     await this._flush();
     return {worldSourceVersion:2,meshCount:this.count,meshChunks:this.chunks};
   }
-  // The producer must stop sending mesh parts before disposing its writer.
-  async dispose() {
+  // Stop future producer calls first; retirement drains every already-admitted I/O operation.
+  dispose() {
+    if(this.disposal)return this.disposal;
     this.disposed=true;
+    this.disposal=this._dispose();
+    return this.disposal;
+  }
+  async _dispose() {
+    await Promise.allSettled([this.initialization,...this.operations]);
     for(const part of this.pending?.parts??[]) {
       if(part.handle){await part.handle.close();part.handle=null;}
     }
@@ -157,5 +181,7 @@ export class WorldSourceWriter {
       this.temporary.delete(path);
     }
     this.pending=null;this.rows=[];this.rowBytes=0;
+    // Completed manifests retain their own chunk array after writer retirement.
+    this.chunks=[];this.verified.clear();
   }
 }

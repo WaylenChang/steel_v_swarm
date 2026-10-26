@@ -36,5 +36,5 @@ func _run() -> void:
 				_check(not file.resource_path.contains("/build/"), "Published font has no temporary cache dependency")
 			for code: float in data.glyphs:
 				_check(font.has_char(int(code)), "Published weight covers every original dialogue character: " + String.chr(int(code)))
-	print("DIALOGUE_FONTS assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DIALOGUE_FONTS assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

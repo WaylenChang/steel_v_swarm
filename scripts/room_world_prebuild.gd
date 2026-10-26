@@ -98,8 +98,12 @@ static func _wait_take(reference: WeakRef, destination: WeakRef, tree: SceneTree
 func _transfer(ticket: int, destination: Node) -> BattleWorld:
 	if not _active() or ticket != generation or not is_instance_valid(prepared) or prepared.is_queued_for_deletion():
 		return null
+	if not is_instance_valid(destination) or not destination.is_inside_tree() or destination.is_queued_for_deletion():
+		return null
 	var world := prepared
 	var viewport := prepared_viewport
+	var previous_selection := selected.duplicate(true)
+	var previous_settings := settings.duplicate(true)
 	prepared = null
 	prepared_viewport = null
 	selected.clear()
@@ -110,6 +114,27 @@ func _transfer(ticket: int, destination: Node) -> BattleWorld:
 		resources.clear()
 	# Seal ownership before reparenting: destination callbacks may replace or free us.
 	world.reparent(destination, false)
+	var accepted := is_instance_valid(world) and not world.is_queued_for_deletion() and is_instance_valid(destination) \
+		and destination.is_inside_tree() and not destination.is_queued_for_deletion() and world.get_parent() == destination
+	if not accepted:
+		var recoverable := is_instance_valid(world) and not world.is_queued_for_deletion() and is_instance_valid(destination) \
+			and world.get_parent() == destination
+		if recoverable and is_instance_valid(self) and _active() and generation == consumed \
+				and is_instance_valid(viewport) and not viewport.is_queued_for_deletion():
+			# Publish rollback ownership before native callbacks; a newer request may replace it.
+			prepared = world
+			prepared_viewport = viewport
+			selected = previous_selection
+			settings = previous_settings
+			world.reparent(viewport, false)
+			if is_instance_valid(self) and _active() and generation == consumed:
+				changed.emit()
+		else:
+			if recoverable:
+				world.queue_free()
+			if is_instance_valid(viewport):
+				viewport.queue_free()
+		return null
 	if is_instance_valid(viewport):
 		viewport.queue_free()
 	if is_instance_valid(world) and not world.is_queued_for_deletion():

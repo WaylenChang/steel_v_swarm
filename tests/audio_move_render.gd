@@ -8,7 +8,7 @@ var failures: Array[Dictionary] = []
 var results: Dictionary = {}
 
 func _ready() -> void:
-	if not Content.balance.get("audio", {}).has("moveGraphs") or not ResourceLoader.exists(NativeAudioMoveBank.PATH):
+	if not Content.balance.get("audio", {}).has("moveGraphs") or preload("res://scripts/audio_resource_snapshot.gd").new().movement() == null:
 		_abort("Regenerate and import original movement audio")
 		return
 	sink = StringName("MoveAudioTest_%d" % get_instance_id())
@@ -41,7 +41,7 @@ func _ready() -> void:
 	for category: String in Content.balance.audio.scene.categories:
 		movement.set_move(category, .8, 0, 1, 0)
 	if not await _wait_rendered():
-		_abort("AUDIO_MOVE_STREAM_START " + JSON.stringify(failures))
+		_abort("AUDIO_MOVE_STREAM_START " + JSON.stringify({"failures": failures, "mixers": _snapshots()}))
 		return
 	var identities := {}
 	for category: String in movement.voices:
@@ -50,10 +50,10 @@ func _ready() -> void:
 	# Source Web Audio continues while the UI thread stalls; this must too.
 	OS.delay_msec(150)
 	var after := _snapshots()
-	for category: String in before:
-		if int(after[category].frames) - int(before[category].frames) < int(AudioServer.get_mix_rate() * .08) or int(after[category].output_skips) != 0:
-			_abort("AUDIO_MOVE_UI_STALL " + category)
-			return
+	var stall_failure := _stall_failure(before, after)
+	if not stall_failure.is_empty():
+		_abort(stall_failure)
+		return
 	var frames := capture.get_buffer(capture.get_frames_available())
 	var energy := 0.0
 	for frame: Vector2 in frames:
@@ -61,6 +61,19 @@ func _ready() -> void:
 	if frames.is_empty() or energy / frames.size() <= .00000001:
 		_abort("AUDIO_MOVE_CAPTURE_SILENT")
 		return
+	var stress: Array[Dictionary] = []
+	if OS.get_cmdline_user_args().has("--stress"):
+		for trial in range(32):
+			var start := _snapshots()
+			OS.delay_msec(150)
+			var finish := _snapshots()
+			stall_failure = _stall_failure(start, finish)
+			if not stall_failure.is_empty():
+				_abort("trial=%d " % trial + stall_failure)
+				return
+			stress.append(finish)
+			capture.clear_buffer()
+			await get_tree().create_timer(.04, true, false, true).timeout
 	movement.set_move("stomp", .8, .4, 1, 1)
 	await get_tree().create_timer(.5, true, false, true).timeout
 	var wet: Dictionary = movement.voices.stomp.mixer.snapshot()
@@ -77,7 +90,9 @@ func _ready() -> void:
 	var resumed := _snapshots()
 	for category: String in identities:
 		if movement.voices[category].get_instance_id() != int(identities[category]) or float(quiet[category].gain) > .01 or int(resumed[category].frames) <= int(quiet[category].frames):
-			_abort("AUDIO_MOVE_PERMANENT_CHANNEL " + category)
+			_abort("AUDIO_MOVE_PERMANENT_CHANNEL " + category + " " + JSON.stringify({
+				"same_owner": movement.voices[category].get_instance_id() == int(identities[category]),
+				"quiet": quiet[category], "resumed": resumed[category]}))
 			return
 	var graph: Dictionary = Content.balance.audio.moveGraphs.stomp
 	var plan := AudioMovePlan.compile(graph)
@@ -88,7 +103,7 @@ func _ready() -> void:
 		_abort("AUDIO_MOVE_SHARED_PHASE " + JSON.stringify(failures))
 		return
 	results = {"before_stall": before, "after_stall": after, "wet": wet, "quiet": quiet, "resumed": resumed,
-		"mean_energy": energy / frames.size(), "audibleAcceptanceRequired": true}
+		"mean_energy": energy / frames.size(), "stress": stress, "audibleAcceptanceRequired": true}
 	var file := FileAccess.open("res://tests/audio-move-native.json", FileAccess.WRITE)
 	if file == null:
 		_abort("AUDIO_MOVE_CAPTURE_OUTPUT")
@@ -118,6 +133,13 @@ func _snapshots() -> Dictionary:
 	for category: String in movement.voices:
 		result[category] = movement.voices[category].mixer.snapshot()
 	return result
+
+func _stall_failure(before: Dictionary, after: Dictionary) -> String:
+	for category: String in before:
+		if int(after[category].frames) - int(before[category].frames) < int(AudioServer.get_mix_rate() * .08) or int(after[category].output_skips) != 0:
+			return "AUDIO_MOVE_UI_STALL " + category + " " + JSON.stringify({
+				"before": before[category], "after": after[category], "failures": failures})
+	return ""
 
 func _cleanup() -> bool:
 	if is_instance_valid(movement):

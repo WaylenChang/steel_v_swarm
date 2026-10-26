@@ -25,6 +25,7 @@ func _init(metadata: Dictionary) -> void:
 
 func start(source: String, now: float) -> void:
 	active = true
+	accumulated = Vector2.ZERO
 	preference = source
 	note = ""
 	_use("motion" if source == "motion" else "orient", now)
@@ -83,7 +84,7 @@ func orientation(forward: Vector3, now: float) -> void:
 	if absf(change.x) > rules.GYRO_JUMP or absf(change.y) > rules.GYRO_JUMP:
 		return
 	_emit(change)
-	if preference == "auto" and raw.y >= rules.GYRO_YAW_PROOF and raw.x < rules.GYRO_YAW_DEAD:
+	if active and path == "orient" and preference == "auto" and raw.y >= rules.GYRO_YAW_PROOF and raw.x < rules.GYRO_YAW_DEAD:
 		note = "gyro_yaw_fallback"
 		_use("motion", now)
 

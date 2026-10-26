@@ -97,5 +97,5 @@ func _run() -> void:
 	_finish_campaign()
 
 func _finish_campaign() -> void:
-	print("CAMPAIGN_LIFECYCLE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_LIFECYCLE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

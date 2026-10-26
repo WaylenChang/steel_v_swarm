@@ -42,13 +42,10 @@ static func run(h: Node) -> void:
 
 static func _music(h: Node) -> void:
 	var data: Dictionary = Content.read_json("res://data/audio_music.json")
+	var resources := preload("res://scripts/audio_resource_snapshot.gd").new()
 	h._check(data.get("formatVersion") == 1 and data.get("music", []).size() == 2, "Both original procedural arrangements are captured separately from real streaming BGM")
 	for music: Dictionary in data.music:
-		var path := "res://assets/audio/native/%s_fallback.res" % music.mood
-		if not ResourceLoader.exists(path):
-			h._check(false, "Import original procedural music loop: " + path)
-			continue
-		var clip := load(path) as NativeAudioClip
+		var clip := resources.music(music.mood)
 		h._check(clip != null and clip.valid() and clip.channel_count == 0 and clip.centered != null, "Native procedural music retains the source centered routing")
 		if clip == null or clip.centered == null:
 			continue

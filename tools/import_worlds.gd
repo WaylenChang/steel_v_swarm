@@ -107,14 +107,12 @@ func _run() -> void:
 					push_error("Incomplete original marine shader program: " + file)
 					get_tree().quit(1)
 					return
-				var program := ShaderInclude.new()
-				program.code = code
-				var program_path := output + "/shaders/" + code.sha256_text() + ".gdshaderinc"
-				if ResourceSaver.save(program, program_path, ResourceSaver.FLAG_CHANGE_PATH) != OK:
-					push_error("Cannot save original native marine shader include: " + file)
+				var publication := await _publish_marine_program(code, output + "/shaders", get_tree())
+				if not publication.error.is_empty():
+					push_error(publication.error + ": " + file)
 					get_tree().quit(1)
 					return
-				marine_programs.append(program)
+				marine_programs.append(publication.program)
 		var scene_root := Node3D.new()
 		scene_root.name = "SourceWorld"
 		scene_root.set_meta("source_cel_data", cel_data)
@@ -526,6 +524,22 @@ func _run() -> void:
 			get_tree().quit(1)
 			return
 	get_tree().quit()
+
+static func _publish_marine_program(code: String, directory: String, tree: SceneTree) -> Dictionary:
+	var path := directory.path_join(code.sha256_text() + ".gdshaderinc")
+	if FileAccess.file_exists(path):
+		if FileAccess.get_sha256(path) != code.sha256_text():
+			return {"program": null, "error": "Corrupt original native marine shader include: " + path}
+	else:
+		var program := ShaderInclude.new()
+		program.code = code
+		var error := await ResourcePublisher.publish(program, path, tree)
+		if error != OK:
+			return {"program": null, "error": "Cannot publish original native marine shader include: " + error_string(error)}
+	var reloaded := ResourceLoader.load(path, "ShaderInclude", ResourceLoader.CACHE_MODE_IGNORE) as ShaderInclude
+	if reloaded == null or reloaded.code != code:
+		return {"program": null, "error": "Cannot reload original native marine shader include: " + path}
+	return {"program": reloaded, "error": ""}
 
 func _body(scene_root: Node3D, label: String, layer: int) -> StaticBody3D:
 	var body := StaticBody3D.new()

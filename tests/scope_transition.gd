@@ -4,7 +4,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/scope_transition.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("programs") is Array,
 		"Capture original browser fog transition programs")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_scope()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -13,7 +13,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Scope transition capture is current")
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Scope transition matches imported CSS")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_scope()
 		return
 	for program: Dictionary in capture.programs:
@@ -50,5 +50,5 @@ func _run() -> void:
 	_finish_scope()
 
 func _finish_scope() -> void:
-	print("SCOPE_TRANSITION assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("SCOPE_TRANSITION assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

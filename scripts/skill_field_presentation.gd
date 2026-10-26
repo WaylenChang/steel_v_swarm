@@ -3,8 +3,41 @@ extends Node3D
 
 var fog_nodes: Dictionary = {}
 var meshes: Dictionary = {}
+var retired := false
+var revision := 0
+
+func _active() -> bool:
+	return not retired and not is_queued_for_deletion()
+
+func _current(token: int) -> bool:
+	return _active() and token == revision
+
+func _release(root: Node3D) -> void:
+	if is_instance_valid(root):
+		root.visible = false
+		if is_instance_valid(root):
+			root.queue_free()
+
+func retire() -> void:
+	if retired:
+		return
+	retired = true
+	revision += 1
+	var roots := get_children()
+	fog_nodes.clear()
+	meshes.clear()
+	for root: Node3D in roots:
+		_release(root)
+	visible = false
+
+func _exit_tree() -> void:
+	retire()
 
 func sync_fogs(states: Array, side: String, now: float) -> void:
+	if not _active():
+		return
+	revision += 1
+	var token := revision
 	var seen := {}
 	for state: Dictionary in states:
 		var id := int(state.id)
@@ -14,25 +47,48 @@ func sync_fogs(states: Array, side: String, now: float) -> void:
 		var ally: bool = state.side == side
 		if not fog_nodes.has(id) or fog_nodes[id].get_meta("ally") != ally:
 			if fog_nodes.has(id):
-				fog_nodes[id].queue_free()
-			fog_nodes[id] = _fog(state.radius, ally)
-		var node: Node3D = fog_nodes[id]
-		var point: Vector2 = state.center
-		node.position = Vector3(point.x, 0.5, point.y)
-		node.rotation.y = maxf(0, now - float(state.start)) * 0.2
-		var base := 0.28 if ally else 0.85
-		var remaining := maxf(0, float(state.until) - now) / float(state.duration)
-		var material: StandardMaterial3D = node.get_child(0).material_override
-		material.albedo_color.a = base if remaining > 0.2 else base * remaining / 0.2
+				var old: Node3D = fog_nodes[id]
+				fog_nodes.erase(id)
+				_release(old)
+				if not _current(token):
+					return
+			var created := _build_fog(state.radius, ally)
+			_apply_state(created, state, now)
+			fog_nodes[id] = created
+			add_child(created)
+			if not _current(token):
+				return
+		else:
+			_apply_state(fog_nodes[id], state, now)
+			if not _current(token):
+				return
 	for id in fog_nodes.keys():
 		if not seen.has(id):
-			fog_nodes[id].queue_free()
+			var old: Node3D = fog_nodes[id]
 			fog_nodes.erase(id)
+			_release(old)
+			if not _current(token):
+				return
+
+func _apply_state(node: Node3D, state: Dictionary, now: float) -> void:
+	var point: Vector2 = state.center
+	node.position = Vector3(point.x, 0.5, point.y)
+	node.rotation.y = maxf(0, now - float(state.start)) * 0.2
+	var base := 0.28 if node.get_meta("ally") else 0.85
+	var remaining := maxf(0, float(state.until) - now) / float(state.duration)
+	var material: StandardMaterial3D = node.get_child(0).material_override
+	material.albedo_color.a = base if remaining > 0.2 else base * remaining / 0.2
 
 func _fog(radius: float, ally: bool) -> Node3D:
+	if not _active():
+		return null
+	var root := _build_fog(radius, ally)
+	add_child(root)
+	return root
+
+func _build_fog(radius: float, ally: bool) -> Node3D:
 	var root := Node3D.new()
 	root.set_meta("ally", ally)
-	add_child(root)
 	var color := Color.hex(0x7fa8d8ff if ally else 0x4a5568ff)
 	var opacity := 0.28 if ally else 0.85
 	_add_surface(root, _ring(0, radius, 24), color, opacity, 0)
@@ -55,24 +111,41 @@ func _add_surface(root: Node3D, mesh: ArrayMesh, color: Color, opacity: float, a
 	root.add_child(node)
 
 func _ring(inner: float, outer: float, segments: int) -> ArrayMesh:
-	var key := "%s/%s/%d" % [inner, outer, segments]
+	if not _active():
+		return null
+	var key := [inner, outer, segments]
 	if meshes.has(key):
 		return meshes[key]
 	var vertices := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var points := PackedVector3Array()
+	var coordinates := PackedVector2Array()
+	if inner <= 0:
+		points.append(Vector3.ZERO)
+		coordinates.append(Vector2(.5, .5))
+	var radius := inner if inner > 0 else outer
+	for row in range(2 if inner > 0 else 1):
+		for index in range(segments + 1):
+			var angle := float(index) / segments * TAU
+			var x := radius * cos(angle)
+			var y := radius * sin(angle)
+			points.append(Vector3(x, 0, -y))
+			coordinates.append(Vector2((x / outer + 1) / 2, (y / outer + 1) / 2))
+		radius += outer - inner
 	for index in range(segments):
-		var first := index * TAU / segments
-		var last := (index + 1) * TAU / segments
-		var a_inner := Vector3(cos(first) * inner, 0, -sin(first) * inner)
-		var a_outer := Vector3(cos(first) * outer, 0, -sin(first) * outer)
-		var b_inner := Vector3(cos(last) * inner, 0, -sin(last) * inner)
-		var b_outer := Vector3(cos(last) * outer, 0, -sin(last) * outer)
-		if inner <= 0:
-			vertices.append_array(PackedVector3Array([Vector3.ZERO, a_outer, b_outer]))
-		else:
-			vertices.append_array(PackedVector3Array([a_inner, a_outer, b_inner, a_outer, b_outer, b_inner]))
+		var indices: Array = [index + 1, index + 2, 0] if inner <= 0 else [index, index + segments + 1, index + 1,
+			index + segments + 1, index + segments + 2, index + 1]
+		for vertex: int in indices:
+			vertices.append(points[vertex])
+			uv.append(coordinates[vertex])
+	var normals := PackedVector3Array()
+	normals.resize(vertices.size())
+	normals.fill(Vector3.UP)
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uv
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	meshes[key] = mesh

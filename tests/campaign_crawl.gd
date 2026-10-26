@@ -21,7 +21,7 @@ func _run() -> void:
 		if not scales.has(program.deviceScaleFactor):
 			scales.append(program.deviceScaleFactor)
 	_check(scales == [1.0, 1.25, 1.5, 2.0], "Crawl source quantization covers desktop and high-density browser scales")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_crawl()
 		return
 	for program: Dictionary in capture.programs:
@@ -69,5 +69,5 @@ func _run() -> void:
 	_finish_crawl()
 
 func _finish_crawl() -> void:
-	print("CAMPAIGN_CRAWL assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_CRAWL assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

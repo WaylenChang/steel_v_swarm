@@ -11,7 +11,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Hold raster capture is current")
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Hold raster retains original source identity")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_render()
 		return
 	var output := "res://build/campaign_hold"
@@ -58,5 +58,5 @@ func _run() -> void:
 	_finish_render()
 
 func _finish_render() -> void:
-	print("CAMPAIGN_HOLD_RENDER assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_HOLD_RENDER assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

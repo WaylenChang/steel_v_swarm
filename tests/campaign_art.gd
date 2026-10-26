@@ -24,7 +24,7 @@ func _run() -> void:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Cinematic art retains original construction, scene selection and CSS identity")
 	_check(data.source == capture.source and data.rules == capture.rules, "Native cinematic art transition resource equals source capture")
 	_check(capture.rules.duration == Content.campaign.presentation.art.fade, "Native art duration retains imported source CSS value")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_art()
 		return
 	var output := "res://build/campaign_art"
@@ -108,5 +108,5 @@ func _pause_art(view: CampaignCinematic) -> void:
 			layer.tween.pause()
 
 func _finish_art() -> void:
-	print("CAMPAIGN_ART assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_ART assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

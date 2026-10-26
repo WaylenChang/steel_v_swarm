@@ -15,7 +15,7 @@ func _run() -> void:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Cinematic exit retains original CSS and finish method identity")
 	_check(data.source == capture.source and data.rules == capture.rules, "Dedicated cinematic transition resource retains source configuration")
 	_check(Content.campaign.presentation.skip.fade == capture.rules.exit.duration, "Imported cinematic exit duration equals original CSS and timeout")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_transition()
 		return
 	var view := LifecycleView.new()
@@ -125,5 +125,5 @@ func _add_rect(host: Node, rect: Array, colour: Variant) -> void:
 	host.add_child(panel)
 
 func _finish_transition() -> void:
-	print("CAMPAIGN_TRANSITION assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_TRANSITION assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

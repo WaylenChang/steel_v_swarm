@@ -179,8 +179,8 @@ func _run() -> void:
 	_finish_retirement()
 
 func _finish_retirement() -> void:
-	print("ROOM_RESOURCE_RETIREMENT assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("ROOM_RESOURCE_RETIREMENT assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)
 
 func _observe_prepare(loader: RoomWorldResources, path: String, completion: Dictionary) -> void:
 	completion.value = await loader.prepare({"path": path})

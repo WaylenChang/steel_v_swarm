@@ -24,6 +24,8 @@ func set_ambience(query: Dictionary) -> void:
 		_ride(definition, volume)
 
 func _ride(definition: Dictionary, volume: float) -> void:
+	if disposed:
+		return
 	var id: String = definition.id
 	var low: bool = low_power and id != rules.rules.ambienceBase.id
 	var timing: Dictionary = rules.rules.ambienceTiming
@@ -32,6 +34,8 @@ func _ride(definition: Dictionary, volume: float) -> void:
 			return
 		beds[id] = {"gain": float(timing.initialGain), "target": 0.0}
 		registered.emit(id, definition.url)
+		if disposed:
+			return
 	beds[id].target = 0.0 if low else clampf(volume, 0, 1)
 
 func advance(seconds: float) -> void:

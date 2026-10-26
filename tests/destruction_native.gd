@@ -4,18 +4,23 @@ const DestructionTests = preload("res://tests/destruction_suite.gd")
 const SourceHelper = preload("res://tests/status_suite.gd")
 
 func _run() -> void:
+	failure_report = FileAccess.open(FAILURE_REPORT, FileAccess.WRITE)
+	_check(failure_report != null, "Preserve every particle acceptance failure")
+	if failure_report == null:
+		_finish_capture()
+		return
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/destruction.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and
 		capture.get("fixtures") is Dictionary and capture.get("metadata") is Dictionary and capture.get("textures") is Dictionary,
 		"Capture original mechanical debris and comic state before native verification")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_capture()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
 	var source: Dictionary = capture.source
 	_check(source.get("inputs") is Dictionary and not source.inputs.is_empty() and
 		source.get("sourceInputs") is Dictionary and not source.sourceInputs.is_empty(), "Particle source/generator identities are present")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_capture()
 		return
 	for path: String in source.inputs:
@@ -25,7 +30,7 @@ func _run() -> void:
 		_check(provenance.get("inputs", {}).get(path) == source.sourceInputs[path], "Particle source matches the imported content: " + path)
 	for key: String in capture.metadata:
 		SourceHelper.compare(self, Content.balance.destruction.get(key), capture.metadata[key], "Original particle metadata: " + key)
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_capture()
 		return
 	for key: String in capture.textures:
@@ -100,8 +105,10 @@ func _run() -> void:
 	_finish_capture()
 
 func _finish_capture() -> void:
-	print("DESTRUCTION_NATIVE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	if failure_report != null:
+		failure_report.close()
+	print("DESTRUCTION_NATIVE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)
 
 func _write_witness(effects: CombatEffects, item: Dictionary, draws: int) -> void:
 	var debris: MechanicalDebris = effects.effects[-1].obj

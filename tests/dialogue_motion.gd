@@ -17,7 +17,7 @@ func _run() -> void:
 	var output := "res://build/dialogue_motion"
 	DirAccess.make_dir_recursive_absolute(output)
 	var report: Array = []
-	if failures.is_empty():
+	if failures == 0:
 		for program: Dictionary in capture.programs:
 			var viewport := SubViewport.new()
 			viewport.size = Vector2i(96, 80)
@@ -99,5 +99,5 @@ func _run() -> void:
 	if file != null:
 		file.store_string(JSON.stringify(report, "  "))
 		file.close()
-	print("DIALOGUE_MOTION assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DIALOGUE_MOTION assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

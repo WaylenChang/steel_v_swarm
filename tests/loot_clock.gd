@@ -8,7 +8,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/loot_clock.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("programs") is Array,
 		"Capture original loot and airdrop clock methods")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_clock()
 		return
 	var source: Dictionary = capture.source
@@ -18,7 +18,7 @@ func _run() -> void:
 		_check(text.sha256_text() == source.inputs[path], "Original clock generator is current")
 	for path: String in source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == source.sourceInputs[path], "Clock oracle matches imported source: " + path)
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_clock()
 		return
 	for program: Dictionary in capture.programs:
@@ -109,8 +109,8 @@ func _explicit_clock() -> void:
 	loot.free()
 
 func _finish_clock() -> void:
-	print("LOOT_CLOCK assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("LOOT_CLOCK assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)
 
 func _rotation(actual: Quaternion, source: Array, description: String) -> void:
 	var value := Vector4(actual.x, actual.y, actual.z, actual.w)

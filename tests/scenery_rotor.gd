@@ -4,7 +4,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/scenery_rotor.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("programs") is Array,
 		"Capture original edge rotor update methods")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_rotor()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -13,7 +13,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Rotor generator is current: " + path)
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Rotor source matches imported provenance: " + path)
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_rotor()
 		return
 	preload("res://tests/scenery_motion_suite.gd").run(self, capture.referencePrograms)
@@ -40,5 +40,5 @@ func _compare(pivot: Node3D, frame: Dictionary) -> void:
 			"Original rotor orientation retains fractional large angles and wind reversal")
 
 func _finish_rotor() -> void:
-	print("SCENERY_ROTOR assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("SCENERY_ROTOR assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

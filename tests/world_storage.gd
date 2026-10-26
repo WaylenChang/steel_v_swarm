@@ -3,12 +3,21 @@ extends Node
 const WorldMeshes = preload("res://tools/source_world_meshes.gd")
 const FIXTURES := "res://artifacts/agy/oracle-validation/world-source-storage/"
 
+class RejectionReader extends WorldMeshes:
+	var rejections: Array[String] = []
+	func _fail(message: String) -> void:
+		valid = false
+		rejections.append(message)
+
 var assertions := 0
 var failures: Array[String] = []
 
 func _ready() -> void:
 	for name: String in ["native-raw-case.json", "native-case.json"]:
 		_run_case(name)
+	_rejections()
+	_path_verification()
+	_gzip_boundaries()
 	print("WORLD_STORAGE assertions=", assertions, " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)
 
@@ -56,6 +65,147 @@ func _run_case(name: String) -> void:
 			_check_bits(stored[0], fixture, name + ": reloaded")
 	_check(DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) == OK,
 		name + ": temporary native resource is released and removed")
+
+func _rejections() -> void:
+	for version: Variant in [null, false, "2", -1, 0, 2.5, 3]:
+		var reader := RejectionReader.new({"worldSourceVersion": version, "meshes": [{"name": "legacy"}]})
+		_check(not reader.valid and reader.rejections == ["Unsupported source world mesh storage version"],
+			"Explicit unsupported versions cannot fall through to legacy mesh storage: " + str(version))
+	var legacy := RejectionReader.new({"meshes": [{"name": "legacy", "positions": [0.0, 0.25, -1.5]}]})
+	var rows := []
+	for mesh: Dictionary in legacy:
+		rows.append(mesh)
+	_check(legacy.valid and legacy.rejections.is_empty() and rows.size() == 1 and rows[0].name == "legacy",
+		"Unversioned original legacy storage remains readable")
+	var empty := RejectionReader.new({"worldSourceVersion": 2, "meshCount": 0, "meshChunks": []})
+	_check(empty.valid and empty.rejections.is_empty(), "A completed empty storage manifest remains valid")
+	var marker := RejectionReader.new({"meshes": []})
+	var result: Variant = marker._decode({"nested": {"$sourceArray": 0}})
+	_check(not marker.valid and marker.rejections == ["Unfinished source numeric transfer"] and result.nested == null,
+		"Unfinished numeric transfer markers are rejected even in nested metadata")
+	for sha: String in ["g".repeat(64), "A".repeat(64), "0".repeat(63), "-".repeat(64), "-" + "0".repeat(63), "+" + "0".repeat(63)]:
+		var invalid := RejectionReader.new({"meshes": []})
+		var bytes := invalid._read_bytes({"sha256": sha, "bytes": 8}, "/buffers/", ".f64")
+		_check(not invalid.valid and bytes.is_empty() and invalid.rejections == ["Invalid source world buffer declaration"],
+			"Invalid SHA declarations fail without invoking a native decoder or file read: " + sha)
+
+func _path_verification() -> void:
+	var root := "user://world-storage-integrity-%d" % Time.get_ticks_usec()
+	for folder: String in ["buffers", "mesh_chunks"]:
+		_check(DirAccess.make_dir_recursive_absolute(root + "/" + folder) == OK,
+			"Storage verification probe directory is created")
+	var original := "[{\"name\":\"verified\"}]".to_utf8_buffer().compress(FileAccess.COMPRESSION_GZIP)
+	var hash := HashingContext.new()
+	hash.start(HashingContext.HASH_SHA256)
+	hash.update(original)
+	var sha := hash.finish().hex_encode()
+	var corrupted := original.duplicate()
+	corrupted[0] = corrupted[0] ^ 1
+	var paths := [root + "/buffers/" + sha + ".f64", root + "/buffers/" + sha + ".f64.gz", root + "/mesh_chunks/" + sha + ".json.gz"]
+	var folders := ["/buffers/", "/buffers/", "/mesh_chunks/"]
+	var extensions := [".f64", ".f64.gz", ".json.gz"]
+	for source in range(paths.size()):
+		for destination in range(paths.size()):
+			if source == destination:
+				continue
+			for path: String in paths:
+				var output := FileAccess.open(path, FileAccess.WRITE)
+				_check(output != null, "Storage verification probe file opens")
+				if output == null:
+					return
+				output.store_buffer(corrupted if path == paths[destination] else original)
+				output.close()
+			var reader := RejectionReader.new({"meshes": []}, root)
+			var spec := {"sha256": sha, "bytes": original.size(), "path": paths[source]}
+			_check(reader._read_bytes(spec, folders[source], extensions[source]) == original and reader.valid,
+				"Original bytes verify before another storage path is read")
+			spec.path = paths[destination]
+			var rejected := reader._read_bytes(spec, folders[destination], extensions[destination])
+			_check(not reader.valid and rejected.is_empty() and reader.rejections == ["Source world buffer hash mismatch: " + paths[destination]],
+				"A verified digest cannot authenticate a different storage path: %d -> %d" % [source, destination])
+	var shared := RejectionReader.new({"meshes": []}, root)
+	for offset in range(paths.size()):
+		var output := FileAccess.open(paths[offset], FileAccess.WRITE)
+		_check(output != null, "Valid shared-digest probe file opens")
+		if output == null:
+			return
+		output.store_buffer(original)
+		output.close()
+		var spec := {"sha256": sha, "bytes": original.size(), "path": paths[offset]}
+		_check(shared._read_bytes(spec, folders[offset], extensions[offset]) == original and shared.valid,
+			"Identical bytes remain valid under each complete storage path")
+		_check(shared._read_bytes(spec, folders[offset], extensions[offset]) == original and shared.valid,
+			"Repeated reads of an authenticated storage path remain valid")
+	for path: String in paths:
+		_check(DirAccess.remove_absolute(path) == OK, "Storage verification probe file is released")
+	for suffix: String in ["/buffers", "/mesh_chunks", ""]:
+		_check(DirAccess.remove_absolute(root + suffix) == OK, "Storage verification probe directory is released")
+
+func _gzip_boundaries() -> void:
+	var root := "user://world-storage-gzip-%d" % Time.get_ticks_usec()
+	for folder: String in ["buffers", "mesh_chunks"]:
+		_check(DirAccess.make_dir_recursive_absolute(root + "/" + folder) == OK,
+			"GZIP boundary probe directory is created")
+	var plain := PackedFloat64Array([1.25, -2.5]).to_byte_array()
+	var mesh := "[{\"name\":\"complete\"}]".to_utf8_buffer()
+	var expanded := PackedByteArray()
+	expanded.resize(1024 * 1024)
+	var overflow := RejectionReader.new({"meshes": []}, root)
+	var excessive := overflow._decompress_gzip(expanded.compress(FileAccess.COMPRESSION_GZIP), 16)
+	_check(not overflow.valid and excessive.is_empty() and overflow.rejections == ["Source world GZIP extent exceeded"],
+		"High-ratio GZIP stops when bounded output exceeds the declared extent")
+	var complete := RejectionReader.new({"meshes": []}, root)
+	_check(complete._decompress_gzip(expanded.compress(FileAccess.COMPRESSION_GZIP), expanded.size()) == expanded and complete.valid,
+		"Valid high-ratio GZIP drains multiple bounded output windows")
+	var random := RandomNumberGenerator.new()
+	random.seed = 730241
+	var numbers := PackedFloat64Array()
+	for offset in range(32768):
+		numbers.append(random.randf())
+	var wide := numbers.to_byte_array()
+	var packed := wide.compress(FileAccess.COMPRESSION_GZIP)
+	_check(packed.size() > 65536, "Wide GZIP probe spans multiple compressed input windows")
+	var wide_reader := RejectionReader.new({"meshes": []}, root)
+	_check(wide_reader._decompress_gzip(packed, wide.size()) == wide and wide_reader.valid,
+		"Bounded input/output windows preserve every original numeric bit")
+	var wide_tail := RejectionReader.new({"meshes": []}, root)
+	_check(wide_tail._decompress_gzip(packed + PackedByteArray([1]), wide.size()).is_empty() and not wide_tail.valid and wide_tail.rejections == ["Trailing source world GZIP data"],
+		"Trailing bytes remain rejected after multiple compressed input windows")
+	for numeric: bool in [false, true]:
+		var original := plain if numeric else mesh
+		var compressed := original.compress(FileAccess.COMPRESSION_GZIP)
+		for tail: PackedByteArray in [PackedByteArray(), compressed, PackedByteArray([1, 2, 3])]:
+			var stored := compressed + tail
+			var hash := HashingContext.new()
+			hash.start(HashingContext.HASH_SHA256)
+			hash.update(stored)
+			var sha := hash.finish().hex_encode()
+			var path := root + ("/buffers/" if numeric else "/mesh_chunks/") + sha + (".f64.gz" if numeric else ".json.gz")
+			var output := FileAccess.open(path, FileAccess.WRITE)
+			_check(output != null, "GZIP boundary probe file opens")
+			if output == null:
+				return
+			output.store_buffer(stored)
+			output.close()
+			var spec := {"sha256": sha, "bytes": stored.size(), "path": path}
+			var reader := RejectionReader.new({"meshes": []}, root)
+			var decoded: Variant
+			if numeric:
+				spec.merge({"encoding": "float64le-gzip", "shape": [2]})
+				decoded = reader._decode({"$sourceNumericArray": spec})
+			else:
+				spec.merge({"plainBytes": original.size(), "count": 1})
+				decoded = reader._read_chunk(spec)
+			if tail.is_empty():
+				_check(reader.valid and reader.rejections.is_empty() and decoded == ([1.25, -2.5] if numeric else [{"name": "complete"}]),
+					"A complete single-member GZIP retains the original numeric/chunk content")
+			else:
+				_check(not reader.valid and reader.rejections == ["Trailing source world GZIP data"] and (decoded == null if numeric else decoded.is_empty()),
+					"Numeric/chunk GZIP rejects a second member or unrelated trailing bytes")
+			_check(FileAccess.get_file_as_bytes(path) == stored, "Rejected GZIP input remains unchanged")
+			_check(DirAccess.remove_absolute(path) == OK, "GZIP boundary probe file is released")
+	for suffix: String in ["/buffers", "/mesh_chunks", ""]:
+		_check(DirAccess.remove_absolute(root + suffix) == OK, "GZIP boundary probe directory is released")
 
 func _check_bits(mesh: Dictionary, fixture: Dictionary, label: String) -> void:
 	for entry: Dictionary in fixture.checks:

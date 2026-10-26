@@ -2,6 +2,8 @@ extends Node
 
 const ResourcePublisher = preload("res://tools/source_resource_publisher.gd")
 const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
+const ResourceIdentity = preload("res://scripts/audio_resource_identity.gd")
+var catalogue_path := AudioSampleLibrary.CATALOGUE_PATH
 
 func _ready() -> void:
 	_import.call_deferred()
@@ -35,7 +37,7 @@ func _import() -> void:
 				return
 			var hash := ClipIdentity.digest(clip)
 			var path := "res://assets/audio/native/%s_%s.res" % [id, hash]
-			if ResourceLoader.exists(path):
+			if FileAccess.file_exists(path):
 				var existing := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as NativeAudioClip
 				if ClipIdentity.digest(existing) != hash:
 					_fail("Existing content-addressed source clip is invalid: " + path)
@@ -49,14 +51,28 @@ func _import() -> void:
 		catalogue.sample_paths[id] = paths
 		catalogue.sample_hashes[id] = hashes
 	if OS.get_cmdline_user_args().has("--samples-only"):
+		if not _retain_resources(catalogue):
+			return
 		await _publish_catalogue(catalogue, count)
 		return
 	var synth_data: Dictionary = Content.read_json("res://data/audio_synth.json")
 	if synth_data.get("formatVersion") != 1 or not synth_data.get("sounds") is Array or synth_data.get("source") != data.source:
 		_fail("Regenerate original independent synthesis stems")
 		return
+	var captured_ids := []
+	for sound: Variant in synth_data.sounds:
+		if not sound is Dictionary or not sound.get("id") is String:
+			_fail("Invalid original synthesis identifier")
+			return
+		captured_ids.append(sound.id)
+	var expected_ids: Array = Content.balance.audio.synthesisIds.duplicate()
+	captured_ids.sort()
+	expected_ids.sort()
+	if captured_ids != expected_ids:
+		_fail("Incomplete original synthesis resource set")
+		return
 	for sound: Dictionary in synth_data.sounds:
-		if not str(sound.get("id", "")).is_valid_identifier():
+		if not str(sound.get("id", "")).is_valid_identifier() or catalogue.synthesis_ids.has(str(sound.id)):
 			_fail("Invalid original synthesis identifier")
 			return
 		var synthesis := NativeAudioSynthesis.new()
@@ -80,10 +96,9 @@ func _import() -> void:
 					_fail("Unsupported original post-envelope synthesis effect: " + str(sound.id))
 					return
 			synthesis.stems.append(stem)
-		var path := "res://assets/audio/native/%s_synth.res" % sound.id
-		if not synthesis.valid() or await ResourcePublisher.publish(synthesis, path, get_tree()) != OK:
-			_fail("Cannot save original synthesis stems: " + path)
+		if not await _publish_resource(catalogue, "synthesis_" + str(sound.id), synthesis):
 			return
+		catalogue.synthesis_ids.append(str(sound.id))
 	var music_data: Dictionary = Content.read_json("res://data/audio_music.json")
 	if music_data.get("formatVersion") != 1 or not music_data.get("music") is Array or music_data.get("source") != data.source:
 		_fail("Regenerate original procedural music arrangements")
@@ -117,22 +132,63 @@ func _import() -> void:
 		if clip.centered.loop_begin <= 0 or clip.centered.loop_end != int(music.frames) or clip.centered.loop_end != clip.centered.loop_begin * 2 or not clip.valid():
 			_fail("Invalid original procedural music loop: " + str(music.mood))
 			return
-		var path := "res://assets/audio/native/%s_fallback.res" % music.mood
-		if await ResourcePublisher.publish(clip, path, get_tree()) != OK:
-			_fail("Cannot save original procedural music loop: " + path)
+		if not await _publish_resource(catalogue, "music_" + str(music.mood), clip):
 			return
-	if not await _movement(data.source):
+	if not await _movement(data.source, catalogue):
 		return
+	catalogue.complete_resources = true
 	await _publish_catalogue(catalogue, count)
 
+func _retain_resources(catalogue: NativeAudioCatalogue) -> bool:
+	if not FileAccess.file_exists(catalogue_path):
+		return true
+	var previous := ResourceLoader.load(catalogue_path, "", ResourceLoader.CACHE_MODE_IGNORE) as NativeAudioCatalogue
+	if previous == null:
+		_fail("Cannot read the previous native audio catalogue")
+		return false
+	if not previous.complete_resources:
+		return true
+	if not previous.valid() or previous.source != catalogue.source:
+		_fail("Samples-only import requires the same complete source catalogue; run the full audio importer")
+		return false
+	for key: String in previous.resource_paths:
+		var path: String = previous.resource_paths[key]
+		var stored := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE_DEEP) if ResourceLoader.exists(path) else null
+		if stored == null or ResourceIdentity.digest(stored) != previous.resource_hashes[key]:
+			_fail("Missing or invalid retained native audio resource: " + path)
+			return false
+	catalogue.complete_resources = true
+	catalogue.synthesis_ids = previous.synthesis_ids.duplicate()
+	catalogue.resource_paths = previous.resource_paths.duplicate()
+	catalogue.resource_hashes = previous.resource_hashes.duplicate()
+	return true
+
+func _publish_resource(catalogue: NativeAudioCatalogue, key: String, resource: Resource) -> bool:
+	var hash := ResourceIdentity.digest(resource)
+	if not key.is_valid_identifier() or hash.is_empty() or catalogue.resource_paths.has(key):
+		_fail("Invalid/duplicate original audio resource: " + key)
+		return false
+	var path := "res://assets/audio/native/%s_%s.res" % [key, hash]
+	if not FileAccess.file_exists(path):
+		if await ResourcePublisher.publish(resource, path, get_tree()) != OK:
+			_fail("Cannot publish original audio resource: " + path)
+			return false
+	var stored := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE_DEEP)
+	if stored == null or ResourceIdentity.digest(stored) != hash:
+		_fail("Existing content-addressed original audio resource is invalid: " + path)
+		return false
+	catalogue.resource_paths[key] = path
+	catalogue.resource_hashes[key] = hash
+	return true
+
 func _publish_catalogue(catalogue: NativeAudioCatalogue, count: int) -> void:
-	if not catalogue.valid() or await ResourcePublisher.publish(catalogue, AudioSampleLibrary.CATALOGUE_PATH, get_tree()) != OK:
+	if not catalogue.valid() or await ResourcePublisher.publish(catalogue, catalogue_path, get_tree()) != OK:
 		_fail("Cannot save native source audio catalogue")
 		return
 	print("Imported original audio takes: ", count, " synthesisProbesRemainReferenceOnly=true")
 	get_tree().quit()
 
-func _movement(provenance: Dictionary) -> bool:
+func _movement(provenance: Dictionary, catalogue: NativeAudioCatalogue) -> bool:
 	var data: Dictionary = Content.read_json("res://data/audio_move.json")
 	if data.get("formatVersion") != 1 or data.get("source") != provenance or not data.get("noise") is Dictionary or not data.get("oscillators") is Array:
 		_fail("Regenerate original movement noise and oscillator periods")
@@ -163,11 +219,26 @@ func _movement(provenance: Dictionary) -> bool:
 			return false
 		if not bank.oscillators.has(captured.category):
 			bank.oscillators[captured.category] = {}
-		bank.oscillators[captured.category][str(int(captured.node))] = values.to_float32_array()
-	if not bank.valid() or await ResourcePublisher.publish(bank, NativeAudioMoveBank.PATH, get_tree()) != OK:
-		_fail("Cannot save original native movement audio bank")
+		var node := str(int(captured.node))
+		if bank.oscillators[captured.category].has(node):
+			_fail("Duplicate original movement oscillator period")
+			return false
+		bank.oscillators[captured.category][node] = values.to_float32_array()
+	if bank.oscillators.size() != Content.balance.audio.moveGraphs.size():
+		_fail("Unexpected original movement oscillator category")
 		return false
-	return true
+	for category: String in Content.balance.audio.moveGraphs:
+		var expected := []
+		for node: Dictionary in Content.balance.audio.moveGraphs[category].nodes:
+			if node.kind == "createOscillator":
+				expected.append(str(int(node.id)))
+		var actual: Array = bank.oscillators.get(category, {}).keys()
+		expected.sort()
+		actual.sort()
+		if actual != expected:
+			_fail("Incomplete original movement oscillator periods: " + category)
+			return false
+	return await _publish_resource(catalogue, "movement", bank)
 
 func _clip(id: String, sample: Dictionary) -> NativeAudioClip:
 	if not sample.get("channels") is Array or sample.channels.size() not in [1, 2] or float(sample.get("sampleRate", 0)) <= 0 or float(sample.get("frames", 0)) <= 0:

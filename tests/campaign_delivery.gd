@@ -23,7 +23,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Cinematic delivery capture is current")
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Cinematic delivery retains original controller and camera functions")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_delivery()
 		return
 	for program: Dictionary in capture.programs:
@@ -81,5 +81,5 @@ func _run() -> void:
 	_finish_delivery()
 
 func _finish_delivery() -> void:
-	print("CAMPAIGN_DELIVERY assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_DELIVERY assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

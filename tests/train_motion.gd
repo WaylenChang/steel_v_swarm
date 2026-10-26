@@ -4,7 +4,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/train_motion.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("trainPrograms") is Array,
 		"Capture original train driver and seasonal paths")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_train()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -13,7 +13,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Train source capture input is current: " + path)
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Train oracle matches imported source: " + path)
-	if failures.is_empty():
+	if failures == 0:
 		preload("res://tests/train_suite.gd").run(self, capture)
 		for program: Dictionary in capture.trainPrograms:
 			_reload(program)
@@ -62,5 +62,5 @@ func _reload(program: Dictionary) -> void:
 	_check(DirAccess.remove_absolute(output) == OK, "Release temporary train resource after replay")
 
 func _finish_train() -> void:
-	print("TRAIN_MOTION assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("TRAIN_MOTION assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

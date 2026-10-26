@@ -4,7 +4,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/campaign_input.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("programs") is Array,
 		"Capture original cinematic input handlers")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_input()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -13,7 +13,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Cinematic input capture is current")
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Cinematic input oracle matches imported source")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_input()
 		return
 	for program: Dictionary in capture.programs:
@@ -107,5 +107,5 @@ func _replacement_input() -> void:
 	view.free()
 
 func _finish_input() -> void:
-	print("CAMPAIGN_INPUT assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_INPUT assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

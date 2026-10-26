@@ -38,7 +38,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Cinematic start capture is current")
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Cinematic start retains original play and camera methods")
-	if failures.is_empty():
+	if failures == 0:
 		for start in [0, 1, 99]:
 			var native := NativeLayoutView.new()
 			add_child(native)
@@ -68,8 +68,8 @@ func _run() -> void:
 			_check_state(view, program.jump, "Source deferred chapter jump")
 			view.dispose()
 			view.free()
-	print("CAMPAIGN_START assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("CAMPAIGN_START assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)
 
 func _check_state(view: CampaignCinematic, expected: Dictionary, label: String) -> void:
 	_check(view.active == expected.active, label + " preserves requested chapter after focus reevaluation")

@@ -19,7 +19,8 @@ static func pose(size: Dictionary, now: float, hit_at: float = -1e9) -> Dictiona
 	var radius: float = maxf(1.5, float(size.radius) * 1.5)
 	var diameter: float = maxf(3.0, maxf(size.height, size.radius * 2) * 1.15)
 	var pulse := 0.5 + 0.5 * sin(now * 6)
-	var flash := maxf(0, 1 - (now - hit_at) / 0.2) if hit_at != 0 else 0.0
+	var flash_ms := hit_at * 1000 if hit_at != 0 else -1e9
+	var flash := maxf(0, 1 - (now * 1000 - flash_ms) / 200)
 	return {"radius": radius, "centre": size.top - size.height * 0.5,
 		"halo_size": diameter * (0.92 + pulse * 0.16 + flash * 0.55),
 		"halo_opacity": minf(1, 0.3 + pulse * 0.35 + flash * 0.6),
@@ -116,5 +117,5 @@ func advance(now: float) -> void:
 	halo_material.albedo_color = color
 	color.a = state.ring_opacity
 	ring_material.albedo_color = color
-	ring.rotation.y = state.ring_angle
+	ring.quaternion = SourceQuaternion.axis_angle(Vector3.UP, float(state.ring_angle))
 	ring.scale = Vector3.ONE * state.radius * state.ring_scale

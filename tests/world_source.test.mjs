@@ -1,13 +1,15 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,mkdtemp,readFile,readdir,writeFile} from 'node:fs/promises';
-import {join,relative} from 'node:path';
+import {mkdir,mkdtemp,readFile,readdir,writeFile,rm,stat} from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {dirname,join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {gunzipSync} from 'node:zlib';
+import {gzipSync,gunzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {WorldSourceWriter} from '../tools/world_source_writer.mjs';
 import {writeFixtureJson} from '../tools/fixture_json.mjs';
-import {readWorldHeader,readLegacyWorldMeshes} from '../tools/world_source.mjs';
+import {readWorldHeader,readLegacyWorldMeshes,verifyWorldStorage} from '../tools/world_source.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
 const artifacts=join(root,'artifacts/agy/oracle-validation/world-source-storage');
@@ -50,6 +52,7 @@ for(const compressed of [false,true])test(`source mesh chunks retain every numer
   for(const mesh of meshes)await writer.append(mesh);
   const manifest=await writer.finish();
   assert.equal(manifest.meshCount,meshes.length);
+  assert.deepEqual(await verifyWorldStorage(manifest,directory,resourceRoot),{meshes:3,chunks:1,buffers:2});
   const decoded=[];
   const decode=async value=>{
     if(value===null||typeof value!=='object')return value;
@@ -232,4 +235,171 @@ test('a failed exclusive gzip open never makes the existing file disposal-owned'
   await writer.dispose();
   assert.deepEqual(await readFile(foreign),sentinel);
   assert.deepEqual(await readdir(join(directory,'buffers')),[foreign.split(/[\\/]/).at(-1)]);
+});
+
+test('existing mesh chunks are verified and reused without rewriting their publication',async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'chunk-reuse-'));
+  const capture=async()=>{
+    const writer=new WorldSourceWriter(directory,'res://fixture');
+    try {await writer.append({name:'retained',positions:[1,2,3]});return await writer.finish();}
+    finally {await writer.dispose();}
+  };
+  const first=await capture();
+  const folder=join(directory,'mesh_chunks'),names=await readdir(folder);
+  const path=join(folder,names[0]),original=await readFile(path);
+  const before=await stat(path);
+  assert.deepEqual(await capture(),first);
+  const after=await stat(path);
+  assert.equal(after.ino,before.ino);
+  assert.equal(after.mtimeMs,before.mtimeMs);
+  const corrupt=Buffer.from(original);
+  corrupt[Math.floor(corrupt.length/2)]^=1;
+  await writeFile(path,corrupt);
+  await assert.rejects(capture(),/Corrupt source mesh chunk hash/);
+  assert.deepEqual(await readFile(path),corrupt);
+  await writeFile(path,original.subarray(1));
+  await assert.rejects(capture(),/Corrupt source mesh chunk length/);
+  assert.deepEqual(await readFile(path),original.subarray(1));
+  assert.deepEqual(await readdir(folder),names);
+  await writeFile(path,original);
+  assert.deepEqual(await capture(),first);
+});
+
+for(const published of [false,true])test(`legacy pack failure releases its temporary sidecar and retains published content (prior=${published})`,async()=>{
+  const worlds=join(root,'data/worlds');
+  await mkdir(worlds,{recursive:true});
+  const directory=await mkdtemp(join(worlds,'pack-failure-'));
+  try {
+    const path=join(directory,'interrupted.json');
+    // The first transfer opens/writes a sidecar; the next transfer fails validation.
+    const positions=Array.from({length:65537},(_,index)=>index===65536?null:index/7);
+    const meshes=published?[{positions:Array.from({length:4097},(_,index)=>index/11)},{positions}]:[{positions}];
+    const original=JSON.stringify({source:{identity:'retained'},meshes});
+    await writeFile(path,original);
+    await assert.rejects(promisify(execFile)(process.execPath,[join(root,'tools/pack_world_source.mjs'),path],
+      {cwd:root,timeout:10000}),error=>{
+      assert.match(error.stderr,/Unsupported nonnumeric source mesh array/);
+      return true;
+    });
+    assert.equal(await readFile(path,'utf8'),original);
+    const buffers=await readdir(join(directory,'buffers'));
+    assert.equal(buffers.length,published?1:0);
+    if(published) {
+      const bytes=await readFile(join(directory,'buffers',buffers[0]));
+      assert.equal(buffers[0],digest(bytes)+'.f64.gz');
+      assert.deepEqual(gunzipSync(bytes),Buffer.from(new Float64Array(meshes[0].positions).buffer));
+    }
+    assert.deepEqual(await readdir(join(directory,'mesh_chunks')),[]);
+  } finally {
+    assert.equal(dirname(directory),worlds);
+    await rm(directory,{recursive:true,force:true});
+  }
+});
+
+for(const compressed of [false,true])test(`completed bundle verification rejects missing, corrupt and inconsistent dependencies (gzip=${compressed})`,async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'verify-'));
+  const writer=new WorldSourceWriter(directory,'res://fixture',compressed);
+  await writer.begin(0,{name:'ground',positions:{$sourceArray:0},nested:{clone:{$sourceArray:0}}},[128]);
+  await writer.part(0,0,Array.from({length:128},(_,index)=>index/7));
+  await writer.end(0);
+  const manifest=await writer.finish();
+  await writer.dispose();
+  const verify=world=>verifyWorldStorage(world,directory,'res://fixture');
+  assert.deepEqual(await verify(manifest),{meshes:1,chunks:1,buffers:1});
+  const chunk=manifest.meshChunks[0],chunkPath=join(directory,'mesh_chunks',chunk.path.split('/').at(-1));
+  const packed=await readFile(chunkPath),rows=JSON.parse(gunzipSync(packed));
+  const spec=rows[0].positions.$sourceNumericArray;
+  assert.equal(spec.encoding,compressed?'float64le-gzip':'float64le');
+  const path=join(directory,'buffers',spec.path.split('/').at(-1)),original=await readFile(path);
+  await rm(path);
+  await assert.rejects(verify(manifest),{code:'ENOENT'});
+  const corrupt=Buffer.from(original);corrupt[0]^=1;
+  await writeFile(path,corrupt);
+  await assert.rejects(verify(manifest),/buffer hash mismatch/);
+  await writeFile(path,original.subarray(1));
+  await assert.rejects(verify(manifest),/buffer length mismatch/);
+  await writeFile(path,original);
+  const changedRows=async change=>{
+    const changed=structuredClone(rows);
+    change(changed);
+    const plain=Buffer.from(JSON.stringify(changed)),bytes=gzipSync(plain),sha256=digest(bytes);
+    await writeFile(join(directory,'mesh_chunks',sha256+'.json.gz'),bytes);
+    return {...manifest,meshChunks:[{...chunk,path:'res://fixture/mesh_chunks/'+sha256+'.json.gz',
+      sha256,bytes:bytes.length,plainBytes:plain.length}]};
+  };
+  for(const [change,error]of [
+    [value=>{value[0].positions.$sourceNumericArray.shape=[];},/array declaration/],
+    [value=>{value[0].positions.$sourceNumericArray.shape=[0];},/array extent/],
+    [value=>{value[0].positions.$sourceNumericArray.shape=[268435456];},/array extent/],
+    [value=>{value[0].positions.$sourceNumericArray.path='res://fixture/buffers/../foreign.f64';},/buffer path/],
+    [value=>{value[0].positions.$sourceNumericArray.sha256='G'.repeat(64);},/buffer declaration/],
+    [value=>{value[0].positions.extra=true;},/array declaration/],
+    [value=>{value[0].positions={$sourceArray:0};},/Unfinished source numeric transfer/],
+    [value=>{value[0].positions.$sourceNumericArray.shape=[129];},compressed?/decompression length mismatch/:/storage mismatch/],
+    [value=>{value[0].positions.$sourceNumericArray.shape=[127];},compressed?/decompression extent exceeded/:/storage mismatch/],
+    [value=>{value[0].nested.clone.$sourceNumericArray.shape=[129];},compressed?/Conflicting source numeric array extent/:/storage mismatch/],
+    [value=>{value[0].nested.clone.$sourceNumericArray.bytes++;},compressed?/Conflicting source world buffer extent/:/storage mismatch/],
+    [value=>{value[0]=null;},/Invalid source world mesh chunk/],
+  ])await assert.rejects(verify(await changedRows(change)),error);
+  if(compressed) {
+    const invalid=Buffer.from('Not a GZIP stream'),sha256=digest(invalid);
+    await writeFile(join(directory,'buffers',sha256+'.f64.gz'),invalid);
+    const invalidStream=await changedRows(value=>Object.assign(value[0].positions.$sourceNumericArray,
+      {sha256,bytes:invalid.length,path:'res://fixture/buffers/'+sha256+'.f64.gz'}));
+    await assert.rejects(verify(invalidStream),{code:'Z_DATA_ERROR'});
+  }
+  await assert.rejects(verify({...manifest,worldSourceVersion:3}),/Unsupported source world mesh manifest/);
+  await assert.rejects(verify({...manifest,meshCount:2}),/Incomplete source world mesh manifest/);
+  await assert.rejects(verify({...manifest,meshChunks:[{...chunk,start:1}]}),/chunk order/);
+  await assert.rejects(verify({...manifest,meshChunks:[{...chunk,plainBytes:chunk.plainBytes-1}]}),/decompression extent exceeded/);
+  await assert.rejects(verify({...manifest,meshChunks:[{...chunk,plainBytes:chunk.plainBytes+1}]}),/decompression length mismatch/);
+  await rm(chunkPath);
+  await assert.rejects(verify(manifest),{code:'ENOENT'});
+  await writeFile(chunkPath,Buffer.from(packed).fill(0));
+  await assert.rejects(verify(manifest),/buffer hash mismatch/);
+  await writeFile(chunkPath,packed);
+  assert.deepEqual(await verify(manifest),{meshes:1,chunks:1,buffers:1});
+  assert.deepEqual(await readFile(path),original);
+  assert.deepEqual(await readFile(chunkPath),packed);
+  assert.deepEqual(await verify({worldSourceVersion:2,meshCount:0,meshChunks:[]}),{meshes:0,chunks:0,buffers:0});
+});
+
+test('source bundle verifier rejects invalid selections before reading captures',async()=>{
+  for(const args of [[],['../berlin_1_spring'],['berlin_1_spring','extra'],['nonexistent_1_spring']]) {
+    await assert.rejects(promisify(execFile)(process.execPath,[join(root,'tools/verify_world_source.mjs'),...args],
+      {cwd:root,timeout:10000}),error=>{
+      assert.match(error.stderr,/Select exactly one original source world bundle|Unknown or conflicting original world bundle/);
+      assert.doesNotMatch(error.stderr,/ENOENT/);
+      return true;
+    });
+  }
+});
+
+test('identical numeric and mesh-chunk bytes are published under both storage paths',async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'path-cache-'));
+  let mesh,packed,numbers;
+  for(let length=1;length<128;length++) {
+    const candidate={name:'x'.repeat(length),index:length},bytes=gzipSync(Buffer.from(JSON.stringify([candidate])));
+    if(bytes.length%8)continue;
+    const values=Array.from({length:bytes.length/8},(_,index)=>bytes.readDoubleLE(index*8));
+    if(values.some(value=>!Number.isFinite(value)))continue;
+    mesh=candidate;packed=bytes;numbers=values;break;
+  }
+  assert.ok(mesh,'A finite float64 array can retain the same bytes as a valid compressed chunk');
+  const writer=new WorldSourceWriter(directory,'res://fixture',false);
+  try {
+    await writer.begin(0,{payload:{$sourceArray:0}},[numbers.length]);
+    await writer.part(0,0,numbers);
+    await writer.end(0);
+    await writer.finish();
+    await writer.append(mesh);
+    const manifest=await writer.finish(),sha256=digest(packed);
+    assert.equal(manifest.meshChunks[1].sha256,sha256);
+    assert.deepEqual(await readFile(join(directory,'buffers',sha256+'.f64')),packed);
+    assert.deepEqual(await readFile(join(directory,'mesh_chunks',sha256+'.json.gz')),packed);
+    assert.deepEqual(await verifyWorldStorage(manifest,directory,'res://fixture'),{meshes:2,chunks:2,buffers:1});
+  } finally {await writer.dispose();}
 });

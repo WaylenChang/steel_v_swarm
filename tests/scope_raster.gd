@@ -7,7 +7,7 @@ func _run() -> void:
 	_check(DisplayServer.get_name() != "headless", "Scope raster qualification requires a rendered session")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("cases") is Array,
 		"Capture original scope CSS and HUD callbacks before raster qualification")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_scope_raster()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -16,7 +16,7 @@ func _run() -> void:
 		_check(text.sha256_text() == capture.source.inputs[path], "Scope raster generator is current: " + path)
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Scope raster matches imported source: " + path)
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_scope_raster()
 		return
 	var output := "res://build/scope_raster"
@@ -78,5 +78,5 @@ func _opaque_bytes(actual: Image, expected: Image) -> Dictionary:
 	return preload("res://tests/opaque_canvas_witness.gd").compare(actual, expected)
 
 func _finish_scope_raster() -> void:
-	print("SCOPE_RASTER assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("SCOPE_RASTER assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

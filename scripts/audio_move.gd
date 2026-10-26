@@ -12,6 +12,7 @@ var thread := Thread.new()
 var context_origin := 0.0
 var configured := false
 var worker_ready := false
+var resources := preload("res://scripts/audio_resource_snapshot.gd").new()
 
 func configure(metadata: Dictionary, routing: AudioBuses, low_power: bool) -> Error:
 	if configured or state.disposed or not is_inside_tree() or is_queued_for_deletion():
@@ -22,6 +23,7 @@ func configure(metadata: Dictionary, routing: AudioBuses, low_power: bool) -> Er
 		return ERR_INVALID_DATA
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	buses = routing
+	buses.retiring.connect(_retire, CONNECT_ONE_SHOT)
 	state.configure(metadata)
 	state.low_power = low_power
 	state.refresh_clock = _advance
@@ -97,21 +99,28 @@ func _register(category: String) -> void:
 	if not _active():
 		return
 	if bank == null:
-		bank = load(NativeAudioMoveBank.PATH) as NativeAudioMoveBank if ResourceLoader.exists(NativeAudioMoveBank.PATH) else null
+		bank = resources.movement()
+	if not _active():
+		return
 	if bank == null or not bank.valid():
 		push_error("Missing original movement audio bank; regenerate and import source audio")
 		failed.emit(category, "load_bank", ERR_UNAVAILABLE)
 		return
 	_advance()
 	var voice := AudioMoveVoice.new()
+	voices[category] = voice
 	add_child(voice)
+	if not _active():
+		voice.retire()
+		return
 	var error := voice.configure(category, state.metadata, bank, buses, state.voices[category].values, context_origin)
 	if error != OK:
+		voices.erase(category)
 		voice.free()
-		failed.emit(category, "configure", error)
+		if _active():
+			failed.emit(category, "configure", error)
 		return
 	voice.failed.connect(func(operation: String, failure: Error) -> void: failed.emit(category, operation, failure))
-	voices[category] = voice
 
 func _target(category: String, key: String, target: float, tau: float, time: float) -> void:
 	if not _active():
@@ -130,9 +139,18 @@ func _active() -> bool:
 func _process(_delta: float) -> void:
 	_advance()
 
-func _exit_tree() -> void:
+func _retire() -> void:
+	if state.disposed:
+		return
 	configured = false
 	state.dispose()
+	if is_instance_valid(buses) and buses.retiring.is_connected(_retire):
+		buses.retiring.disconnect(_retire)
 	worker.stop()
 	if thread.is_started():
 		thread.wait_to_finish()
+	for voice: AudioMoveVoice in voices.values():
+		voice.retire()
+
+func _exit_tree() -> void:
+	_retire()

@@ -11,21 +11,107 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   authored campaign seasons. Enumerate current requirements and existing outputs
   from the tools; road-only resources cannot satisfy seasonal availability.
   Missing captures must never select an invented map or fallback season.
+  Use `node tools/world_publication_inventory.mjs --summary` to compare exact
+  seasonal bundle names against the imported catalog. Detailed JSON includes
+  per-bundle source identity, LFS/malformed/missing states and native binary
+  presence; legacy names remain unselected. This availability inventory never
+  qualifies sidecars, source provenance, native reload, rendered content or full
+  match parity. Cover it with `tests/world_publication_inventory.test.mjs` and
+  the existing `tests/world_selection.test.mjs`.
 - [ ] **S2 — World storage/packing acceptance:** verify ordered chunk/numeric
   sidecars, exact float64 bits, raw/GZIP shapes/hashes, complete feature tables,
   cancellation and atomic publication. Bound peak memory through traversal and
   ResourceSaver publication; finish resource reload, complete rendered appearance
   and populated lifecycle checks on the full set, including actual tunnel cases.
+  Use all four seasons of both `taroko_1_*` and `taroko_swap_1_*` as original
+  populated tunnel inputs: retain each world's 198 captured tunnel records, their geometry and source
+  metadata through native packing/reload before rendered and traversal integration
+  acceptance. Their source
+  storage/provenance gates do not qualify native numbers, material fidelity,
+  layered-deck references, tunnel pixels or full seasonal-world availability.
+  Also qualify all four seasons of `taroko_3_*` and `taroko_swap_3_*`, each with
+  248 captured tunnels and 46 decks; smaller team-size recipes cannot stand in
+  for their full geometry and feature tables.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
-  Existing Berlin spring/summer/autumn resources are partial inputs, not world-set
-  certification. Refresh stale generator fingerprints before source reuse.
+  Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference
+  publication. It verifies the selected identity, contiguous chunks, every numeric
+  dependency, streamed hashes and bounded GZIP extents without decoding complete
+  numeric buffers into memory. A matching generator fingerprint never establishes
+  that ignored/untracked sidecars are present. `tools/migrate_worlds.ps1` must stop
+  before reference/native publication on any storage failure; this storage gate
+  does not establish complete scenery, source provenance or rendered parity.
+  Run `tools/verify_world_provenance.mjs <bundle>` separately for declared original
+  input/asset bytes and both provenance fingerprints. Hash original files through
+  bounded streams, reject paths/links outside the source root, and preserve
+  declared missing-asset identity. `tools/migrate_worlds.ps1` runs this gate before
+  references and again before native packing; source changes must stop publication.
+  This gate does not establish generator freshness, extraction-helper/reference
+  semantics, native shader fidelity or match parity. Keep the dedicated
+  `tests/world_provenance.test.mjs` failure/immutability cases.
+  Content-addressed mesh chunks also require length/hash validation before reuse;
+  reject corrupt existing chunks without rewriting them. Cache verification by
+  complete storage path: identical bytes can belong to both numeric and chunk
+  namespaces, and raw/GZIP suffixes require independent native authentication.
+  Keep the six cross-path corruption cases and valid repeated/shared-digest
+  reads in `tests/world_storage.tscn`. Legacy packing must
+  dispose its writer on failure while retaining the original manifest and any
+  already-published sidecars. Keep the child-process failure cases in
+  `tests/world_source.test.mjs` alongside native reload coverage.
+  Native numeric/chunk GZIP must consume the complete single member emitted by
+  the source writer. Godot's whole-buffer decoder ignores trailing data; retain
+  the bounded `StreamPeerGZIP` input-consumption/extent check before native
+  member validation. Reject second members, garbage tails and expanded output
+  beyond the declared extent without changing the source files. Keep valid
+  high-ratio/multi-window and numeric/chunk tail cases in `tests/world_storage.tscn`.
+  Browser transfer, inline mesh chunks and final metadata publication must retain
+  signed zero. `tools/source_json.mjs` uses native `JSON.rawJSON` and a copy-on-write
+  adapter for the shared streaming publisher; reject unavailable native support
+  instead of falling back to ordinary `JSON.stringify`. Capture fingerprints
+  include the serialization helpers/storage writer, so prior captures require
+  regeneration. Keep `tests/source_json.test.mjs` alongside storage regression tests.
+  Browser and legacy mesh transfer share `tools/source_mesh_transfer.mjs`.
+  Within one mesh, transmit identical large numeric arrays once, using full
+  scalar-bit, rank and row-width equality, including signed zero. Retain first
+  encounter order and independent transfers for any differing word/shape;
+  never merge by approximate equality or a sampled/hash-only match. The helper
+  belongs in serialization fingerprints. Keep `tests/source_mesh_transfer.test.mjs`
+  and the original Chromium sphere probes in `tools/source_json_capture.mjs`;
+  complete chunk bytes must equal the prior separate-field wire contract.
+  Transfer large numeric parts as canonical base64 float64-LE frames through
+  `tools/source_numeric_transfer.mjs`; retain JSON for captured metadata. Validate
+  rank, row widths, exact byte extent, finite words and canonical base64 before
+  writing. JSON and binary parts share the same ordered writer, hashing,
+  publication and retirement path. Keep `tests/world_binary_transfer.test.mjs`,
+  `tests/source_numeric_transfer.test.mjs` and both retirement-entry variants;
+  raw/GZIP manifests and complete chunks must match the prior JSON-part output.
+  Original Chromium sphere probes exercise the binary writer and native reload;
+  that success never discharges the separate inline-number precision gate.
+  `node tools/source_json_capture.mjs` records original Chromium sphere-buffer bits;
+  real-driver `tests/source_json.tscn` checks JSON, sidecar and native resource
+  roundtrips. Retain its strict inline-number failures until the shared native
+  number-decoding contract below is accepted; binary-sidecar success does not
+  certify complete source numerics or full worlds. Interrupted capture chunks
+  without a completed manifest never count as a published seasonal bundle.
+  Publish marine shader includes through the native atomic publisher before the
+  containing world, retaining their final content-addressed paths. Reuse requires
+  byte-hash verification and a fresh native load; corrupt existing includes must
+  remain untouched. `tests/world_shader_publication.tscn` checks dependency reload
+  and retained-reader isolation, not marine shader pixels or complete worlds.
+  Existing Berlin and Taroko seasonal source captures are partial inputs, not
+  world-set certification. Refresh stale generator fingerprints before source reuse.
   Stop browser producers before disposing an interrupted mesh writer. Close its
   live numeric handles and remove only its successfully opened raw/GZIP temporary
   paths; retain published content-addressed sidecars and rejected existing files.
   Writer temporary identities must remain unique within one process and clock
   tick. Keep `tests/world_source.test.mjs` disposal/ownership checks alongside
   native reload coverage; they do not qualify world content or publication.
+  Retirement drains admitted directory preparation, numeric opens/writes and
+  atomic chunk publication before cleanup, including a still-running sibling
+  after initialization fails. Concurrent callers share one retirement promise;
+  cancelled operations cannot return a completed manifest. Retain completed
+  manifests, published cache files and foreign temporary paths. Keep the delayed
+  I/O cases in `tests/world_source_retirement.test.mjs` with storage acceptance.
 - [ ] **S3 — Terrain/scenery content:** finish source triangular terrain,
   dry-band/wet-grid, water/swamp, imagery, OSM facilities/buildings, habitat,
   complete biome orchestration and edge geometry capture. Retain original
@@ -59,11 +145,42 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   prefixes, full/low budgets, constructor activity boundaries and saved instance
   buffer isolation. Synthetic probe geometry does not qualify original animal
   meshes, rendered habitats or complete seasonal population/transport retention.
+  Wildlife bindings close on native root deletion while surviving staging
+  detachment and reparenting. Weak observers match generation and instance ID;
+  queued roots reject frames. Rebinding or retirement during terrain queries
+  cancels the old writer before subsequent queries or instance writes, releasing
+  private buffers and borrowed callbacks with closed owners retained.
+  `node tools/wildlife_writer_capture.mjs` and real-driver
+  `tests/wildlife_retirement.tscn` isolate the original writer with explicit
+  state/limb probes; they do not execute RNG, route construction or integration,
+  qualify authored animal geometry, or replace the full wildlife gate above.
+  **Opus handoff:** reconcile `data/provenance.json` through
+  `tools/import_source.mjs` with the original `public/js/rng.js` consumed by
+  wildlife initialization. The full capture genuinely executes that dependency;
+  retain its source guard and the failing `tests/wildlife_native.tscn` check.
+  Acceptance requires matching source provenance and the complete original
+  constructor, capacity, habitat and integration programs without dropping RNG
+  inputs or substituting the scoped writer oracle.
   Aquatic school headings retain an unbounded source double angle; derive the
   quaternion before native storage. `node tools/aquatic_native_capture.mjs` and
   real-driver `tests/aquatic_native.tscn` cover original bubbles, detritus, fish,
   jellies, vessel/wake frames and private buffers, including large environment
   clocks. Their probe geometry does not qualify source model pixels or full worlds.
+  Aquatic hosts and independent detritus controllers retain private buffers,
+  particle phases and bubble RNG across staging transfers. Physical root/leaf
+  deletion closes the matching weak binding; obsolete or duplicated observers
+  cannot retire replacements. Queued owners reject updates, and retirement seals
+  aliased system dictionaries before releasing owned point controllers, native
+  vertex/instance buffers and RNG references. Real-driver
+  `tests/aquatic_retirement.tscn` uses explicit state/point/sphere probes to check
+  those lifetimes with closed controllers retained. It does not replace original
+  factory/frame qualification, material pixels or full seasonal-world acceptance.
+  **Opus handoff:** reconcile `public/js/rng.js` in shared provenance through
+  `tools/import_source.mjs`. Aquatic constructors and original bubble recycling
+  genuinely execute that dependency; retain the full producer and failing
+  `tests/aquatic_native.tscn` guard. Acceptance includes all original aquatic
+  initialization, reset RNG, large-clock motion and vessel/wake programs without
+  omitting source inputs or changing the existing transform tolerances.
   `node tools/aquatic_point_capture.mjs` captures original PointsMaterial pixels
   through locally fulfilled, fingerprinted source modules. Run real-driver
   `tests/aquatic_render.tscn -- --source-capture` for the independent six-case
@@ -77,12 +194,108 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   phase cases also compare normalized orientation independently of tiny petal
   scale. Declared crown/quad probes do not qualify original foliage/flower meshes,
   material pixels or complete seasonal world composition.
+  Petal controllers preserve their captured clock/population and private material
+  bindings across staging transfers. Native root deletion closes the weak binding;
+  generation/observer identity guards isolate replacements and duplicated roots.
+  Queued roots and retired owners reject later frames, and interrupted landing
+  queries stop before later callbacks, cached landing writes or instance updates.
+  Real-driver `tests/petal_retirement.tscn` checks these ownership boundaries with
+  explicit grounded/quad probes and retained closed owners. It does not qualify
+  source planning, motion, animal/foliage geometry or rendered seasonal worlds.
+  **Opus handoff:** reconcile the original `public/js/rng.js` provenance through
+  `tools/import_source.mjs` before full petal qualification. Both
+  `public/js/petals.js::petalRnd` and the original field constructor consume that
+  dependency; retain the full capture and `tests/petal_native.tscn` source guard.
+  Acceptance requires the original seasonal/full-low planning, prewarm and all
+  frame/transition programs without omitting RNG or loosening existing tolerances.
+  Borrowed scenery pivots and train visuals retain their controllers across
+  staging detachment/reparenting, without rebuilding phases or private materials.
+  Native deletion closes the binding through a weak observer; match its binding
+  generation and instance identity so old or duplicated observers cannot retire
+  a replacement. Queued pivots/visuals reject later updates, and terminal
+  controllers release source/node/material references and reject reconfiguration.
+  Real-driver `tests/scenery_binding_retirement.tscn` replays original motion/train
+  programs and checks transfers, rebinding, duplication, paused deletion and
+  retained-controller material/curve release. Its waterfall quad and empty train
+  model isolate ownership; they do not qualify authored geometry, complete world
+  retention or populated transport/prebuild barriers.
+  Scenery hosts also close on source-root deletion, sealing aliased owned-node
+  lists, landmark records, private batch caches and child controllers before
+  callbacks. Late frame/camp commands cannot advance shared clocks or revive the
+  host; retirement never resets the module-global wind/wave/gust phases.
+  Independent camp events retain both removals, while replacement roots stop old
+  cache/frame continuations. World stepping rejects queued/deleted source roots
+  and stops subordinate updates when a callback replaces the host binding.
+  Real-driver `tests/scenery_host_retirement.tscn` retains source-program replay,
+  staging/duplicate/rebind checks, native private-buffer isolation and resource
+  release with closed hosts retained. Cache/geometry/callback probes and the
+  fresh clock-only fixture contract do not establish complete scenery pixels,
+  seasonal publication or populated world/transport/prebuild acceptance.
+  Climb-arrow owners preserve their source flow phase and private instance buffers
+  across staging transfers, then close terminally on native root deletion.
+  Generation/observer identity guards isolate replaced and duplicated roots;
+  queued roots and retired owners reject later updates. Release borrowed route
+  references without clearing the authority caller's accepted roster.
+  `node tools/climb_arrow_capture.mjs` runs the original arrow constructor,
+  unit-bar geometry and update callback with declared route probes. Real-driver
+  `tests/climb_arrow_retirement.tscn` retains its initial/long-clock transforms,
+  unchanged matrix tolerance and native private-buffer ownership checks. This
+  presentation-only capture executes no authority route planner and cannot
+  qualify route admission, populated traversal, material pixels or complete worlds.
 - [ ] **S5 — Environment appearance:** finish cloud/fog-bank detail,
   precipitation, celestial bodies, deposits/scorch, contact effects,
   shoreline/underwater/waves/reflections and
   source wind/wave/gust/tide/ripple/vessel coupling. Bind the shared shader owner's
   accepted materials; certify weather style/low-power transitions and full
   seasonal rendered composition. Weather damage and hazards remain authority-owned.
+  Marine surface hosts close on native root deletion while staging transfers
+  preserve private materials and incremental scan progress. Retain the unbound
+  scan-only source-fixture contract; queued bound roots and retired owners reject
+  updates. Root generation/observer identity guards isolate replacements. Water
+  and ground-code callbacks may replace or retire the scanner; stop old row/cell
+  continuations and global ripple updates after either boundary. Reflection
+  visibility callbacks also stop later opacity writes and revision commits.
+  Retirement releases terrain callbacks, wave buffers and private child bindings,
+  but never resets module-global ripple slots, packets or cooldown.
+  `node tools/marine_native_capture.mjs` captures the original extracted packet,
+  hash and six scanner/ripple programs with their actual source dependencies;
+  real-driver `tests/marine_retirement.tscn` replays them alongside native
+  root/material ownership checks. Declared shader/quad probes isolate lifetime;
+  they do not certify original marine shader pixels, authored surface geometry,
+  full seasonal retention or transport/prebuild barriers.
+  Native weather owners configure once, then close terminally on detachment.
+  Prepare sky, light and private particle resources before world admission;
+  reentrant publications retain the newest weather and original construction
+  seed. Seal resource maps and lightning records before callbacks, stop stale
+  property/frame writes and preserve independent strike batches. Unbind retired
+  environments immediately, then drain queued sky resources through one native
+  `frame_post_draw` callback independently of the closed node before final release.
+  `node tools/weather_owner_capture.mjs` retains twelve original Node/Chromium
+  precipitation-profile cases; real-driver `tests/weather_retirement.tscn` checks
+  native profile bindings, interruption, expiry and retained-owner resource release.
+  Also run it with `-- --live-exit` for active-owner application shutdown. Setter
+  probes isolate property-boundary cancellation; these checks do not qualify
+  original sky/cloud/fog/precipitation pixels, particle trajectories, authored
+  lightning geometry or complete seasonal/transport acceptance.
+  Fire flicker/drift uses the same local wall clock as loot, independently of
+  incoming authority times and render deltas. Retain authored origin/scale doubles
+  until final native Float32 writes; extinguished nodes keep their prior pose.
+  The first visible smoke update disables depth writes and updates private source
+  material metadata, preserving that state across later quench/recovery.
+  `node tools/fire_clock_capture.mjs` and real-driver `tests/fire_clock.tscn`
+  retain the original client/animation/weather functions, large clock phases,
+  exact scalar/Float32 outputs and private packed-resource isolation. Their
+  declared node probes use imported FX records; they do not qualify original
+  constructor geometry, full shader pixels, populated worlds or transport delivery.
+  Fire owners also close terminally on detachment. Complete private meshes,
+  node indices, outline bindings and world pose before admission; reject late
+  commands before sampling clocks. Sync/frame generations stop interrupted
+  visibility, opacity and smoke-depth continuations. Retirement clears weather
+  ownership without mutating the caller's dictionary, and world reuse acquires
+  a fresh owner. Real-driver `tests/fire_retirement.tscn` replays the original
+  frame oracle and checks reentrant cancellation plus deferred private-resource
+  release while owners remain retained. It does not qualify the missing full
+  constructor/shader/world or populated transport acceptance.
 - [ ] **S6 — Room resources/prebuild:** finish populated seasonal-world retention,
   cancellation/retry and tree transfer in offline, ENet and WebSocket sessions.
   Isolated lifecycle fixtures cannot establish complete-world dependency retention
@@ -107,12 +320,28 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   Seal transfer ownership before native reparent callbacks, so a callback's fresh
   request cannot be cleared by the preceding transfer. Run
   `tests/prebuild_retirement.tscn` alongside existing room lifecycle checks.
+  Recheck destination admission after synchronous reparent callbacks. A queued
+  or detached destination cancels the transfer before processing is enabled;
+  restore the same disabled world and its identity to staging only while the
+  original cache generation remains current. Publish rollback ownership before
+  reparent/readiness callbacks so fresh requests, clears and retirement win.
+  Superseded cancelled transfers release their obsolete tree and viewport.
+  Real-driver `tests/prebuild_transfer_cancellation.tscn` checks reuse without
+  rebuilding, zero early process/physics ticks and replacement callbacks at
+  destination entry, staging re-entry and rollback readiness. Its existing held
+  fixture world does not certify seasonal geometry or populated transport barriers.
+  Destination loss probes queue deletion at destination entry or detach during
+  source exit. Removing an ancestor while its child is entering violates native
+  tree notifications; use deferred deletion at that boundary.
   Held build signals exercise retirement without qualifying seasonal geometry.
 
 World workflow, from the repository root:
 
 ```powershell
 node tools/bake_worlds.mjs --list-bundles
+node tools/world_publication_inventory.mjs --summary
+node tools/verify_world_source.mjs berlin_1_autumn
+node tools/verify_world_provenance.mjs berlin_1_autumn
 ./tools/migrate_worlds.ps1 -Godot C:/path/to/godot_console.exe -Bundle berlin_1_autumn
 godot --headless --path . res://tests/worlds.tscn -- --bundle=berlin_1_autumn
 node --test tests/world_source.test.mjs tests/world_selection.test.mjs
@@ -135,22 +364,48 @@ The wrapper runs capture, source references and native packing sequentially.
   catalogue last through the atomic native resource publisher; never overwrite
   an existing fingerprint path or remove a prior catalogue's referenced clips.
   New sample libraries read a fresh catalogue snapshot and verify every clip
-  before registering the complete batch. Legacy catalogues without fingerprints
-  require regeneration with `tools/import_audio.tscn -- --samples-only`.
+  before registering the complete batch. Synthesis, music fallback and movement
+  also use verified content-addressed resources behind the same catalogue switch.
+  One `BattleAudio` owner shares a lazy index snapshot across all consumers;
+  late loads retain that generation, while acquisition can retry until a valid
+  index exists. Regenerate legacy catalogues with `tools/import_audio.tscn`.
+  Samples-only publication retains a complete index only when its source agrees
+  and every retained dependency verifies; it cannot establish a missing full index.
   `tests/audio_catalogue.tscn` covers native reload, staged replacement and
   retained-reader isolation; `tests/audio_resources.tscn` checks original PCM and
-  take order. The samples-only publication does not certify atomic updates of
-  synthesis/music/movement resources, codec parity or complete audible output.
+  take order. `tests/audio_resource_catalogue.tscn` covers staged interruption,
+  complete index replacement, delayed reads, exact resource identities, partial
+  import retention and corruption rejection. These checks do not establish codec
+  parity, actual device suspension, audible waveform parity or transport delivery.
 - [ ] **S8 — Mixer and voice lifecycle:** certify native SFX/BGM settings,
   panning, bus/filter order, initial dedup timestamp, cap reservation grace and
   playing-stream lifetime. Malformed legacy negative SFX polarity stays explicitly
   unavailable; do not convert it into positive gain. Music envelope correctness
   is an Opus-owned blocker, not a tolerance adjustment here.
+  Music, ambience, fallback and loop-player detachment is terminal: stop timers,
+  release streams, disconnect envelopes and reject reattachment or late commands.
+  Routing retirement must stop every live consumer before removing native buses,
+  including SFX and movement workers. Track admitted children before callbacks;
+  reentrant disposal cannot resume configuration or allocate another voice.
+  `tests/audio_owner_retirement.tscn` checks native routing loss, paused detachment,
+  held-decoder drainage and isolated original music/ambience/movement programs.
+  Its isolated source gate does not replace full lifecycle provenance acceptance.
+  Manager configuration and unlock must stop after synchronous retirement;
+  queued owners/routes reject playback before touching deduplication or RNG.
+  Reentrant voice/player admission cannot continue allocating, consume a take
+  after cancellation or reserve a partially started voice. Manager retirement
+  closes all consumers and emits one routing retirement notification.
+  `tests/audio_manager_retirement.tscn` combines these native interruption cases
+  with isolated original gate/count/sample programs from
+  `data/audio_manager/fixtures.json`. Keep its exact numeric tapes and producer
+  fingerprints; this dedicated capture does not discharge shared fixture gates.
 - [ ] **S9 — Movement/location audio:** certify lazy permanent location beds,
   source channel allocation, noise/oscillator reconstruction, synchronized frame
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.
   Verify fade-out retention, driver suspension, buffer latency, thread shutdown,
   scheduling/performance and threaded Web export with actual mixer output.
+  Reuse panning coefficients only for an exactly unchanged double control value;
+  retain per-sample evaluation during automation and the existing buffer latency.
   Movement owners and voices retire permanently on tree exit; reattachment must
   reject configuration rather than reconnecting signals to stopped DSP state.
   Use a fresh owner for new playback. Stopped workers release pending mixer
@@ -160,10 +415,33 @@ The wrapper runs capture, source references and native packing sequentially.
   Run WASAPI `tests/audio_move_retirement.tscn` and `tests/audio_move_render.tscn`
   alongside source lifecycle checks. Native frames and shutdown probes do not
   certify audible waveform parity, device suspension or threaded Web delivery.
+  Service permanent voices in admission order with a one-millisecond worker
+  poll. Failed middle voices must not skip later voices; submissions during a
+  service pass join its next pass. `tests/audio_move_retirement.tscn` verifies
+  these races with a real worker. Run `tests/audio_move_render.tscn -- --stress`
+  for 32 repeated 150 ms UI interruptions with unchanged continuity/skip checks.
+  One WASAPI device configuration does not certify other drivers/rates, sustained
+  CPU contention or platform delivery. Keep the two-period startup budget aligned
+  to Godot's native 128-frame resampler refills instead of truncating it to the
+  driver period. `tests/audio_generator_buffers.tscn` reproduces the former
+  480-frame driver's 64-frame shortfall at an off-block cursor and verifies
+  native refills across driver sizes. Do not hide scheduling failures by
+  increasing the budget, changing coefficient math,
+  branch order or automation clocks, or relaxing strict underrun checks.
+  Requalify the block size against the installed engine's native
+  [resampler contract](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_stream.h)
+  on engine upgrades; failure diagnostics must retain current output skips,
+  playback position, free ring frames, unread source captures and maximum service
+  gaps. Keep measured per-call time alongside those cursors in native captures.
 - [ ] **S10 — Event/frame audio integration:** certify immediate local fire,
   cast/purchase reports, death/leave and remote events in their source order.
   Cover deduplication across snapshot/RPC delivery and all offline/ENet/WebSocket
   lifecycles, including source clock suspension and independent wall deadlines.
+  `tests/audio_context_clock.tscn` compares the silent SFX context against an
+  independent, active native PCM bus beyond bus auto-disable, through paused
+  zero/slow/fast SceneTree scales and bounded capture overflow. Preserve exact
+  native frame deltas. This does not qualify physical driver suspension, rate
+  changes or event delivery; retain the distinct source-context and wall clocks.
 
 Relevant existing checks include `audio_*_suite.gd`,
 `tests/audio_pan_render.tscn` and `tests/audio_move_render.tscn`. Source capture
@@ -174,10 +452,13 @@ Audio workflow, from the repository root:
 ```powershell
 node tools/audio_mixer_references.mjs C:/path/to/steel_vs_swarm
 node tools/audio_lifecycle_references.mjs C:/path/to/steel_vs_swarm
+node tools/audio_manager_references.mjs C:/path/to/steel_vs_swarm
 godot --headless --path . res://tools/import_audio.tscn
 godot --headless --path . res://tests/audio_resources.tscn
 godot --headless --path . res://tests/audio_lifecycle.tscn
 godot --headless --audio-driver WASAPI --path . res://tests/audio_loop_loading.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_owner_retirement.tscn
+godot --headless --audio-driver WASAPI --path . res://tests/audio_manager_retirement.tscn
 godot --headless --audio-driver WASAPI --path . res://tests/audio_pan_render.tscn
 godot --headless --audio-driver WASAPI --path . res://tests/audio_move_render.tscn
 ```
@@ -203,6 +484,39 @@ player's position when pausing/resuming.
   screen-axis sensor data or fabricate an identity pose from missing sensors.
   Physical hardware, hybrid-device/DPI detection and mobile exports remain open;
   synthetic decision fixtures cannot certify them.
+  Native gyro owners configure once and retire terminally on tree exit. Stop the
+  retained sensor state, disconnect its look/failure and preference subscriptions,
+  and reject queued or late commands. Preserve the stopped state for existing
+  viewport basis-reset consumers; release the borrowed preference owner. A status
+  or look callback may retire the owner synchronously, so cancel subsequent
+  preference writes, watchdog work and sensor fallback. Fresh sensor starts reset
+  accumulated angles. `node tools/gyro_owner_capture.mjs` executes the original
+  Gyro constructor/start/stop/motion methods with event/timer transport probes;
+  real-driver `tests/gyro_retirement.tscn` checks those programs, retained-owner
+  cleanup, queued deletion, reattachment and callback interruption. These checks
+  do not certify real sensor delivery, native permission handling, hardware
+  orientation, hybrid/DPI behavior, complete input integration or mobile exports.
+  Touch reset seals the old pointer/gesture roster before release callbacks;
+  nested resets must not duplicate releases or clear newly admitted holds/taps.
+  Pending move/release/frame and haptic continuations stop after reset or blocking,
+  while unrelated old holds still release in source order. A new hold for the
+  same action supersedes an old release. `node tools/touch_reset_capture.mjs`
+  executes the original reset/fire-handoff methods for all gesture/button and
+  blocked combinations; real-driver `tests/touch_reset.tscn` checks their event
+  order plus directed callback interruption and same-pointer-ID replacement.
+  The source DOM/stick-paint probes and native state-only checks do not certify
+  Flash-owned control-node lifetime, hardware pointer capture, complete input
+  publication, populated transport behavior or mobile exports.
+  **Flash — `scripts/touch_controls.gd::reset`:** seal the old `held` mirror
+  before calling `TouchState.reset()`. Its release signals can synchronously
+  admit a fresh button; the current trailing `held.clear()` erases that new
+  command's mirror after the state has retained it. Acceptance: a release
+  callback that admits a fresh fire/jump hold, including the same pointer ID,
+  retains both the state roster and the control's mirrored input; nested resets
+  release old holds once without clearing replacement commands. Keep ordinary
+  focus/overlay release and source gesture/button handoff order unchanged.
+  The native reproduction in `artifacts/sol/touch-mirror-probe.log` retains
+  state pointer 8 as `fire` while the control mirror is empty.
 - [ ] **S12 — View/scope/observer:** certify FPV/TPS/spectator camera state,
   source clipping/ring order, recoil composition, view-lock acquisition/cycling,
   previous-rendered projection, scope gradients/fog/blur/FOV easing and freeze/
@@ -228,6 +542,16 @@ player's position when pausing/resuming.
   Unknown remote magazines and movement resources remain null. These checks do
   not qualify populated ray queries, actor pixels, recipient publication or the
   shared main-to-camera angle transfer contract below.
+  Lock-glow hit decay retains millisecond subtraction before division by 200;
+  ring rotation derives its quaternion from the double phase before native
+  storage. `node tools/lock_glow_capture.mjs` executes the original constructor
+  and render callback under Node and Chromium, retaining both numeric results;
+  Chromium is the browser-state oracle. Real-driver `tests/lock_glow.tscn`
+  compares exact double states, native Float32 poses/material values, ring
+  orientation and private resource release. Keep its strict scalar gate open
+  until the shared pulse-sine contract below is accepted. The shared texture
+  probe, measured-dimension probe and component states do not qualify glow
+  texture pixels, actor bounds, populated targeting or full frame composition.
 - [ ] **S13 — Minimap:** certify full/vicinity windows, warmup/draw deadlines,
   original baked pixels, lane grades/dash/miter rules, labels, remembered bunkers,
   neutral exclusions and public entity markers. Finish persistent exploration,
@@ -273,12 +597,41 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   reports, local fan/remote plasma/lance/ion fallbacks, nearest current muzzle
   callbacks and private versus public shot cadence. Preserve pre-fire initial
   emitters, compressed reverse-order bursts, source crowding limits and contact
-  star gates. Complete moving-shot interpolation, terminal owner-shell retirement,
-  geographic collision and immediate
+  star gates. Complete moving-shot interpolation, geographic collision and immediate
   impact/prediction timing. These effects never repeat damaging settlement.
   Keep owner-pose clocks monotonic and terminal deadlines nondecreasing;
   `tests/projectile_lifecycle.tscn` covers stale/equal-clock packets before and
   after terminal-guard reclamation. Populated transports still require acceptance.
+  Native owner exit must clear active rounds, visual-shell model references,
+  tracers and every model pool; late calls cannot resume that owner. Reattached
+  worlds acquire a fresh presentation owner. Seal record removal before native
+  visibility callbacks and stop continuations after collision/impact retirement.
+  Keep the original per-variant pool bound and LIFO order, dispose overflow and
+  reset root scale on reuse. Regenerate `data/projectile_presentation.json` with
+  `node tools/projectile_owner_capture.mjs`; never manually retune its bound.
+  Real-driver `tests/projectile_owner_retirement.tscn` verifies current original
+  acquisition/drop programs, ordinary/hit/range flight, actual packed models and
+  interrupted native ownership. These cases do not qualify all projectile styles,
+  moving snapshot interpolation, complete pixels or populated transport behavior.
+  Tracers retain one two-vertex dynamic ArrayMesh and private material across
+  reuse. Update its culling override with the vertex buffer; native raster probes
+  must still draw after endpoints move outside the original surface bounds.
+  Release clears the old trace record before visibility callbacks and may return
+  a line only once. Preserve original double TTL/age accumulation and fade order.
+  The ownership scene includes source endpoint/frame programs, exact scalar bits
+  and real-driver buffer/culling-pixel checks. It requires a rendered session.
+  Verify retired buffers and private materials after deferred destruction and a
+  completed rendered frame, including lines that were actually visible.
+  Original tracer prewarm/free-stack bounds remain unqualified until the pool
+  provenance contract below is resolved. Preserve the shared oldest-first
+  `FX_MAX` budget and reverse fade/expiry order across
+  `ProjectilePresentation.traces` and `CombatEffects.effects`, after visual-shell
+  movement. Source crowding gates count both owners. Regenerate the scoped oracle
+  with `node tools/effect_order_capture.mjs`; real-driver
+  `tests/presentation_effect_order.tscn` checks mixed insertion, zero-delta trimming,
+  exact lifetime/fade scalars, both quality gates and reentrant owner retirement.
+  Its unbuilt-world and callback probes do not qualify full effect pixels,
+  original tracer pool limits or populated transport behavior.
 - [ ] **S17 — Impact/particles:** certify muzzle/contact/explosion layers,
   source fire/smoke/embers, texture/opacity/depth rules, pooling/oldest-first
   budgets, victim first-observation/healing/re-entry gates and guard peak rules.
@@ -305,6 +658,59 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
   source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
+  Mine visibility retains the original zero-initialized absolute throttle clock,
+  strict 0.12 s wall-time interval and three-argument compensated distance before
+  sight/opacity decisions. Native Float32 observer/anchor components enter double
+  subtraction directly; a Float32 vector length changes edge behavior. Preserve
+  hidden opacity and per-instance material isolation. `node tools/mine_view_capture.mjs`
+  executes the original controller under both Node and the original Chromium
+  runtime; real-driver `tests/mine_view.tscn` retains exact distance/time bits,
+  near-threshold states and world clock binding. Constructor geometry/shading and
+  terrain height probes do not qualify original mine shape, imagery-derived
+  camouflage, complete world coordinates, trigger settlement or transport delivery.
+  Mine owners retire terminally on detachment and reject queued/late calls before
+  clock providers, throttle reservation or model acquisition. Prepare private
+  meshes and world pose before admission; seal the entire roster before terminal
+  visibility callbacks. Reentrant synchronization and eligible view updates
+  supersede old opacity/visibility continuations. World reuse acquires fresh
+  owners. Real-driver `tests/mine_retirement.tscn` replays the original visibility
+  oracle and checks interrupted admission/removal, clock callbacks, nested view
+  updates and deferred private-resource release with closed owners retained.
+  It does not qualify the uncaptured imagery/geometry or populated round delivery.
+  Missile retirement is terminal and idempotent. Seal it before fracture callbacks,
+  stop interrupted observation/model continuations, and release packed models,
+  persistent damage children, copied materials and private ray buffers even while
+  the closed owner remains retained. Reattachment requires a fresh owner.
+  `node tools/missile_owner_capture.mjs` and real-driver
+  `tests/missile_owner_retirement.tscn` retain original interpolation/smoke/removal
+  programs plus native admission, damaged-owner and deferred-resource checks.
+  Declared source geometry/damage probes do not qualify missile shape, damage
+  semantics, complete pixels, ray triangles or populated transport delivery.
+  **Models — `scripts/missile_view_ray.gd`:** reject retired/queued owners before
+  reading global transforms, model nodes or persistent damage geometry. Acceptance:
+  ray queries during a reentrant terminal fracture callback, after retirement and
+  after tree detachment return no hit without dereferencing released resources.
+  Fog circles/rings retain original expanded triangle order, normals and exact
+  Float32 UV writes, including native resource reload. Reuse immutable meshes by
+  exact radius parameters while retaining private per-fog opacity materials.
+  `node tools/fog_geometry_capture.mjs` and real-driver
+  `tests/fog_geometry.tscn` retain the actual source constructor and all six layers.
+  Buffer/material checks do not qualify composed pixels, clocks or capacity.
+  Fog owners close terminally on tree exit and reject late geometry acquisition.
+  Complete all layers, pose and membership before native admission; seal removals
+  before visibility callbacks and stop superseded synchronization after admission,
+  removal or ally replacement. Retirement clears the immutable mesh cache while
+  deferring native child destruction; world reuse requires a fresh owner.
+  Real-driver `tests/fog_retirement.tscn` reuses the original geometry oracle and
+  checks reentrant interruption plus root/material/cache release with retained
+  owners. These lifecycle checks do not resolve the delivery contract below.
+  **Opus — `scripts/main.gd` fog delivery contract:** reconcile the current
+  snapshot-derived `BattleWorld.sync_fogs` age/expiry with original `fog_spawn`
+  receipt and render-frame effect deltas. Original fog visuals belong to the
+  same oldest-first `FX_MAX` list as tracers and other effects; authority duration
+  must not silently replace that client lifetime. Acceptance: zero/capped frame
+  deltas, paused authority clocks, late observation and mixed-effect eviction
+  retain the original birth/fade/removal sequence before full fog qualification.
   Keep loot bob/airdrop descent on the local wall clock, independent of incoming
   authority clocks; creation and frame updates must use that same time base while
   rotation still consumes the source frame delta. Accumulate rotation in double
@@ -315,6 +721,23 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   `node tools/loot_clock_capture.mjs`
   and real-driver `tests/loot_clock.tscn` cover the original methods and world
   binding, not complete loot geometry or populated pickup/transport settlement.
+  The clock producer executes only the captured original constants/functions;
+  do not import the entire source data module or its unrelated RNG dependencies.
+  Retain strict hashes for every executed source input and the fixture writer.
+  Run the same programs in Node and original Chromium, require matching double
+  phase/landing tapes, and publish the browser's pose outputs. Preserve the
+  declared constructor probes and all long-rotation/zero-clock cases; this gate
+  still cannot establish source constructor geometry or complete rendered pixels.
+  Collectible owners close terminally on detachment; world reuse acquires fresh
+  owners. Seal all entry references before visibility callbacks, prepare pose
+  and private outline bindings before admission, and stop superseded sync/frame
+  continuations. Existing IDs retain their original first-observation metadata;
+  removal and later reuse create fresh objects. `node tools/collectible_owner_capture.mjs`
+  executes the original constructors and snapshot/frame methods for eighteen
+  programs; real-driver `tests/collectible_retirement.tscn` checks those states,
+  reentrant replacement/retirement and deferred root/private-material release.
+  Declared source geometry/toon/outline and terrain probes do not qualify shape,
+  shading, complete world coordinates, pickup settlement or transport delivery.
 - [ ] **S20 — Campaign presentation:** certify original crawl/pan/zoom/skip,
   portrait/art fallbacks, UTF-16 radio timing, stable portrait ties, timer
   cancellation, transitions and victory transcript/replay. Campaign maps and
@@ -406,8 +829,23 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   static/group controls pass but dynamic native SVG stroke coverage remains an
   open shared-renderer contract below. Do not certify full cinematic pixels,
   fractional/DPI placement, hardware input, export or performance from these probes.
-  Finish original first-play asset readiness, buffer-warning presentation and
-  skip-readiness gates before accepting the complete loading/cinematic lifecycle.
+  Prologue playback continues while native image/font cache attempts run. Gesture
+  skipping waits for every attempt; the explicit finish button retains its source
+  bypass. Failed attempts count toward progress, not asset availability. Preserve
+  independent 1800 ms warning deadlines, generation checks and decoder drains
+  across replacement/exit, including pause and zero gameplay speed. Original model
+  warming currently has an empty base manifest; reject nonempty/custom manifests
+  until their native preload contract is published. Keep retained successful
+  resource-cache entries separate from cancelled owners and private scene state.
+  `node tools/campaign_buffer_capture.mjs` and real-driver
+  `tests/campaign_buffer.tscn` retain original cache/error/skip programs, native
+  resource requests, held-decoder retirement and warning timers. Controlled art
+  layers do not qualify actual story decoding, warning CSS/flash appearance,
+  complete cinematic pixels or hardware input. Successful-image readiness and
+  complete first-play loading still require the shared story-encoding contract
+  below and publication of the remaining preload images (`assets/logo_flat.png`
+  and `assets/loading/`) through Opus-owned `tools/import_source.mjs`, preserving
+  the original paths, decoded bytes and explicit failure behavior.
   Automatic radio retains original empty-scene, UTF-16 timer, replacement/clear,
   viewer-relative portrait/guest and single-speaker endpoint behavior. A hidden
   portrait endpoint stays hidden when receiving a speaker update.
@@ -507,6 +945,22 @@ switches for `-Loading`, `-Mobile`, `-Controls`, `-View`, `-Tps`, `-Pips`,
 Cross-owner changes stay as exact requests in this file until their owner pulls
 them. Remove completed items; no dated checkpoints or copied validation history.
 
+### Shared-owner contract required for world publication
+
+- **Opus — source publisher temporary ownership:**
+  `tools/fixture_json.mjs::writeSourceFile` uses PID plus `Date.now()` for its
+  temporary path and removes that path after a failed exclusive write, including
+  `EEXIST`. Two same-process writes to one chunk within one clock tick therefore
+  collide; the rejected opener deletes the first writer's temporary file.
+  Isolated concurrent 8 MiB writes with a fixed clock both reject (`ENOENT` and
+  `EEXIST`) and leave no publication. Give each invocation a unique temporary
+  identity and remove only successfully opened files. Preserve atomic rename,
+  completed-capture retention and existing retry semantics for both source-file
+  and fixture-JSON writers. Acceptance: fixed-clock concurrent writes cannot
+  delete another writer's staging file; rejected exclusive opens retain foreign
+  bytes, and failed encodes clean up only their own incomplete output. Sol's
+  serial chunk hash/reuse checks do not discharge this shared publisher contract.
+
 ### Local execution constraints
 
 - In this worktree, source tools need
@@ -514,6 +968,9 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   sibling source checkout does not exist. The required/output presence inventory
   is [world-inventory.json](../../artifacts/sol/world-inventory.json). Presence
   does not establish source fingerprints, dependency integrity or native parity.
+  Browser captures also need process-local `PW_CHROME` pointing to
+  `C:/Users/user/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe`;
+  the sandbox's default Playwright browser cache is empty.
 - Godot 4.7.2 is available at
   `C:/Users/user/AppData/Local/Temp/steel-v-swarm-godot/Godot_v4.7.2-stable_win64_console.exe`.
   Set process-local `APPDATA` to this worktree's `build/sol-user` and
@@ -522,12 +979,66 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   resources; produce the selected original bundles before repeating populated
   acceptance. Root-suite failures in other owners' fixtures do not authorize
   changing their production code or shared reference registries here.
+  Root and selected NPC-shot suites also reject stale consumer dependencies.
+  Projectile transport timeouts and a rendered smoke timeout without `SMOKE_PASS`
+  leave integrated effect delivery unqualified; isolated effect-order acceptance
+  cannot discharge these gates.
+  Native font/codec caches can be generated in an isolated minimal Godot project
+  from identical source assets and import descriptors, then copied into the
+  ignored `.godot/imported` directory. Avoid broad editor imports that rewrite
+  the shared project settings. An automatic `--quit-after` exit without
+  `SMOKE_PASS` is not a passing smoke test.
 - `tests/world_storage.tscn` consumes the artifacts generated by
   `node --test tests/world_source.test.mjs`. Its float64 decode/disk-reload checks
   do not establish complete world geometry, rendered appearance or delivery.
 
 ### Shared-owner contracts required for world/audio acceptance
 
+- **Opus — exact native source JSON numbers:** expose a reusable validated
+  numeric-tape boundary in `scripts/source_fixture_sections.gd` before Sol
+  certifies native inline world values. Its existing `load_part` honors
+  `numericEncoding: f64-le`, and `_restore_numbers` already restores source words;
+  avoid a second decimal parser. The public contract must accept a captured value
+  tree plus native float64 bytes, preserve tree shape, reject incomplete/extra
+  words and retain the fixture loader's hash/path validation. World callers
+  validate their own storage paths/hashes before restoration. The original
+  Chromium small sphere has 14 double-bit
+  mismatches in each position/normal array after Godot JSON parsing; the large
+  sphere has 928 per array on the direct JSON path, while its float64 sidecars
+  remain exact. Native resource reload retains the already-decoded small-array
+  differences. `artifacts/sol/source-json/report.json` records authoritative
+  expected/actual bytes; for example `0000004026a681bc` becomes `ffffff3f26a681bc`.
+  Sol binds the accepted contract in `tools/source_world_meshes.gd` and
+  `tools/import_worlds.gd`. Acceptance: every original JSON/inline/sidecar/reloaded
+  field in `tests/source_json.tscn`, signed zero and difficult finite doubles,
+  without numeric retuning, decimal correction tables or tolerance widening.
+- **Opus — layered-deck reference provenance:**
+  `tools/world_references.mjs` executes the live original `makeDeckIndex` without
+  checking the selected world's captured `source.inputs`. It can overwrite
+  `collision.deckEndTolerance` and `deckProbes` using different source while
+  retaining the old source fingerprint and reporting success. An isolated
+  reproduction is retained in `artifacts/sol/deck-provenance-reproduction.json`;
+  it never edits an actual captured bundle. Bind the deck-reference producer and
+  native-import consumer to matching original biomes/extraction-helper inputs,
+  and reject missing or mismatched selected bundles before publication.
+  Acceptance: changed/missing source hashes and source changes during reference
+  generation preserve the original bundle byte-for-byte; matching inputs retain
+  original endpoint tolerance and upper/lower deck query results. This reference
+  generator includes authority query semantics and remains a separate shared-owner
+  change. Sol's wrapper rechecks declared world inputs before/after references;
+  it cannot certify the standalone oracle or extraction-helper contract.
+  Preserve signed zero when rewriting the complete bundle as well: ordinary
+  `JSON.stringify(data)` erases corrected inline metadata even when the oracle
+  itself leaves that data unchanged. Bind the accepted source-number publication
+  helper and retain reference results plus all unrelated captured numeric bits.
+  The isolated `berlin_1_winter` rewrite erases 99 captured negative zeros in
+  marine matrices, water-obstacle shapes and sampler matrices. Exact field paths
+  and the preserved original-manifest checksum are retained in
+  `artifacts/sol/berlin-winter-reference-proof.json`. Keep the original winter
+  capture unchanged; it has no accepted layered-deck references or native
+  seasonal resource until this producer contract is corrected. Raw chunk/numeric
+  caches still require storage verification before reuse and do not establish
+  native-world availability.
 - **Opus — float vertex colors:** agree the native mesh/shader attribute contract
   in `scripts/source_cel_*.gd` and `shaders/` before Sol changes
   `tools/import_worlds.gd` to bind it. Original Berlin autumn `SourceMesh_5`
@@ -537,16 +1048,24 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   explicitly rejects these active channels until the shared shader accepts
   lossless storage. Acceptance: regenerate `berlin_1_autumn`, pass original
   surface-color checks in `tests/worlds.tscn` and source/native pixel comparison.
+  The freshly recaptured, completely storage-verified Berlin spring bundle also
+  stops on mesh 5: 4,944 of its 22,537,287 RGB components exceed one. The first
+  is blue at vertex 146,852 (component 440,558), with the same maximum above.
+  Exact source buffer identity and surface declarations are retained in
+  [world-color-inventory.json](../../artifacts/sol/world-color-inventory.json);
+  the current real-driver rejection is in `build/sol-berlin-spring-import.log`.
+  Require lossless native disk reload and colored/uncolored source/native pixels
+  in both quality modes before Sol binds the accepted storage contract.
 - **Opus — cel resource metadata:** resolve the source/native material-table
   mismatch through `scripts/source_cel_data.gd` or its serialized consumer
   contract. Acceptance: `SourceCelData.material_source(material)` equals the
   captured per-surface `cel` declaration after native resource reload;
   `tests/worlds.tscn -- --bundle=berlin_1_autumn` must retain its exact material
-  checks. The full failure evidence is in `tests/sol-world-qualified.log`.
-- The rejected candidate is retained at
-  `artifacts/sol/unqualified-worlds/berlin_1_autumn.res`, outside normal world
-  selection. Its successful prebuild transfer/lifecycle does not discharge the
-  failed geometry/material qualification. Keep unqualified candidates unavailable.
+  checks. Passing isolated material metadata probes does not qualify full worlds.
+- Keep rejected candidates outside normal world selection, for example under
+  `artifacts/sol/unqualified-worlds/`. The current worktree has no qualified
+  seasonal native bundle. Prebuild transfer/lifecycle checks cannot discharge
+  failed geometry/material qualification or establish absent candidate resources.
 - **Opus — shared audio fixtures:** refresh the existing audio routing/state
   fields in `data/fixtures.json` through `tools/import_source.mjs` and
   `tools/model_references.mjs`. In particular, `tests/audio_suite.gd` still needs
@@ -555,8 +1074,43 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   `tools/audio_references.mjs` and `tools/audio_pan_capture.mjs`; do not invent
   outputs or relax the entry guard. The independent native resource/mixer scenes
   use Sol-owned captures and cannot certify the missing shared decision fixtures.
+  The shared gate/count/sample sections still declare producer input
+  `tools/audio_references.mjs` as
+  `d1a87b6357256bf6059f017f3eee3f2bea8e4f6ccf74b445402d0b35cec084d1`,
+  while the current normalized module is
+  `3de024594ab66b555c6df2e54a2def16c957981acd4bd5c2666aaabc278df245`.
+  Refresh those shared producer declarations through the importer; Sol's separate
+  manager capture reuses the current recorder without editing this registry.
+- **Opus — shared audio provenance/consumer publication:** refresh
+  `data/provenance.json` and the shared fixture consumer manifests through
+  `tools/import_source.mjs`. Original `public/js/rng.js` and Sol's
+  `data/audio_lifecycle.json` agree on SHA-256
+  `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`, while
+  runtime provenance still declares
+  `c46913b415a75aa5f0d2366dd7bfcb4f8f26c1db913ecea2a74b40695dd78aaa`.
+  The lifecycle generator correctly refuses to overwrite this mismatch. Refresh
+  dependency declarations for `tests/audio_clip_suite.gd` and
+  `tests/audio_move_suite.gd` after their catalogue-based resource binding; preserve
+  the original expected samples, control programs and strict fingerprint guards.
+  Acceptance: `tests/audio_lifecycle.tscn` reaches its original programs without
+  bypassing provenance, and the root suite accepts the current audio consumers.
 
 ### Shared-owner contracts required for local feedback
+
+- **Opus — browser pulse sine:** provide an accepted shared binding in
+  `scripts/source_trigonometry.gd` for original browser `Math.sin` before Sol
+  certifies bit-identical lock-glow scalar states. `tests/fixtures/lock_glow.json`
+  retains original Node and Chromium constructor/callback outputs, runtime
+  identities, pulse inputs and sine bits. Current native phase bits agree, but
+  the native sine differs at large inputs and changes 249 halo-size/opacity and
+  ring-scale double results; the strict scene deliberately remains failing.
+  `artifacts/sol/lock-glow-differences.json` records each input and both sine
+  bit patterns. The sampled native Float32 outputs and ring orientations agree;
+  those checks cannot establish scalar parity. Acceptance: all captured scalar
+  bits and additional argument-reduction boundaries agree with the original
+  Chromium execution, without baked input tables, angle wrapping or tolerance
+  changes. Node and Chromium sine bits also differ in part of this corpus;
+  Node-only capture is insufficient to choose the shared browser binding.
 
 - **Opus — spectator angle transfer:** `scripts/main.gd::_advance_spectator`
   packs double `yaw`/`pitch` into `Vector2` before calling
@@ -592,8 +1146,42 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   false then true emits another, and replayed snapshots emit none. Do not infer
   this flag from `unbalLeft` alone or add client resource settlement.
 
+### Shared-owner contracts required for projectile acceptance
+
+- **Opus — original presentation pool provenance:** refresh `data/provenance.json`
+  through `tools/import_source.mjs` before Sol captures original `_initFxPools`,
+  `_releaseFxLine` and `Pool.release` together. Current original
+  `public/js/pool.js` hashes to
+  `58b938ad46b8c4afd0036612f143a4bdb52be72af6b9d45eb73ae229a690b84b`,
+  while imported metadata declares
+  `5040958ee9974e92e7cf25ad784bb92b0c76f02a6f8d9de60baa13b1cd5b987e`.
+  The guard must reject this mixed identity; do not reuse an invented Pool or
+  relax the fingerprint check. Acceptance: original prewarm, bounded LIFO release,
+  overflow disposal and reentrant shell retirement execute against one accepted
+  source snapshot. Sol's current supplied-line probes certify vertex/fade writes,
+  not the absent pool qualification. The exact identities are retained in
+  [tracer-pool-source.json](../../artifacts/sol/tracer-pool-source.json).
+- **Opus — shared projectile fixture publication:** refresh `data/fixtures.json`
+  through `tools/import_source.mjs` before full projectile acceptance. The shared
+  `visualShells`, `projectileGeometry` and `tracerPresentation` sections declare
+  `tools/projectile_references.mjs` as
+  `44d833f86189b5e8a394249b3b7c4988144bb3093a2cc6014d9ea73602af2cd0`,
+  while the current normalized producer is
+  `9a8545ae29e9c1a51ab5fed6d35050028cbe78ff767a2125f24a8d5169c3ca35`.
+  Preserve original flight, geometry, material and tracer expectations and the
+  source fingerprint guards. Acceptance: the shared projectile suites consume
+  current producers/consumers without substituting Sol's narrower ownership oracle.
+
 ### Shared-owner contracts required for particle acceptance
 
+- **Opus — current particle provenance:** reconcile the original source inputs
+  through `tools/import_source.mjs` and `data/provenance.json` before publishing
+  another `tests/fixtures/destruction.json`. Its current capture disagrees with
+  shared provenance for `public/js/rng.js`, `public/js/pool.js`,
+  `public/js/lookPrefs.js` and `public/js/movePrefs.js`. Keep all four source
+  guards and the strict particle comparisons. Acceptance: regenerate from the
+  agreed original inputs, then execute both particle families on the real driver;
+  a compiling fixture adapter does not qualify debris, comics or imported pixels.
 - **Opus — debris source random contract:** the original default
   `vfx.debrisBurst()` path captured by `tools/destruction_references.mjs` consumes
   `Math.random` while constructing Three.js groups/materials/instance batches,

@@ -15,6 +15,11 @@ var _verified := {}
 
 func _init(source: Dictionary, resource_root: String = "res://data/worlds") -> void:
 	_root = resource_root
+	if source.has("worldSourceVersion"):
+		var version: Variant = source.worldSourceVersion
+		if not (version is int or version is float) or float(version) != 2.0:
+			_fail("Unsupported source world mesh storage version")
+			return
 	if source.get("worldSourceVersion") == 2:
 		if not source.get("meshChunks") is Array or not _integer(source.get("meshCount")):
 			_fail("Invalid source world mesh manifest")
@@ -83,7 +88,9 @@ func _read_chunk(chunk: Dictionary) -> Array:
 	var bytes := _read_bytes(chunk, "/mesh_chunks/", ".json.gz")
 	if not valid:
 		return []
-	var plain := bytes.decompress(int(chunk.plainBytes), FileAccess.COMPRESSION_GZIP)
+	var plain := _decompress_gzip(bytes, int(chunk.plainBytes))
+	if not valid:
+		return []
 	if plain.size() != int(chunk.plainBytes):
 		_fail("Source world chunk decompression mismatch")
 		return []
@@ -93,9 +100,37 @@ func _read_chunk(chunk: Dictionary) -> Array:
 		return []
 	return parser.data
 
+func _decompress_gzip(bytes: PackedByteArray, extent: int) -> PackedByteArray:
+	# PackedByteArray.decompress validates the member but ignores bytes after it.
+	# Check input consumption with bounded native scratch space before decoding.
+	var stream := StreamPeerGZIP.new()
+	if stream.start_decompression(false, 65536) != OK:
+		_fail("Cannot initialize source world GZIP validation")
+		return PackedByteArray()
+	var offset := 0
+	var produced := 0
+	while offset < bytes.size():
+		var written := stream.put_partial_data(bytes.slice(offset, mini(offset + 65536, bytes.size())))
+		if written[0] != OK:
+			_fail("Invalid source world GZIP data")
+			return PackedByteArray()
+		var available := stream.get_available_bytes()
+		produced += available
+		if produced > extent:
+			_fail("Source world GZIP extent exceeded")
+			return PackedByteArray()
+		if available > 0 and stream.get_data(available)[0] != OK:
+			_fail("Cannot drain source world GZIP validation")
+			return PackedByteArray()
+		if written[1] == 0 and available == 0:
+			_fail("Trailing source world GZIP data")
+			return PackedByteArray()
+		offset += int(written[1])
+	return bytes.decompress(extent, FileAccess.COMPRESSION_GZIP)
+
 func _read_bytes(spec: Dictionary, folder: String, extension: String) -> PackedByteArray:
 	var sha: Variant = spec.get("sha256")
-	if not sha is String or sha.length() != 64 or sha.hex_decode().size() != 32 or not _integer(spec.get("bytes")) or int(spec.bytes) <= 0 or int(spec.bytes) > 2147483647:
+	if not sha is String or sha.length() != 64 or not sha.lstrip("0123456789abcdef").is_empty() or not _integer(spec.get("bytes")) or int(spec.bytes) <= 0 or int(spec.bytes) > 2147483647:
 		_fail("Invalid source world buffer declaration")
 		return PackedByteArray()
 	var expected := _root + folder + str(sha) + extension
@@ -111,18 +146,21 @@ func _read_bytes(spec: Dictionary, folder: String, extension: String) -> PackedB
 	if bytes.size() != int(spec.bytes):
 		_fail("Incomplete source world buffer read: " + expected)
 		return PackedByteArray()
-	if not _verified.has(sha):
+	if not _verified.has(expected):
 		var hash := HashingContext.new()
 		hash.start(HashingContext.HASH_SHA256)
 		hash.update(bytes)
 		if hash.finish().hex_encode() != sha:
 			_fail("Source world buffer hash mismatch: " + expected)
 			return PackedByteArray()
-		_verified[sha] = true
+		_verified[expected] = true
 	return bytes
 
 func _decode(value: Variant, packed_metadata := false) -> Variant:
 	if value is Dictionary:
+		if value.has("$sourceArray"):
+			_fail("Unfinished source numeric transfer")
+			return null
 		if value.has("$sourceNumericArray"):
 			var spec: Variant = value["$sourceNumericArray"]
 			if value.size() != 1 or not spec is Dictionary or spec.get("encoding") not in ["float64le", "float64le-gzip"] or not spec.get("shape") is Array or spec.shape.size() not in [1, 2]:
@@ -142,7 +180,9 @@ func _decode(value: Variant, packed_metadata := false) -> Variant:
 			if not valid:
 				return null
 			if compressed:
-				bytes = bytes.decompress(count * 8, FileAccess.COMPRESSION_GZIP)
+				bytes = _decompress_gzip(bytes, count * 8)
+				if not valid:
+					return null
 				if bytes.size() != count * 8:
 					_fail("Source numeric array decompression mismatch")
 					return null

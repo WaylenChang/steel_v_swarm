@@ -1,6 +1,9 @@
 import { readFile, mkdir, readdir } from 'node:fs/promises';
 import {writeFixtureJson} from './fixture_json.mjs';
 import {WorldSourceWriter} from './world_source_writer.mjs';
+import {stringifySourceJson,prepareSourceJson} from './source_json.mjs';
+import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
+import {encodeSourceNumericPart,decodeSourceNumericPart} from './source_numeric_transfer.mjs';
 import {selectWorldBundles} from './world_selection.mjs';
 import { readFileSync } from 'node:fs';
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
@@ -51,6 +54,7 @@ for (const name of ['public/index.html', 'server/sim.js', 'tools/elevation_fixtu
 for (const name of (await readdir(join(source,'out/forest_review'))).filter(name=>name.endsWith('.js')).sort())
   sourceInputs['out/forest_review/'+name] = sha256(await readFile(join(source,'out/forest_review',name)));
 const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString() + '\n' + instrumentWorldTextCapture.toString() + '\n' + captureWorldTextMesh.toString());
+const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+encodeSourceNumericPart.toString()+'\n'+decodeSourceNumericPart.toString()+'\n'+WorldSourceWriter.toString());
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const campaignMaps = JSON.parse(await readFile(join(root, 'data/campaign.json'), 'utf8')).maps;
@@ -97,7 +101,7 @@ const offlineBiomesSource = instrumentPetalCapture(motionSources.biomes, grabFn)
   bandInstallSeam + '\n  group.userData.nativeBandMask = ground.nativeBandMask;')
   .replace(buildingBatchSeam, buildingBatchSeam + '\n  group.userData.nativeCampBuildingMeshes = bldMeshes;')
   .replace(landmarkInstallSeam, landmarkInstallSeam + '\n  group.userData.nativeCampLandmarks = landmarkG;')
-  .replace(trainSeam, trainSeam + '\n  train.userData.nativeTrain = {points:line.pts.map(point=>point.toArray()),total:line.total,speed,start:s,...' + JSON.stringify(trainRules) + '};');
+  .replace(trainSeam, trainSeam + '\n  train.userData.nativeTrain = {points:line.pts.map(point=>point.toArray()),total:line.total,speed,start:s,...' + stringifySourceJson(trainRules) + '};');
 const terrainSource=readSrc('public','js','terrain.js');
 const offlineToonSource = instrumentMarineCapture(readSrc('public','js','toon.js'));
 const offlineAquaticSource = instrumentAquaticCapture(readSrc('public','js','aquatics.js'), grabFn);
@@ -179,6 +183,9 @@ let worldMeshWriter=null;
 try {
   const page = await browser.newPage();
   await page.addInitScript({content:'globalThis.__sourceWorldTextCapture = ('+captureWorldTextMesh.toString()+');'});
+  await page.addInitScript({content:'globalThis.__sourceJsonStringify = ('+stringifySourceJson.toString()+');'});
+  await page.addInitScript({content:'globalThis.__sourceMeshTransfer = ('+sourceMeshTransfer.toString()+');'});
+  await page.addInitScript({content:'globalThis.__sourceNumericPart = ('+encodeSourceNumericPart.toString()+');'});
   let worldSections = Object.create(null);
   await page.exposeFunction('__sourceWorldMesh', async (operation,index,offset,json) => {
     if(!Number.isInteger(index)||index<0||!Number.isInteger(offset)||offset<0||typeof json!=='string')
@@ -189,6 +196,8 @@ try {
       await worldMeshWriter.begin(index,captured.header,captured.lengths);
     } else if(operation==='array') {
       await worldMeshWriter.part(index,offset,JSON.parse(json));
+    } else if(operation==='array-f64') {
+      await worldMeshWriter.partEncoded(index,offset,JSON.parse(json));
     } else if(operation==='end') {
       if(offset!==0)throw new Error('Invalid original world mesh boundary');
       await worldMeshWriter.end(index);
@@ -333,7 +342,7 @@ try {
         tiles: fixture.elevation.source.tiles.map(({url,sha256}) => ({url,sha256})),
         terrainSha256: sha256(terrainSource), roadsSha256: sha256(biomesSource),
         configSha256: sha256(JSON.stringify(worldConfig)),
-        generatorSha256, selectorSha256: sha256(selectWorldBundles.toString()), minimapCanvasSourceSha, inputs: sourceInputs,
+        generatorSha256, serializationSha256, selectorSha256: sha256(selectWorldBundles.toString()), minimapCanvasSourceSha, inputs: sourceInputs,
       };
       provenance.inputFingerprint = sha256(JSON.stringify(provenance));
       if(reuse) {
@@ -348,7 +357,7 @@ try {
           const b=previous.bounds;
           previous.laneHeights=map.variants[String(size)].lanes.map(lane=>lane.map(([x,z])=>
             tunnelAt(x,z)?.floor ?? Math.max(fieldSample(heights,x,z,previous.grid,b.minX,b.maxX,b.minZ,b.maxZ),deckAt(x,z)??-Infinity)));
-          await writeFixtureJson(target,previous);
+          await writeFixtureJson(target,prepareSourceJson(previous));
           console.log(`${map.id}/${size}/${season}: source geometry reused`);
           continue;
         }
@@ -394,17 +403,12 @@ try {
           if(!meshes.length)return;
           for(const mesh of meshes){
             if(meshCount<16||mesh.positions.length>1000000)console.log('SOURCE_WORLD_CAPTURE mesh-transfer '+JSON.stringify({index:meshCount,name:mesh.name,positions:mesh.positions.length,instances:mesh.instances?.length||0}));
-            const arrays=[];
-            const header=JSON.parse(JSON.stringify(mesh,(_key,value)=>{
-              if(value&&typeof value==='object'&&Object.hasOwn(value,'$sourceArray'))throw new Error('Reserved source mesh transfer property');
-              if(Array.isArray(value)&&value.length>4096){arrays.push(value);return {$sourceArray:arrays.length-1};}
-              return value;
-            }));
-            await window.__sourceWorldMesh('begin',meshCount,0,JSON.stringify({header,lengths:arrays.map(values=>values.length)}));
+            const {header,arrays}=globalThis.__sourceMeshTransfer(mesh,globalThis.__sourceJsonStringify);
+            await window.__sourceWorldMesh('begin',meshCount,0,globalThis.__sourceJsonStringify({header,lengths:arrays.map(values=>values.length)}));
             for(let id=0;id<arrays.length;id++){
               const values=arrays[id],size=typeof values[0]==='number'?65536:64;
               for(let offset=0;offset<values.length;offset+=size)
-                await window.__sourceWorldMesh('array',id,offset,JSON.stringify(values.slice(offset,offset+size)));
+                await window.__sourceWorldMesh('array-f64',id,offset,JSON.stringify(globalThis.__sourceNumericPart(values.slice(offset,offset+size))));
             }
             await window.__sourceWorldMesh('end',meshCount,0,'');
             meshCount++;
@@ -631,10 +635,10 @@ try {
           counts[key]=values.length;
           const chunkSize=['meshes','textureImages'].includes(key)?1:typeof values[0]==='number'?8192:16;
           for(let offset=0;offset<values.length;offset+=chunkSize)
-            await window.__sourceWorldSection(key,offset,JSON.stringify(values.slice(offset,offset+chunkSize)));
+            await window.__sourceWorldSection(key,offset,globalThis.__sourceJsonStringify(values.slice(offset,offset+chunkSize)));
           result[key]=null;
         }
-        return JSON.stringify({header,counts});
+        return globalThis.__sourceJsonStringify({header,counts});
       }, { minimapMethod: minimapBakeMethod, minimapSize, cfg: worldConfig, raw: Array.from(raw), roads, osm, climbCaptureSource: captureClimbBundle.toString(), supportCaptureSource: captureSupportBundle.toString(), sceneryPrepareSource: prepareSceneryCapture.toString(), textureImageSource: captureTextureImage.toString(), textureDescriptionSource: describeSourceTexture.toString(), textureUVSource: captureTextureUV.toString(), trainCaptureSource: captureTrainBundle.toString(), motionCaptureSource:captureSceneryMotion.toString(), wildlifeCaptureSource:captureWildlifeBundle.toString(), petalCaptureSource:capturePetalBundle.toString(), aquaticCaptureSource:captureAquaticBundle.toString(), marineCaptureSource:captureMarineBundle.toString(), marineMaterialSource:captureMarineMaterial.toString(), marineShaderSource:captureMarineShader.toString(), outlineCaptureSource:captureOutlineUniforms.toString(), celCaptureSource:createCelCapture.toString() }));
       const bundle=transfer.header;
       const storage=await worldMeshWriter.finish();
@@ -660,14 +664,14 @@ try {
       authority.camps=[];
       bundle.corridors=[];
       authority._pruneCorridors=cor=>{bundle.corridors=cor;};
-      authority.setWorld({occ:JSON.parse(JSON.stringify(bundle.weatherOcc)),cor:bundle.weatherCor,wet:bundle.waterProfile.wetGrid,hgt:bundle.waterProfile.heightGrid,slabs:rawSlabs});
+      authority.setWorld({occ:JSON.parse(stringifySourceJson(bundle.weatherOcc)),cor:bundle.weatherCor,wet:bundle.waterProfile.wetGrid,hgt:bundle.waterProfile.heightGrid,slabs:rawSlabs});
       bundle.waterProfile.obstacles=authority.worldOcc.map(shape=>({shape:Array.from(shape),baseY:shape.baseY??null,...(shape.buildingKey?{buildingKey:shape.buildingKey}:{})}));
       delete bundle.weatherOcc;
       delete bundle.weatherCor;
       provenance.assets = Object.fromEntries(Array.from(sourceAssets).sort(([a],[b])=>a.localeCompare(b)));
       provenance.fingerprint = sha256(JSON.stringify(provenance));
       bundle.source = provenance;
-      await writeFixtureJson(target,bundle);
+      await writeFixtureJson(target,prepareSourceJson(bundle));
       console.log(`${map.id}/${size}/${season}: ${bundle.meshCount} meshes, ${bundle.decks.length} decks, ${bundle.tunnels.length} tunnels`);
     }
   }

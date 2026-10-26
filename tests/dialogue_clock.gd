@@ -63,5 +63,5 @@ func _run() -> void:
 	get_tree().paused = false
 	Engine.time_scale = speed
 	view.free()
-	print("DIALOGUE_CLOCK assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("DIALOGUE_CLOCK assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

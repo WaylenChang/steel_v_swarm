@@ -5,6 +5,7 @@ var ids: Array = []
 var definitions: Dictionary = {}
 var cache: Array[Dictionary] = []
 var capacity := 0
+var resources := preload("res://scripts/audio_resource_snapshot.gd").new()
 
 func configure(metadata: Dictionary) -> void:
 	ids = metadata.synthesisIds
@@ -17,10 +18,9 @@ func definition(id: String) -> NativeAudioSynthesis:
 		return null
 	if definitions.has(id):
 		return definitions[id]
-	var path := "res://assets/audio/native/%s_synth.res" % id
-	var resource := load(path) as NativeAudioSynthesis if ResourceLoader.exists(path) else null
+	var resource := resources.synthesis(id)
 	if resource == null or not resource.valid() or resource.source.get("id") != id:
-		push_error("Missing original synthesis stems; regenerate and import source audio: " + path)
+		push_error("Missing original synthesis stems; regenerate and import complete source audio: " + id)
 		return null
 	definitions[id] = resource
 	return resource

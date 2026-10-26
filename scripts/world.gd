@@ -24,6 +24,7 @@ var projectile_visuals: ProjectilePresentation
 var missile_view_collision := Callable()
 var skill_fields: SkillFieldPresentation
 var weather_visuals: WeatherPresentation
+var weather_sync_revision := 0
 var water_y: Variant = null
 var water_meshes: Array[MeshInstance3D] = []
 var authority_height_grid: Dictionary = {}
@@ -96,7 +97,9 @@ func sync_airdrops(states: Array, now: float) -> void:
 		return
 	if airdrop_visuals == null and states.is_empty():
 		return
-	if airdrop_visuals == null:
+	if not is_instance_valid(airdrop_visuals) or airdrop_visuals.retired or airdrop_visuals.is_queued_for_deletion():
+		if is_instance_valid(airdrop_visuals):
+			airdrop_visuals.queue_free()
 		airdrop_visuals = AirdropPresentation.new()
 		airdrop_visuals.wall_clock = BodyPresentation.time_now
 		add_child(airdrop_visuals)
@@ -114,8 +117,11 @@ func sync_mines(states: Array) -> void:
 		return
 	if mine_visuals == null and states.is_empty():
 		return
-	if mine_visuals == null:
+	if not is_instance_valid(mine_visuals) or mine_visuals.retired or mine_visuals.is_queued_for_deletion():
+		if is_instance_valid(mine_visuals):
+			mine_visuals.queue_free()
 		mine_visuals = MinePresentation.new()
+		mine_visuals.wall_clock = BodyPresentation.time_now
 		add_child(mine_visuals)
 	var poses: Array = []
 	for state: Dictionary in states:
@@ -127,7 +133,7 @@ func sync_mines(states: Array) -> void:
 	mine_visuals.sync(poses)
 
 func update_mine_view(observer: Vector3, now: float) -> void:
-	if mine_visuals != null:
+	if is_instance_valid(mine_visuals):
 		mine_visuals.update_view(observer, now)
 
 func sync_loots(states: Array, now: float) -> void:
@@ -135,7 +141,9 @@ func sync_loots(states: Array, now: float) -> void:
 		return
 	if loot_visuals == null and states.is_empty():
 		return
-	if loot_visuals == null:
+	if not is_instance_valid(loot_visuals) or loot_visuals.retired or loot_visuals.is_queued_for_deletion():
+		if is_instance_valid(loot_visuals):
+			loot_visuals.queue_free()
 		loot_visuals = LootPresentation.new()
 		loot_visuals.wall_clock = BodyPresentation.time_now
 		add_child(loot_visuals)
@@ -146,8 +154,11 @@ func sync_fires(states: Array, now: float, dynamics: Dictionary) -> void:
 		return
 	if fire_visuals == null and states.is_empty():
 		return
-	if fire_visuals == null:
+	if not is_instance_valid(fire_visuals) or fire_visuals.retired or fire_visuals.is_queued_for_deletion():
+		if is_instance_valid(fire_visuals):
+			fire_visuals.queue_free()
 		fire_visuals = FirePresentation.new()
+		fire_visuals.wall_clock = BodyPresentation.time_now
 		add_child(fire_visuals)
 	fire_visuals.sync(states, now, dynamics)
 
@@ -176,33 +187,43 @@ func water_plane(x: float, z: float) -> Variant:
 func sync_weather(dynamics: Dictionary, _surface: Dictionary, hour: float, schedule: Dictionary, season: String, seed_value: int = 0) -> void:
 	if dynamics.is_empty():
 		return
+	weather_sync_revision += 1
+	var token := weather_sync_revision
 	visual_frozen = bool(dynamics.get("isFrozen", false))
 	if native_data != null and native_data.water_profile.get("baseY") != null:
 		var shift := EnvironmentRules.tide(hour, schedule.lunarDay, native_data.water_profile.isMarine)
 		water_y = float(native_data.water_profile.baseY) + shift
 		for mesh: MeshInstance3D in water_meshes:
 			mesh.position.y = shift
-	if weather_visuals == null:
+	if not is_instance_valid(weather_visuals) or weather_visuals.retired or weather_visuals.is_queued_for_deletion():
+		if is_instance_valid(weather_visuals):
+			weather_visuals.queue_free()
 		weather_visuals = WeatherPresentation.new()
-		add_child(weather_visuals)
 		weather_visuals.configure(seed_value)
+		add_child(weather_visuals)
+		if token != weather_sync_revision:
+			return
 	var span := maxf(float(bounds.maxX) - float(bounds.minX), float(bounds.maxZ) - float(bounds.minZ))
 	weather_visuals.sync(dynamics, hour, schedule, season, span)
 
 func present_lightning(points: Array) -> void:
-	if weather_visuals != null:
+	if is_instance_valid(weather_visuals):
 		weather_visuals.strike(points)
 
 func sync_fogs(states: Array, side: String, now: float) -> void:
 	if skill_fields == null and states.is_empty():
 		return
-	if skill_fields == null:
+	if not is_instance_valid(skill_fields) or skill_fields.retired or skill_fields.is_queued_for_deletion():
+		if is_instance_valid(skill_fields):
+			skill_fields.queue_free()
 		skill_fields = SkillFieldPresentation.new()
 		add_child(skill_fields)
 	skill_fields.sync_fogs(states, side, now)
 
 func ensure_projectile_visuals() -> ProjectilePresentation:
-	if projectile_visuals == null:
+	if not is_instance_valid(projectile_visuals) or projectile_visuals.retired or projectile_visuals.is_queued_for_deletion():
+		if is_instance_valid(projectile_visuals):
+			projectile_visuals.queue_free()
 		projectile_visuals = ProjectilePresentation.new()
 		add_child(projectile_visuals)
 	projectile_visuals.missile_collision = missile_view_collision
@@ -213,6 +234,7 @@ func ensure_combat_effects() -> CombatEffects:
 		combat_effects = CombatEffects.new()
 		combat_effects.low_power = Controls.low_power()
 		add_child(combat_effects)
+	combat_effects.effect_count = _presentation_effect_count
 	return combat_effects
 
 func clip_shot(origin: Vector3, target: Vector3) -> Dictionary:
@@ -224,10 +246,15 @@ func sync_projectile_view(states: Array, clock: float = NAN) -> void:
 	ensure_projectile_visuals().sync_rounds(states, clock)
 
 func step_projectile_visuals(delta: float) -> void:
-	if projectile_visuals != null:
-		projectile_visuals.advance(delta, visual_collision, _visual_shell_impact)
-	if combat_effects != null:
-		combat_effects.advance(delta)
+	if is_instance_valid(projectile_visuals):
+		projectile_visuals.advance_shells(delta, visual_collision, _visual_shell_impact)
+	preload("res://scripts/presentation_effects.gd").advance([projectile_visuals, combat_effects], delta)
+
+func _presentation_effect_count() -> int:
+	var count := combat_effects.effects.size() if is_instance_valid(combat_effects) else 0
+	if is_instance_valid(projectile_visuals):
+		count += projectile_visuals.presentation_effects().size()
+	return count
 
 func _visual_shell_impact(point: Vector3, radius: float, color: int) -> void:
 	ensure_combat_effects().spark(point, radius, color)
@@ -456,7 +483,12 @@ func climb_query() -> Callable:
 	return climb_index.at if native_data != null and native_data.climbs_captured else Callable()
 
 func step_scenery(delta: float, weather: Dictionary) -> void:
+	if not scenery_view.can_advance():
+		return
+	var generation := scenery_view.generation
 	scenery_view.advance(delta, weather)
+	if not scenery_view.can_advance() or scenery_view.generation != generation:
+		return
 	if wildlife_view != null:
 		wildlife_view.advance(delta, SceneryPresentation.wind_time, {"activity": WeatherRules.wildlife_activity(weather)})
 	if petal_view != null:

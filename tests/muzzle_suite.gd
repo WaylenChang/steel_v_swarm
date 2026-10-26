@@ -1,9 +1,10 @@
 extends RefCounted
 
-static func run(h: Node, fixtures: Array) -> void:
+static func run(h: Node, fixtures: Variant) -> void:
+	var cases: Array = fixtures.muzzleLaunches if fixtures is Dictionary else fixtures
 	var maximum_error := 0.0
 	var physical := 0
-	for fixture: Dictionary in fixtures:
+	for fixture: Dictionary in cases:
 		var def := Content.weapon(fixture.character, fixture.slot, int(fixture.level))
 		var flying: bool = fixture.form == "air"
 		var pose := AuthorityWeaponPose.new()
@@ -62,21 +63,20 @@ static func run(h: Node, fixtures: Array) -> void:
 			h._check(line.normalized().distance_to((h._reference_vector(fixture.visual[0].to) - expected).normalized()) < 0.00001,
 				"Instant line connects the launch muzzle to the camera endpoint")
 		geometry.free()
-	print("MUZZLE_LAUNCH_REFERENCE_PASS cases=", fixtures.size(), " physical=", physical, " maximum_error=", maximum_error)
+	print("MUZZLE_LAUNCH_REFERENCE_PASS cases=", cases.size(), " physical=", physical, " maximum_error=", maximum_error)
 	await integration(h)
 
 static func integration(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
+	sim.set_physics_process(false)
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
 	var map_data := Content.map_variant(0, 1)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [{"peer": 981, "side": "STEEL", "character": "t04", "bot": false}], {"time": "day", "weather": "clear"}, true)
-	sim.set_physics_process(false)
-	var actor: BattleUnit = sim.pilots[981]
-	for unit: BattleUnit in sim.units.values():
-		if unit != actor:
-			unit.hp = 0
-	actor.position = Vector3(0, 80, 0)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	var actor := sim.spawn({"peer": 981, "side": "STEEL", "character": "t04", "kind": Content.heroes.t04.kind, "position": Vector3(0, 80, 0)})
+	sim.pilots[981] = actor
 	actor.yaw = 0
 	actor.pitch = 0
 	var origin := actor.weapon_pose.muzzle(actor.aim_transform(), "light", false, true, false)

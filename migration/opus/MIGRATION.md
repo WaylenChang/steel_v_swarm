@@ -188,7 +188,8 @@ runtime acceptance remain incomplete. Component results do not certify the build
   transforms and duplicate the imported MultiMesh before camp clearance.
   `tests/structure_suite.gd` reproduces buffer-size errors and source matrix/
   shared-resource mutation differences without world setup; retain every
-  rotated, mirrored, zero-scale, overlap and repeated-clearance assertion.
+  rotated, mirrored, zero-scale, overlap and repeated-clearance assertion. `scripts/scenery_presentation.gd`, `scripts/climb_presentation.gd`, `scripts/aquatic_presentation.gd`, `scripts/wildlife_presentation.gd` and `scripts/petal_presentation.gd` must allocate a fresh `MultiMesh` and copy `transform_format`, `use_colors`, `use_custom_data`, `mesh`, `instance_count`, `visible_instance_count`, `custom_aabb` and `buffer` in order instead of calling `MultiMesh.duplicate()`, which in Godot 4.7.2 triggers `set_buffer` before `instance_count` is applied.
+  Sol handoff: `scripts/control_preferences.gd` must check `has_section_key("presentation", "low_power")` before calling `ConfigFile.get_value` with a `null` default and preserve `lookSens` clamp/persistence in `tests/mobile_suite.gd`; `scripts/audio_preferences.gd` must validate bracketed INI section headers before `ConfigFile.parse` in `tests/audio_suite.gd` and match `tests/audio_clip_suite.gd` PCM conversion. `tests/audio_move_render.gd:108` must explicitly type `var complete: bool = ...` so GDScript strict type inference does not fail on `Content.balance.audio.scene.categories`, and `tests/aquatic_render.gd`, `tests/audio_pan_render.gd`, `tests/death_render.gd`, `tests/minimap_fog_render.gd` and `tests/splat_render.gd` must pass explicit section arrays to `Content.read_json("res://data/fixtures.json", ...)` and register as fixture consumers.
   Sol handoff: `scripts/room_world_resources.gd`, `scripts/world.gd` and the
   generated `assets/worlds/*_{spring,summer,autumn,winter}.res` must agree
   on available authored seasonal resources. The ordinary smoke and both baseline
@@ -215,6 +216,7 @@ runtime acceptance remain incomplete. Component results do not certify the build
   a `BattleSimulation` before `CockpitRig.update_view` consumes their authority
   context. Retain all original burst frames and serial/kick/muzzle assertions;
   a parent-type script error cannot establish a presentation difference.
+  Models handoff: `scripts/view_occlusion.gd` must copy `MultiMesh` format flags and `instance_count` before `buffer` instead of calling `MultiMesh.duplicate()`, and match `expandByObject` descendant bounds, nine TPS body samples and instanced fade restoration in `tests/view_occlusion_suite.gd` (`tests/player_view_suite.gd`). `scripts/civilian_body_builder.gd` must unset `owner` before reparenting instantiated template nodes in `configure` so `tests/snapshot_suite.gd` does not emit inconsistent-owner engine warnings.
 - [ ] **O24 — Delivery:** certify native exports, mobile sensors/safe areas,
   Compatibility rendering, memory/performance, threaded audio on Web, browser
   single-player, Pages artifact contents and production native hosting. Complete

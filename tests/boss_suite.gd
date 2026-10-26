@@ -22,6 +22,12 @@ class ReferenceHud extends BossHud:
 	func _obstruction_distance(origin: Vector3, point: Vector3) -> float:
 		return origin.distance_to(point) - cover if cover > 0 else INF
 
+class BossUnit extends BattleUnit:
+	func _build_model() -> void:
+		if is_hero() and not BodyRig.available("%s_%s" % [side.to_lower(), character]):
+			return
+		super._build_model()
+
 static func run(h: Node, fixtures: Dictionary) -> void:
 	for key: String in ["bossMath", "bossAnchors", "bossSync", "siegeGates", "siegeDeaths", "siegeDamage", "bossRevive", "bossView"]:
 		if not fixtures.has(key):
@@ -173,7 +179,7 @@ static func context(h: Node) -> BossSimulation:
 	return simulation
 
 static func actor(simulation: BattleSimulation, input: Dictionary) -> BattleUnit:
-	var unit := BattleUnit.new()
+	var unit := BossUnit.new()
 	simulation.add_child(unit)
 	var special := {"boss": input.boss, "boss_segment": int(input.segment)}
 	if int(input.stage) >= 0:

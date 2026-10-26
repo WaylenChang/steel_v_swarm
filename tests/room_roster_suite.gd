@@ -40,9 +40,15 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 	for item: Dictionary in fixtures.roomHeroDeployment:
 		var battle := BattleSimulation.new()
 		h.add_child(battle)
+		battle.set_physics_process(false)
+		battle.world = BattleWorld.new()
+		battle.add_child(battle.world)
 		var map_data := Content.map_variant(0, int(item.teamSize))
+		map_data.erase("native_world")
 		var roster: Array = item.roster.duplicate(true)
-		await battle.setup(map_data, roster, {"time": "day", "weather": "clear", "season": "summer"}, true, true)
+		await battle.world.build(map_data, {"time": "day", "weather": "clear", "season": "summer"})
+		battle.bot_tower_sites = map_data.get("tower_sites", []).duplicate(true)
+		battle.bot_difficulty = Content.constants.DEFAULT_BOT_DIFF
 		h._check(battle._populate_heroes(map_data, roster), "Native roster initializes from prepared source geometry")
 		for index in item.heroes.size():
 			var expected: Dictionary = item.heroes[index]

@@ -217,7 +217,7 @@ func configure(info: Dictionary, replica: bool = false) -> void:
 		money = 0
 		power = 0
 		max_power = 0
-	flying = special.get("role") == "carrier" or bool(unit.get("fly", false)) or kind in ["drone", "heli"]
+	flying = special.get("role") == "carrier" or kind in ["drone", "heli"] or (not is_pilot() and bool(unit.get("fly", false)))
 	position = info.position
 	yaw = float(info.get("yaw", 0))
 	rotation.y = yaw

@@ -170,11 +170,15 @@ static func integration(h: Node) -> void:
 	h.add_child(sim)
 	var map_data := Content.map_variant(0, 1)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [{"peer": 951, "side": "STEEL", "character": "t03", "bot": false},
-		{"peer": 952, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
+	sim.authoritative = true
 	sim.set_physics_process(false)
-	var actor: BattleUnit = sim.pilots[951]
-	var remote: BattleUnit = sim.pilots[952]
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	var actor := sim.spawn({"kind": Content.heroes.t03.kind, "peer": 951, "side": "STEEL", "character": "t03", "bot": false, "position": Vector3(0, 80, 0), "yaw": 0.0})
+	var remote := sim.spawn({"kind": Content.heroes.s01.kind, "peer": 952, "side": "SWARM", "character": "s01", "bot": false, "position": Vector3(0, 80, 10), "yaw": 0.0})
+	sim.pilots[951] = actor
+	sim.pilots[952] = remote
 	h._check(actor.cockpit == null and remote.cockpit == null, "Authority actors do not allocate first-person cockpit geometry")
 	actor.ensure_cockpit()
 	var rig := actor.cockpit

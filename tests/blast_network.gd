@@ -83,7 +83,7 @@ func _emit_fixture() -> void:
 	pilot.impulse_velocity = Vector2.ZERO
 	pilot.recoil.clear_active()
 	pilot.recoil.trauma = 0
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["blastFeedbackSequences"])
 	reference = fixtures.blastFeedbackSequences.filter(func(item): return bool(item.flying) == pilot.flying)[0]
 	var point := pilot.position + Vector3.UP * pilot.height * .5 + Vector3.RIGHT
 	frozen_resources = _resources(pilot)

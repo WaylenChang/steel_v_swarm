@@ -354,7 +354,10 @@ func _run_fixture_suite(suite: Variant) -> void:
 		return
 	var data: Dictionary = Content.read_json("res://data/fixtures.json", keys)
 	print("SOURCE_SUITE_BEGIN ", suite.resource_path)
-	await suite.run(self, data)
+	if suite in [RoomWorldResourceTests, RoomWorldPrebuildTests]:
+		await suite.run(self)
+	else:
+		await suite.run(self, data)
 	data.clear()
 	await get_tree().process_frame
 	print("SOURCE_SUITE_END ", suite.resource_path, " assertions=", assertions - previous_assertions, " failures=", failures - previous_failures)
@@ -1293,6 +1296,10 @@ func _blast_volume_tests(fixtures: Array) -> void:
 		target.shield = 0
 		target.armor = 0
 		sim.units = {2: target}
+		# The source capture stubs `_damage` at entry; the attacking creep satisfies the
+		# separate base-siege support rule so HP loss still equals that entry amount.
+		if fixture.kind == "base":
+			sim.units[1] = attacker
 		sim.blast(attacker, {"dmg": 100, "r": fixture.radius, "vsSp": 1, "vsHp": 1}, _reference_vector(fixture.impact), fixture.get("friendly", false))
 		_check(absf(10000 - target.hp - fixture.amount) < 0.0001, "Source blast measures horizontal surface and vertical body band: " + fixture.kind)
 		target.free()

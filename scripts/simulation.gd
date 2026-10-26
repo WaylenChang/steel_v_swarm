@@ -331,7 +331,7 @@ func _match_world_error(map_data: Dictionary, env: Dictionary) -> String:
 	return ""
 
 func _populate_heroes(map_data: Dictionary, roster: Array) -> bool:
-	if not authoritative or world == null:
+	if not authoritative or world == null or world.paths.is_empty():
 		return false
 	var slots := {"SWARM": 0, "STEEL": 0, "SUPER": 0}
 	var bot_index := 0
@@ -2933,6 +2933,8 @@ func present_echo(definition: Dictionary, origin: Vector3, unit: BattleUnit) -> 
 	presentation.spawn_shell(state, "%s-%s-%s" % [definition.ch, definition.slot, unit.side.to_lower()])
 
 func _projectile_surface(point: Vector3) -> float:
+	if world == null:
+		return 0.0
 	var bottom: float = world.native_data.min_height - 100 if world.native_data != null else -100
 	var query := PhysicsRayQueryParameters3D.create(point + Vector3.UP * 0.01, Vector3(point.x, bottom, point.z), 8 | 16 | 32 | 64 | 1024)
 	# The synthetic test world uses only the ordinary static collision layer.
@@ -3300,6 +3302,8 @@ func _missile_world_position(point: Vector3) -> Vector3:
 func _missile_target_altitude(target: BattleUnit) -> float:
 	if not target.is_hero() and target.kind != "heli" and target.special.get("role") not in ["summon", "hologram", "carrier"]:
 		return 0.0
+	if world == null:
+		return target.position.y
 	var surface := _height_reference(target) if target.is_hero() else world.ground_height(target.position.x, target.position.z)
 	return target.position.y - surface
 
@@ -3308,6 +3312,8 @@ func _body_altitude(target: BattleUnit) -> float:
 	return _missile_target_altitude(target) if target.is_hero() or target.kind in ["heli", "decoy", "kami", "hyper"] else 0.0
 
 func _height_reference(unit: BattleUnit) -> float:
+	if world == null:
+		return 0.0
 	var surface := _projectile_surface(unit.position)
 	var ground := world.ground_height(unit.position.x, unit.position.z)
 	if not is_finite(surface) or not is_finite(ground):
@@ -5918,7 +5924,7 @@ func _hero_group(owner: BattleUnit) -> Array[BattleUnit]:
 
 func _hero_representative(id: int, peer: int = 0) -> BattleUnit:
 	var owner: BattleUnit = units.get(id)
-	if owner != null and owner.presentation_visible and (owner.body_presentation == null or not owner.body_presentation.report.is_empty()):
+	if owner != null and owner.presentation_visible and (owner.body_presentation == null or not owner.body_presentation.report.is_empty() or (owner.is_pilot() and owner.peer_id == Session.player_id())):
 		return owner
 	if peer == 0 and owner != null:
 		peer = owner.peer_id

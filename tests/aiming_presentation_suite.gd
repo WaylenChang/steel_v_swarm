@@ -126,7 +126,7 @@ static func _glow_visibility(h: Node, fixtures: Array) -> void:
 		actor(simulation, id, "SWARM", Vector3.ZERO)
 	for item: Dictionary in fixtures:
 		for id: int in simulation.units:
-			simulation.units[id].special.siege_locked = item.locked.has(id)
+			simulation.units[id].special.siege_locked = item.locked.any(func(value): return int(value) == id)
 		var weapon := {"hits": item.hits, "side": "STEEL", "warn": false} if item.hits != null else {}
 		var skill := {"hits": item.skills, "side": "STEEL", "warn": false} if item.casting else {}
 		simulation.apply_footprint(weapon, {"anchor": item.anchor})

@@ -29,11 +29,14 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 static func integration(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
+	sim.set_physics_process(false)
 	var map_data := Content.map_variant(0, 1)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [{"peer": 991, "side": "STEEL", "character": "t04", "bot": false}], {"time": "day", "weather": "clear"}, true)
-	sim.set_physics_process(false)
-	var actor: BattleUnit = sim.pilots[991]
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	var actor := sim.spawn({"peer": 991, "side": "STEEL", "character": "t04", "kind": Content.heroes.t04.kind, "bot": false, "position": Vector3(0, 80, 0)})
+	sim.pilots[991] = actor
 	actor.position = Vector3(0, 80, 0)
 	actor.yaw = .7
 	actor.pitch = -.2

@@ -283,7 +283,7 @@ func _ready() -> void:
 		elif recovery == ERR_DOES_NOT_EXIST:
 			if arguments.has("--resume"):
 				_status("failed")
-			elif arguments.is_empty() and not campaign_progress.prologue_seen and not Content.campaign.get("prologue", []).is_empty():
+			elif arguments.is_empty() and get_script().resource_path == "res://scripts/main.gd" and not campaign_progress.prologue_seen and not Content.campaign.get("prologue", []).is_empty():
 				lobby.hide()
 				campaign_ui.first_visit(campaign_progress)
 

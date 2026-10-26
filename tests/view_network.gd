@@ -14,7 +14,7 @@ var accepted := false
 func _ready() -> void:
 	Controls.persist = false
 	Controls.configure(Content.balance.mobile)
-	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json")
+	var fixtures: Dictionary = Content.read_json("res://data/fixtures.json", ["viewLocks"])
 	for item: Dictionary in fixtures.viewLocks:
 		if item.yaw == 0 and item.pitch == 0:
 			trace = item
@@ -56,7 +56,7 @@ func _physics_process(delta: float) -> void:
 			_fail("Shop entry must release the actual native view-lock pointer")
 			return
 		_overlay(shop, false)
-		var aim := touch_controls.buttons.aim.get_global_rect().get_center()
+		var aim: Vector2 = touch_controls.buttons.aim.get_global_rect().get_center()
 		_touch(1, aim, true)
 		_touch(1, aim, false)
 		phase = 3

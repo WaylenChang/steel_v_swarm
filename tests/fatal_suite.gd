@@ -73,8 +73,12 @@ static func _failure_barrier(h: Node) -> void:
 	session.free()
 	battle.free()
 
+class RejectedWorld extends BattleWorld:
+	func _build_failed(reason: String) -> void:
+		build_error = reason
+
 static func _world_failure(h: Node) -> void:
-	var world := BattleWorld.new()
+	var world := RejectedWorld.new()
 	h.add_child(world)
 	var map := Content.map_variant(0, int(Content.constants.TEAM.MIN))
 	map.native_world = "res://assets/worlds/missing-fatal-fixture.res"

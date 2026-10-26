@@ -46,7 +46,7 @@ func _physics_process(delta: float) -> void:
 		_fail("NETWORK_MINIMAP_NATIVE_LANE_LAYER")
 		return
 	var fog: MinimapFog = minimap.fog_view
-	var pulse := float(Time.get_ticks_msec()) / 1000.0 < minimap.vision.pulse_until
+	var pulse: bool = float(Time.get_ticks_msec()) / 1000.0 < minimap.vision.pulse_until
 	if not fog.configured or fog.get_parent() != minimap.base_canvas or fog.get_index() >= minimap.lane_view.get_index() or fog.explored.get_parent() != fog.current:
 		_fail("NETWORK_MINIMAP_NATIVE_FOG_LAYERS")
 		return

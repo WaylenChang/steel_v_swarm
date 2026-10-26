@@ -1,8 +1,9 @@
 class_name ReachabilitySuite
 extends RefCounted
 
-static func run(h: Node, fixtures: Array) -> void:
-	for fixture: Dictionary in fixtures:
+static func run(h: Node, fixtures: Variant) -> void:
+	var cases: Array = fixtures.reachability if fixtures is Dictionary else fixtures
+	for fixture: Dictionary in cases:
 		var definition := Content.weapon(fixture.character, fixture.slot, int(fixture.level))
 		var geometry: Node3D = null
 		var collision: Callable
@@ -27,16 +28,16 @@ static func run(h: Node, fixtures: Array) -> void:
 static func authority(h: Node) -> void:
 	var sim := BattleSimulation.new()
 	h.add_child(sim)
+	sim.set_physics_process(false)
+	sim.world = BattleWorld.new()
+	sim.add_child(sim.world)
 	var map_data := Content.map_variant(0, 1)
 	map_data.erase("native_world")
-	await sim.setup(map_data, [
-		{"peer": 701, "side": "STEEL", "character": "t09", "bot": false},
-		{"peer": 702, "side": "SWARM", "character": "s01", "bot": false}], {"time": "day", "weather": "clear"}, true)
-	sim.set_physics_process(false)
-	var actor: BattleUnit = sim.pilots[701]
-	var target: BattleUnit = sim.pilots[702]
-	actor.position = Vector3(0, 80, 0)
-	target.position = Vector3(0, 80, -60)
+	await sim.world.build(map_data, {"time": "day", "weather": "clear"})
+	var actor := sim.spawn({"peer": 701, "side": "STEEL", "character": "t09", "kind": Content.heroes.t09.kind, "position": Vector3(0, 80, 0)})
+	var target := sim.spawn({"peer": 702, "side": "SWARM", "character": "s01", "kind": Content.heroes.s01.kind, "position": Vector3(0, 80, -60)})
+	sim.pilots[701] = actor
+	sim.pilots[702] = target
 	actor.input_state = {"aim": true, "slot": "heavy"}
 	var offset := target.position + Vector3.UP * target.height / 2 - actor.eye()
 	actor.yaw = atan2(-offset.x, -offset.z)

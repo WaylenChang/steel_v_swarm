@@ -4,6 +4,7 @@ const ResourcePublisher = preload("res://tools/source_resource_publisher.gd")
 const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 const ResourceIdentity = preload("res://scripts/audio_resource_identity.gd")
 const SynthesisImport = preload("res://tools/audio_synthesis_import.gd")
+const ResourceSnapshot = preload("res://scripts/audio_resource_snapshot.gd")
 var catalogue_path := AudioSampleLibrary.CATALOGUE_PATH
 
 func _ready() -> void:
@@ -140,12 +141,8 @@ func _retain_resources(catalogue: NativeAudioCatalogue) -> bool:
 	if not previous.valid() or previous.source != catalogue.source:
 		_fail("Samples-only import requires the same complete source catalogue; run the full audio importer")
 		return false
-	for key: String in previous.resource_paths:
-		var path: String = previous.resource_paths[key]
-		var stored := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE_DEEP) if ResourceLoader.exists(path) else null
-		if stored == null or ResourceIdentity.digest(stored) != previous.resource_hashes[key]:
-			_fail("Missing or invalid retained native audio resource: " + path)
-			return false
+	if not _resource_cohort(previous):
+		return false
 	catalogue.complete_resources = true
 	catalogue.synthesis_ids = previous.synthesis_ids.duplicate()
 	catalogue.resource_paths = previous.resource_paths.duplicate()
@@ -171,11 +168,51 @@ func _publish_resource(catalogue: NativeAudioCatalogue, key: String, resource: R
 	return true
 
 func _publish_catalogue(catalogue: NativeAudioCatalogue, count: int) -> void:
-	if not catalogue.valid() or await ResourcePublisher.publish(catalogue, catalogue_path, get_tree()) != OK:
+	if not catalogue.valid():
+		_fail("Cannot save invalid native source audio catalogue")
+		return
+	if catalogue.complete_resources and not _resource_cohort(catalogue):
+		return
+	if await ResourcePublisher.publish(catalogue, catalogue_path, get_tree()) != OK:
 		_fail("Cannot save native source audio catalogue")
 		return
 	print("Imported original audio takes: ", count, " synthesisProbesRemainReferenceOnly=true")
 	get_tree().quit()
+
+func _resource_cohort(catalogue: NativeAudioCatalogue) -> bool:
+	var reader := ResourceSnapshot.new()
+	reader.catalogue = catalogue
+	var noise_hash := ""
+	var sample_rate := 0
+	for key: String in catalogue.resource_paths:
+		var resource: Resource
+		var rate := 0
+		if key == "movement":
+			resource = reader.movement()
+			if resource != null:
+				rate = resource.noise.mix_rate
+		elif key.begins_with("synthesis_"):
+			resource = reader.synthesis(key.trim_prefix("synthesis_"))
+			if resource != null:
+				rate = resource.sample_rate
+		elif key in ["music_menu", "music_battle"]:
+			resource = reader.music(key.trim_prefix("music_"))
+			if resource != null:
+				rate = resource.centered.mix_rate
+		if resource == null:
+			_fail("Missing or invalid native audio cohort resource: " + key)
+			return false
+		var hash: Variant = resource.source.get("noiseSha256")
+		if not NativeAudioCatalogue._valid_hash(hash) or rate <= 0:
+			_fail("Missing original shared noise identity/rate: " + key)
+			return false
+		if noise_hash.is_empty():
+			noise_hash = hash
+			sample_rate = rate
+		elif hash != noise_hash or rate != sample_rate:
+			_fail("Mixed original shared noise or context rates: " + key)
+			return false
+	return not noise_hash.is_empty()
 
 func _movement(provenance: Dictionary, catalogue: NativeAudioCatalogue) -> bool:
 	var data: Dictionary = Content.read_json("res://data/audio_move.json")

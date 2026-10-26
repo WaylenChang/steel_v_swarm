@@ -464,6 +464,13 @@ The wrapper runs capture, source references and native packing sequentially.
   Preserve the original context's shared noise across synthesis, movement and
   music; do not silently combine an isolated rate profile with another capture's
   noise generation when publishing a complete native catalogue.
+  Full publication and samples-only retention must load and verify every
+  synthesis/movement/music dependency and reject missing or differing shared
+  noise fingerprints/context rates before changing the catalogue. Oscillator
+  period representation rates are independent of the shared noise context.
+  Keep this gate in `tools/import_audio.gd` and the mismatched-cohort publication
+  cases in `tests/audio_resource_catalogue.tscn`. A consistent declaration alone
+  does not establish source waveform parity or qualify cross-rate reconstruction.
   Preserve the existing 47,360 Hz music representation and its integral onsets;
   do not relabel or rescale captured SFX rates. Run `tests/audio_sfx_rate.test.mjs`
   alongside full-source capture checks. Other device rates, codecs, resampling

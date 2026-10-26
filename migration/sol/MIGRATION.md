@@ -381,6 +381,13 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   Destination loss probes queue deletion at destination entry or detach during
   source exit. Removing an ancestor while its child is entering violates native
   tree notifications; use deferred deletion at that boundary.
+  Staging viewport/world loss must cancel pending transfers and invalidate both
+  building and ready state. Reject queued staging before allocation/build and
+  revalidate factory callbacks before admitting their output. Notify replacement
+  listeners after native tree-exit notifications finish; repeated transfer
+  rollbacks must rebind loss observers to the restored generation. Run real-driver
+  `tests/prebuild_stage_lifetime.tscn` with the retirement and transfer fixtures;
+  held worlds isolate lifecycle behavior without qualifying seasonal content.
   Held build signals exercise retirement without qualifying seasonal geometry.
 
 World workflow, from the repository root:

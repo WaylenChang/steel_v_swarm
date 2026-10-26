@@ -485,6 +485,14 @@ The wrapper runs capture, source references and native packing sequentially.
   with isolated original gate/count/sample programs from
   `data/audio_manager/fixtures.json`. Keep its exact numeric tapes and producer
   fingerprints; this dedicated capture does not discharge shared fixture gates.
+  Validate every previously admitted SFX player after native admission callbacks;
+  cancellation of the current/earlier player or routing stops later allocations
+  and rejects the voice before playback or budget reservation. Once routing is
+  bound, failed admission retires the owner and disconnects the old route observer.
+  Preserve already-consumed private sample draws. Physical player loss closes the
+  voice and stops all stems, while ordinary stem completion still waits for the
+  remaining stems. Keep these sample/synthesis cases and route-drain checks in
+  `tests/audio_manager_retirement.tscn` alongside native mixer captures.
 - [ ] **S9 — Movement/location audio:** certify lazy permanent location beds,
   source channel allocation, noise/oscillator reconstruction, synchronized frame
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.

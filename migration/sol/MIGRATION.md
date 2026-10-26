@@ -64,7 +64,7 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   byte-hash verification and a fresh native load; corrupt existing includes must
   remain untouched. `tests/world_shader_publication.tscn` checks dependency reload
   and retained-reader isolation, not marine shader pixels or complete worlds.
-  Existing Berlin spring/summer/autumn resources are partial inputs, not world-set
+  Existing Berlin seasonal source captures are partial inputs, not world-set
   certification. Refresh stale generator fingerprints before source reuse.
   Stop browser producers before disposing an interrupted mesh writer. Close its
   live numeric handles and remove only its successfully opened raw/GZIP temporary
@@ -958,6 +958,14 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   `JSON.stringify(data)` erases corrected inline metadata even when the oracle
   itself leaves that data unchanged. Bind the accepted source-number publication
   helper and retain reference results plus all unrelated captured numeric bits.
+  The isolated `berlin_1_winter` rewrite erases 99 captured negative zeros in
+  marine matrices, water-obstacle shapes and sampler matrices. Exact field paths
+  and the preserved original-manifest checksum are retained in
+  `artifacts/sol/berlin-winter-reference-proof.json`. Keep the original winter
+  capture unchanged; it has no accepted layered-deck references or native
+  seasonal resource until this producer contract is corrected. Raw chunk/numeric
+  caches still require storage verification before reuse and do not establish
+  native-world availability.
 - **Opus — float vertex colors:** agree the native mesh/shader attribute contract
   in `scripts/source_cel_*.gd` and `shaders/` before Sol changes
   `tools/import_worlds.gd` to bind it. Original Berlin autumn `SourceMesh_5`

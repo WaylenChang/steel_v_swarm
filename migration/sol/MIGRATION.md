@@ -470,6 +470,27 @@ player's position when pausing/resuming.
   cleanup, queued deletion, reattachment and callback interruption. These checks
   do not certify real sensor delivery, native permission handling, hardware
   orientation, hybrid/DPI behavior, complete input integration or mobile exports.
+  Touch reset seals the old pointer/gesture roster before release callbacks;
+  nested resets must not duplicate releases or clear newly admitted holds/taps.
+  Pending move/release/frame and haptic continuations stop after reset or blocking,
+  while unrelated old holds still release in source order. A new hold for the
+  same action supersedes an old release. `node tools/touch_reset_capture.mjs`
+  executes the original reset/fire-handoff methods for all gesture/button and
+  blocked combinations; real-driver `tests/touch_reset.tscn` checks their event
+  order plus directed callback interruption and same-pointer-ID replacement.
+  The source DOM/stick-paint probes and native state-only checks do not certify
+  Flash-owned control-node lifetime, hardware pointer capture, complete input
+  publication, populated transport behavior or mobile exports.
+  **Flash — `scripts/touch_controls.gd::reset`:** seal the old `held` mirror
+  before calling `TouchState.reset()`. Its release signals can synchronously
+  admit a fresh button; the current trailing `held.clear()` erases that new
+  command's mirror after the state has retained it. Acceptance: a release
+  callback that admits a fresh fire/jump hold, including the same pointer ID,
+  retains both the state roster and the control's mirrored input; nested resets
+  release old holds once without clearing replacement commands. Keep ordinary
+  focus/overlay release and source gesture/button handoff order unchanged.
+  The native reproduction in `artifacts/sol/touch-mirror-probe.log` retains
+  state pointer 8 as `fire` while the control mirror is empty.
 - [ ] **S12 — View/scope/observer:** certify FPV/TPS/spectator camera state,
   source clipping/ring order, recoil composition, view-lock acquisition/cycling,
   previous-rendered projection, scope gradients/fog/blur/FOV easing and freeze/

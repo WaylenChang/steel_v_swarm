@@ -24,6 +24,7 @@ var fire_arm := false
 var look_fire := false
 var held: Dictionary = {}
 var taps: Dictionary = {}
+var revision := 0
 
 func _init(metadata: Dictionary) -> void:
 	rules = metadata
@@ -68,7 +69,10 @@ func look_down(id: int, point: Vector2, now: float) -> void:
 func button_down(action: String, id: int, point: Vector2, now: float) -> void:
 	if blocked or owns(id):
 		return
+	var token := revision
 	haptic.emit(6 if action == "fire" else 10)
+	if token != revision or blocked or owns(id):
+		return
 	if action in HOLD:
 		held[id] = action
 		command.emit(action, true)
@@ -76,21 +80,29 @@ func button_down(action: String, id: int, point: Vector2, now: float) -> void:
 		taps[id] = {"action": action, "position": point, "at": now}
 
 func move(id: int, point: Vector2) -> void:
+	var token := revision
 	if id == look_id:
 		var change := point - look_position
 		look_position = point
 		if not blocked:
 			if fire_arm and not look_fire and point.distance_to(down_position) >= rules.TAP_FIRE_PX:
 				_set_look_fire(true)
+				if token != revision:
+					return
 			look.emit(-change * float(rules.TOUCH_RAD_PX) * sensitivity)
+			if token != revision:
+				return
 	for movement: bool in [true, false]:
 		var stick := move_stick if movement else look_stick
 		if id == stick.id and not blocked:
 			_move_stick(stick, point, movement)
+			if token != revision:
+				return
 	if taps.has(id) and point.distance_to(taps[id].position) > rules.TAP_SLOP_PX:
 		taps.erase(id)
 
 func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
+	var token := revision
 	if id == look_id:
 		look_id = NONE
 		var tap: bool = not look_fire and now - down_at <= rules.TAP_MS and point.distance_to(down_position) <= rules.TAP_SLOP_PX
@@ -99,6 +111,8 @@ func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
 		tap_position = down_position
 		fire_arm = false
 		_set_look_fire(false)
+		if token != revision:
+			return
 	for movement: bool in [true, false]:
 		var stick := move_stick if movement else look_stick
 		if id == stick.id:
@@ -107,11 +121,15 @@ func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
 			if movement:
 				axis = Vector2.ZERO
 				command.emit("sprint", false)
+				if token != revision:
+					return
 	if taps.has(id):
 		var tap: Dictionary = taps[id]
 		taps.erase(id)
 		if not cancelled and not blocked and now - float(tap.at) <= rules.TAP_MS and point.distance_to(tap.position) <= rules.TAP_SLOP_PX:
 			command.emit(tap.action, true)
+			if token != revision:
+				return
 	if held.has(id):
 		var action: String = held[id]
 		held.erase(id)
@@ -119,10 +137,15 @@ func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
 			command.emit(action, false)
 
 func tick(delta: float, now: float) -> void:
+	var token := revision
 	if look_fire and blocked:
 		_set_look_fire(false)
+		if token != revision:
+			return
 	if fire_arm and not look_fire and look_id != NONE and now - down_at >= rules.TAP_FIRE_MS:
 		_set_look_fire(true)
+		if token != revision:
+			return
 	for id: int in taps.keys():
 		if now - float(taps[id].at) > rules.TAP_MS:
 			taps.erase(id)
@@ -138,8 +161,9 @@ func _set_look_fire(on: bool) -> void:
 	look_fire = on
 	if not on and "fire" in held.values():
 		return
+	var token := revision
 	command.emit("fire", on)
-	if on:
+	if on and token == revision and look_fire and not blocked:
 		haptic.emit(6)
 
 func set_blocked(on: bool) -> void:
@@ -150,15 +174,23 @@ func set_blocked(on: bool) -> void:
 		reset()
 
 func reset() -> void:
+	revision += 1
+	var actions := held.values()
+	var release_look := look_fire and not "fire" in actions
+	# Seal old ownership before release callbacks can reset or admit new pointers.
 	axis = Vector2.ZERO
 	look_id = NONE
-	_set_look_fire(false)
+	look_fire = false
 	fire_arm = false
 	tap_at = 0
 	for stick: Dictionary in [move_stick, look_stick]:
 		stick.id = NONE
 		stick.vector = Vector2.ZERO
-	for action: String in held.values():
-		command.emit(action, false)
 	held.clear()
 	taps.clear()
+	if release_look:
+		command.emit("fire", false)
+	for action: String in actions:
+		if action in held.values() or action == "fire" and look_fire:
+			continue
+		command.emit(action, false)

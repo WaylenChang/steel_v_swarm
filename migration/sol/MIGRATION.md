@@ -458,6 +458,18 @@ player's position when pausing/resuming.
   screen-axis sensor data or fabricate an identity pose from missing sensors.
   Physical hardware, hybrid-device/DPI detection and mobile exports remain open;
   synthetic decision fixtures cannot certify them.
+  Native gyro owners configure once and retire terminally on tree exit. Stop the
+  retained sensor state, disconnect its look/failure and preference subscriptions,
+  and reject queued or late commands. Preserve the stopped state for existing
+  viewport basis-reset consumers; release the borrowed preference owner. A status
+  or look callback may retire the owner synchronously, so cancel subsequent
+  preference writes, watchdog work and sensor fallback. Fresh sensor starts reset
+  accumulated angles. `node tools/gyro_owner_capture.mjs` executes the original
+  Gyro constructor/start/stop/motion methods with event/timer transport probes;
+  real-driver `tests/gyro_retirement.tscn` checks those programs, retained-owner
+  cleanup, queued deletion, reattachment and callback interruption. These checks
+  do not certify real sensor delivery, native permission handling, hardware
+  orientation, hybrid/DPI behavior, complete input integration or mobile exports.
 - [ ] **S12 — View/scope/observer:** certify FPV/TPS/spectator camera state,
   source clipping/ring order, recoil composition, view-lock acquisition/cycling,
   previous-rendered projection, scope gradients/fog/blur/FOV easing and freeze/

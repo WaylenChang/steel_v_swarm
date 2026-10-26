@@ -145,6 +145,27 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   `tests/world_elevation_capture.test.mjs` and the elevation-helper fingerprint:
   every source query and complete Float32 grid must match the original terrain
   sampling loop. This does not qualify complete terrain or populated worlds.
+  Capture the original low-resolution imagery input with
+  `node tools/capture_world_imagery.mjs <bundle>` and qualify it separately with
+  `node tools/verify_world_imagery.mjs <bundle>`. Retain the original image entities,
+  raw pre-style RGBA, separately styled display RGBA, projection constants and
+  pixel-boundary probes. Source functions are extracted without executing unrelated
+  module initialization; this isolated gate does not waive full-world RNG gates.
+  Preserve transparent RGB, `validOnly`, null/undefined outcomes, source rounding,
+  complete tile coverage and single-member GZIP extents. Keep
+  `tests/world_imagery_*.test.mjs` with corruption, retirement and source-seam cases.
+  These archives do not qualify high-resolution road observations, codecs on other
+  platforms, native geography/classification, populated scenery or complete worlds.
+  **Opus handoff:** implement the original double geographic projection in
+  `scripts/source_world_geography.gd`, returning original latitude/longitude and
+  rounded pixel coordinates from scalar client-frame `(x,z)` and captured metadata.
+  Preserve operation order, radians, `Math.round`, bounds and nonfinite semantics;
+  do not pass inputs through Float32 vectors or sample the styled image. Acceptance:
+  exact `constantsLE`, `pointLE` and `projectionLE` words plus the raw-RGB/null/
+  undefined probes in `data/world_imagery/*.json`, including pixel edges and alpha
+  validity. Sol binds the accepted helper and raw pixel reader through
+  `scripts/world.gd`/`tools/import_worlds.gd` in a separate change; retain the current
+  imagery rejection until that complete contract is accepted.
 - [ ] **S4 — Animated scenery:** certify trains, articulated pivots, boundary
   facilities and waterfalls against source frame order, endpoints, parent frames,
   wind and capped/zero deltas. Finish wildlife, petals/leaves and aquatic

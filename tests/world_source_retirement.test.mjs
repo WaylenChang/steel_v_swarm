@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gunzipSync} from 'node:zlib';
 import {WorldSourceWriter} from '../tools/world_source_writer.mjs';
+import {encodeSourceNumericPart} from '../tools/source_numeric_transfer.mjs';
 
 const artifacts=fileURLToPath(new URL('../artifacts/sol/world-source-retirement-tests/',import.meta.url));
 function barrier(){let release;const promise=new Promise(resolve=>{release=resolve;});return {promise,release};}
@@ -17,7 +18,7 @@ async function intercept(name,replacement,body) {
 }
 function watched(promise){let done=false;promise.then(()=>{done=true;},()=>{done=true;});return ()=>done;}
 
-test('retirement drains a late numeric open before releasing its owned temporary file',{timeout:5000},async()=>{
+for(const binary of [false,true])test('retirement drains a late numeric open before releasing its owned temporary file (binary='+binary+')',{timeout:5000},async()=>{
   const root=await directory(),writer=new WorldSourceWriter(root),entered=barrier(),release=barrier(),handles=[];
   await writer.begin(0,{positions:{$sourceArray:0}},[2]);
   const foreign=join(root,'buffers/foreign.partial');await writeFile(foreign,'foreign owner');
@@ -27,7 +28,7 @@ test('retirement drains a late numeric open before releasing its owned temporary
     }
     return original(...args);
   },async()=>{
-    const operation=writer.part(0,0,[1,2]);operation.catch(()=>{});
+    const operation=binary?writer.partEncoded(0,0,encodeSourceNumericPart([1,2])):writer.part(0,0,[1,2]);operation.catch(()=>{});
     let retirement;
     try {
       await entered.promise;retirement=writer.dispose();const done=watched(retirement);
@@ -45,12 +46,12 @@ test('retirement drains a late numeric open before releasing its owned temporary
   });
 });
 
-test('concurrent retirement waits for admitted numeric writes and performs one cleanup',{timeout:5000},async()=>{
+for(const binary of [false,true])test('concurrent retirement waits for admitted numeric writes and performs one cleanup (binary='+binary+')',{timeout:5000},async()=>{
   const root=await directory(),writer=new WorldSourceWriter(root),entered=barrier(),release=barrier();
   await writer.begin(0,{positions:{$sourceArray:0}},[2]);await writer.part(0,0,[1]);
   const handle=writer.pending.parts[0].handle,original=handle.write.bind(handle);
   handle.write=async(...args)=>{entered.release();await release.promise;return original(...args);};
-  const operation=writer.part(0,1,[2]);operation.catch(()=>{});
+  const operation=binary?writer.partEncoded(0,1,encodeSourceNumericPart([2])):writer.part(0,1,[2]);operation.catch(()=>{});
   let first,second;
   try {
     await entered.promise;first=writer.dispose();second=writer.dispose();const done=watched(first);

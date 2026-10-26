@@ -75,6 +75,15 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   belongs in serialization fingerprints. Keep `tests/source_mesh_transfer.test.mjs`
   and the original Chromium sphere probes in `tools/source_json_capture.mjs`;
   complete chunk bytes must equal the prior separate-field wire contract.
+  Transfer large numeric parts as canonical base64 float64-LE frames through
+  `tools/source_numeric_transfer.mjs`; retain JSON for captured metadata. Validate
+  rank, row widths, exact byte extent, finite words and canonical base64 before
+  writing. JSON and binary parts share the same ordered writer, hashing,
+  publication and retirement path. Keep `tests/world_binary_transfer.test.mjs`,
+  `tests/source_numeric_transfer.test.mjs` and both retirement-entry variants;
+  raw/GZIP manifests and complete chunks must match the prior JSON-part output.
+  Original Chromium sphere probes exercise the binary writer and native reload;
+  that success never discharges the separate inline-number precision gate.
   `node tools/source_json_capture.mjs` records original Chromium sphere-buffer bits;
   real-driver `tests/source_json.tscn` checks JSON, sidecar and native resource
   roundtrips. Retain its strict inline-number failures until the shared native

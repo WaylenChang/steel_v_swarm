@@ -8,6 +8,7 @@ import {pipeline} from 'node:stream/promises';
 import {writeSourceFile,publishSourceFile} from './fixture_json.mjs';
 import {stringifySourceJson} from './source_json.mjs';
 import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
+import {decodeSourceNumericPart} from './source_numeric_transfer.mjs';
 
 export async function bufferDigest(path) {
   const hash=createHash('sha256');
@@ -44,6 +45,7 @@ export class WorldSourceWriter {
   }
   begin(index,header,lengths){return this._run(()=>this._begin(index,header,lengths));}
   part(index,offset,values){return this._run(()=>this._part(index,offset,values));}
+  partEncoded(index,offset,value){return this._run(()=>this._partEncoded(index,offset,value));}
   end(index){return this._run(()=>this._end(index));}
   append(mesh){return this._run(()=>this._append(mesh));}
   finish(){return this._run(()=>this._finish());}
@@ -58,19 +60,32 @@ export class WorldSourceWriter {
     if(!part||!Array.isArray(values)||!values.length||offset!==part.rows||offset+values.length>part.length)
       throw new Error('Out-of-order source numeric part');
     const width=Array.isArray(values[0])?values[0].length:1;
-    if(width<=0||(part.width&&width!==part.width))throw new Error('Inconsistent source numeric dimensions');
+    if(width<=0)throw new Error('Inconsistent source numeric dimensions');
     const flat=width===1&&!Array.isArray(values[0])?values:values.flat();
-    if(flat.length!==values.length*width||flat.some(value=>typeof value!=='number'||!Number.isFinite(value))
+    if(flat.length!==values.length*width
       ||(Array.isArray(values[0])&&values.some(row=>!Array.isArray(row)||row.length!==width)))
       throw new Error('Unsupported nonnumeric source mesh array');
+    for(let index=0;index<flat.length;index++)
+      if(typeof flat[index]!=='number'||!Number.isFinite(flat[index]))throw new Error('Unsupported nonnumeric source mesh array');
+    const numbers=new Float64Array(flat),bytes=Buffer.from(numbers.buffer,numbers.byteOffset,numbers.byteLength);
+    await this._writePart(index,offset,values.length,width,Array.isArray(values[0]),bytes);
+  }
+  async _partEncoded(index,offset,value) {
+    if(!this.pending?.parts[index]||offset!==this.pending.parts[index].rows)throw new Error('Out-of-order source numeric part');
+    const {bytes,rows,width,matrix}=decodeSourceNumericPart(value);
+    await this._writePart(index,offset,rows,width,matrix,bytes);
+  }
+  async _writePart(index,offset,rows,width,matrix,bytes) {
+    const part=this.pending?.parts[index];
+    if(!part||offset!==part.rows||offset+rows>part.length)throw new Error('Out-of-order source numeric part');
+    if(part.width&&width!==part.width)throw new Error('Inconsistent source numeric dimensions');
+    if(part.width&&part.matrix!==matrix)throw new Error('Source numeric array rank changed');
     if(!part.handle) {
-      part.width=width;part.matrix=Array.isArray(values[0]);
+      part.width=width;part.matrix=matrix;
       part.temporary=join(this.directory,'buffers',`capture-${process.pid}-${randomUUID()}-${this.count}-${index}.partial`);
       part.handle=await open(part.temporary,'wx');
       this.temporary.add(part.temporary);
     }
-    if(part.matrix!==Array.isArray(values[0]))throw new Error('Source numeric array rank changed');
-    const numbers=new Float64Array(flat),bytes=Buffer.from(numbers.buffer,numbers.byteOffset,numbers.byteLength);
     part.hash.update(bytes);
     let written=0;
     while(written<bytes.length) {
@@ -78,7 +93,7 @@ export class WorldSourceWriter {
       if(!result.bytesWritten)throw new Error('Source numeric write made no progress');
       written+=result.bytesWritten;
     }
-    part.rows+=values.length;
+    part.rows+=rows;
   }
   async _end(index) {
     const pending=this.pending;

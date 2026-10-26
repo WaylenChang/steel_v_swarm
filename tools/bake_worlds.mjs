@@ -3,6 +3,7 @@ import {writeFixtureJson} from './fixture_json.mjs';
 import {WorldSourceWriter} from './world_source_writer.mjs';
 import {stringifySourceJson,prepareSourceJson} from './source_json.mjs';
 import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
+import {encodeSourceNumericPart,decodeSourceNumericPart} from './source_numeric_transfer.mjs';
 import {selectWorldBundles} from './world_selection.mjs';
 import { readFileSync } from 'node:fs';
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
@@ -53,7 +54,7 @@ for (const name of ['public/index.html', 'server/sim.js', 'tools/elevation_fixtu
 for (const name of (await readdir(join(source,'out/forest_review'))).filter(name=>name.endsWith('.js')).sort())
   sourceInputs['out/forest_review/'+name] = sha256(await readFile(join(source,'out/forest_review',name)));
 const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString() + '\n' + instrumentWorldTextCapture.toString() + '\n' + captureWorldTextMesh.toString());
-const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+WorldSourceWriter.toString());
+const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+encodeSourceNumericPart.toString()+'\n'+decodeSourceNumericPart.toString()+'\n'+WorldSourceWriter.toString());
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const campaignMaps = JSON.parse(await readFile(join(root, 'data/campaign.json'), 'utf8')).maps;
@@ -184,6 +185,7 @@ try {
   await page.addInitScript({content:'globalThis.__sourceWorldTextCapture = ('+captureWorldTextMesh.toString()+');'});
   await page.addInitScript({content:'globalThis.__sourceJsonStringify = ('+stringifySourceJson.toString()+');'});
   await page.addInitScript({content:'globalThis.__sourceMeshTransfer = ('+sourceMeshTransfer.toString()+');'});
+  await page.addInitScript({content:'globalThis.__sourceNumericPart = ('+encodeSourceNumericPart.toString()+');'});
   let worldSections = Object.create(null);
   await page.exposeFunction('__sourceWorldMesh', async (operation,index,offset,json) => {
     if(!Number.isInteger(index)||index<0||!Number.isInteger(offset)||offset<0||typeof json!=='string')
@@ -194,6 +196,8 @@ try {
       await worldMeshWriter.begin(index,captured.header,captured.lengths);
     } else if(operation==='array') {
       await worldMeshWriter.part(index,offset,JSON.parse(json));
+    } else if(operation==='array-f64') {
+      await worldMeshWriter.partEncoded(index,offset,JSON.parse(json));
     } else if(operation==='end') {
       if(offset!==0)throw new Error('Invalid original world mesh boundary');
       await worldMeshWriter.end(index);
@@ -404,7 +408,7 @@ try {
             for(let id=0;id<arrays.length;id++){
               const values=arrays[id],size=typeof values[0]==='number'?65536:64;
               for(let offset=0;offset<values.length;offset+=size)
-                await window.__sourceWorldMesh('array',id,offset,globalThis.__sourceJsonStringify(values.slice(offset,offset+size)));
+                await window.__sourceWorldMesh('array-f64',id,offset,JSON.stringify(globalThis.__sourceNumericPart(values.slice(offset,offset+size))));
             }
             await window.__sourceWorldMesh('end',meshCount,0,'');
             meshCount++;

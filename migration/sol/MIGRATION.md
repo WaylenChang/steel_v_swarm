@@ -89,6 +89,14 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   member validation. Reject second members, garbage tails and expanded output
   beyond the declared extent without changing the source files. Keep valid
   high-ratio/multi-window and numeric/chunk tail cases in `tests/world_storage.tscn`.
+  The offline gate likewise requires the writer's single, unflagged GZIP member:
+  stream raw DEFLATE, require exact compressed-input consumption, and validate
+  native CRC32 plus ISIZE without retaining complete numeric buffers. Reject
+  empty additional members, zero padding, unsupported header flags and truncated
+  input as well as checksum/extent failures. Keep these numeric/chunk cases and
+  high-ratio/multi-window probes in `tests/world_source.test.mjs`; offline Node
+  must provide native CRC32 support. This storage contract does not qualify
+  native source-number decoding, materials or complete seasonal worlds.
   Browser transfer, inline mesh chunks and final metadata publication must retain
   signed zero. `tools/source_json.mjs` uses native `JSON.rawJSON` and a copy-on-write
   adapter for the shared streaming publisher; reject unavailable native support

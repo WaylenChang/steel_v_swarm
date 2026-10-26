@@ -23,6 +23,11 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   cancellation and atomic publication. Bound peak memory through traversal and
   ResourceSaver publication; finish resource reload, complete rendered appearance
   and populated lifecycle checks on the full set, including actual tunnel cases.
+  Use `taroko_1_winter` as an original populated tunnel input: retain all 198
+  captured tunnel records, their geometry and source metadata through native
+  packing/reload before rendered and traversal integration acceptance. Its source
+  storage/provenance gates do not qualify native numbers, material fidelity,
+  layered-deck references, tunnel pixels or full seasonal-world availability.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
   Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference
@@ -72,8 +77,8 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   byte-hash verification and a fresh native load; corrupt existing includes must
   remain untouched. `tests/world_shader_publication.tscn` checks dependency reload
   and retained-reader isolation, not marine shader pixels or complete worlds.
-  Existing Berlin seasonal source captures are partial inputs, not world-set
-  certification. Refresh stale generator fingerprints before source reuse.
+  Existing Berlin and Taroko seasonal source captures are partial inputs, not
+  world-set certification. Refresh stale generator fingerprints before source reuse.
   Stop browser producers before disposing an interrupted mesh writer. Close its
   live numeric handles and remove only its successfully opened raw/GZIP temporary
   paths; retain published content-addressed sidecars and rejected existing files.

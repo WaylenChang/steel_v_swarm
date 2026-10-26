@@ -21,6 +21,8 @@ var oscillator_phase := 0.0
 var input_ahead := 0
 var late_control_frames := 0
 var startup_frames := 0
+var startup_budget_frames := 0
+var startup_history_frames := 0
 var lfo_waveform := PackedFloat32Array()
 var lfo_frequency := 0.0
 var lfo_scaled := false
@@ -68,11 +70,14 @@ func _commands() -> bool:
 		return false
 	for command: Dictionary in pending:
 		var wanted := maxi(0, ceili((float(command.time) - origin) * sample_rate))
-		var editable := maxi(controls.frame, input_controls.frame)
+		# Only rate changes affect samples already generated into the input ring.
+		# Gain, pan and wetness remain editable until the output consumes them.
+		var input_command: bool = has_oscillator_input and command.key == "rate"
+		var editable := maxi(controls.frame, input_controls.frame) if input_command else controls.frame
 		late_control_frames = maxi(late_control_frames, editable - wanted)
 		var at_frame := maxi(wanted, editable)
 		controls.queue(command.key, command.target, command.tau, at_frame)
-		if has_oscillator_input:
+		if input_command:
 			input_controls.queue(command.key, command.target, command.tau, at_frame)
 	return true
 
@@ -104,10 +109,17 @@ func prepare() -> bool:
 	return _commands() and prime_inputs()
 
 func prime_output(frames: int) -> bool:
-	startup_frames = frames
+	var history := 0
+	for input: Dictionary in inputs:
+		history = maxi(history, int(input.get("startup_discard", 0)))
+	# Removing input history must not also spend the two-period service reserve.
+	# Restore whole native refills so an off-block cursor retains that reserve.
+	startup_budget_frames = frames
+	startup_history_frames = ceili(float(history) / AudioGeneratorFeed.REFILL_FRAMES) * AudioGeneratorFeed.REFILL_FRAMES
+	startup_frames = frames + startup_history_frames
 	input_ahead = maxi(input_ahead, frames)
 	var silence := PackedVector2Array()
-	silence.resize(frames)
+	silence.resize(startup_frames)
 	silence.fill(Vector2.ZERO)
 	return output.push_buffer(silence)
 
@@ -201,6 +213,7 @@ func _publish() -> void:
 	mutex.lock()
 	diagnostics = {"frames": controls.frame, "input_frames": input_controls.frame,
 		"startup_frames": startup_frames, "late_control_frames": late_control_frames,
+		"startup_budget_frames": startup_budget_frames, "startup_history_frames": startup_history_frames,
 		"lfo_phase": lfo_phase, "ready": announced, "output_skips": output.get_skips(),
 		"gain": controls.values[0], "rate": controls.values[2], "wet": controls.values[3],
 		"output_position": output.get_playback_position(), "output_available": output.get_frames_available(),

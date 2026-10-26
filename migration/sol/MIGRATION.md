@@ -558,15 +558,26 @@ The wrapper runs capture, source references and native packing sequentially.
   `data/audio_move_automation/`; native cases submit those future commands through
   the real mixer queue and require zero late control frames. Bound dynamic
   numerical error with the source target gain maximum and the same independent
-  oscillator/filter/PCM limits. These prequeued programs do not certify realtime
-  frame delivery, changing playback rates/filter cutoffs, device suspension or
-  complete audible delivery.
+  oscillator/filter/PCM limits. With `--max-fps 240` and native user arguments
+  `-- --automation --live`, deliver output controls during playback after the
+  engine's input samples have already been generated. Preserve source timing
+  while the output frame is still editable; only rate commands share the input
+  generation frontier. `tests/audio_move_command_frontier.tscn` covers these
+  source targets, genuinely late output commands and pending-command retirement.
+  Keep the live native delivery cursors in its artifact. These scoped programs
+  do not certify game-frame event delivery, changing playback rates/filter
+  cutoffs, device suspension or complete audible delivery.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)
   and [generator startup](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/effects/audio_stream_generator.cpp)
-  on engine upgrades. Keep the original two-period output budget; do not mask
-  branch phase errors with more buffering or output-dependent error bounds.
+  on engine upgrades. Replace stripped input history with a separately reported
+  output prefix rounded to native refill blocks. Preserve the original
+  two-period service reserve and input-ahead budget; otherwise stripping history
+  can consume the final refill even without a scheduling delay.
+  `tests/audio_generator_buffers.tscn` reproduces this loss at an off-block
+  cursor and checks the replacement independently of driver timing. Do not mask
+  branch phase errors with arbitrary buffering or output-dependent error bounds.
   Reuse panning coefficients only for an exactly unchanged double control value;
   retain per-sample evaluation during automation and the existing buffer latency.
   Movement owners and voices retire permanently on tree exit; reattachment must

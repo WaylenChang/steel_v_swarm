@@ -10,6 +10,7 @@ var reference: Dictionary
 var buses: AudioBuses
 var sink: StringName
 var automation := false
+var live := false
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -23,6 +24,9 @@ func _check(value: bool, message: String) -> bool:
 func _source() -> bool:
 	var rate := int(AudioServer.get_mix_rate())
 	automation = OS.get_cmdline_user_args().has("--automation")
+	live = OS.get_cmdline_user_args().has("--live")
+	if not _check(not live or automation, "Live command delivery requires an original automation corpus"):
+		return false
 	var directory := "audio_move_automation" if automation else "audio_move_waveforms"
 	var scope := "original-movement-automation-waveforms" if automation else "original-movement-static-waveforms"
 	reference = Content.read_json("res://data/%s/%d.json" % [directory, rate])
@@ -168,20 +172,43 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	gen_trace.clear_buffer()
 	AudioServer.unlock()
 	_check(voice.activate() == OK, "Activate aligned movement inputs")
+	var pending: Array[Dictionary] = []
+	var deliveries: Array[Dictionary] = []
 	for command: Dictionary in fixture.get("commands", []):
-		voice.mixer.queue(command.key, command.target, command.tau, voice.mixer.origin + float(command.time))
+		if live:
+			if command.key == "rate":
+				_check(command.target == fixture.rate, "Live output-control corpus leaves the input rate unchanged")
+			else:
+				pending.append(command)
+		else:
+			voice.mixer.queue(command.key, command.target, command.tau, voice.mixer.origin + float(command.time))
 	worker.add(voice.mixer)
 	var deadline := Time.get_ticks_msec() + 1400
 	while Time.get_ticks_msec() < deadline:
+		var progress := voice.mixer.snapshot()
+		while not pending.is_empty():
+			var command: Dictionary = pending[0]
+			var wanted := ceili(float(command.time) * float(reference.sampleRate))
+			var frame := int(progress.get("frames", 0))
+			# A published output cursor can lag the batch currently being mixed.
+			# Enter the engine's observable input/output window, not that batch.
+			if frame == 0 or (fixture.category == "engine" and wanted >= int(progress.get("input_frames", 0))):
+				break
+			deliveries.append({"key": command.key, "wanted": wanted, "outputFrame": frame, "inputFrame": progress.get("input_frames", 0)})
+			voice.mixer.queue(command.key, command.target, command.tau, voice.mixer.origin + float(command.time))
+			pending.pop_front()
 		var feed := generator_marker.stream as AudioGeneratorFeed
 		var silence := PackedVector2Array()
 		silence.resize(feed.playback.get_frames_available())
 		silence.fill(Vector2.ZERO)
 		feed.playback.push_buffer(silence)
-		await get_tree().create_timer(.01, true, false, true).timeout
+		await get_tree().create_timer(.001 if live else .01, true, false, true).timeout
 	worker.stop()
 	thread.wait_to_finish()
 	var snapshot := voice.mixer.snapshot()
+	_check(pending.is_empty(), "Deliver every original output command during native playback")
+	if live and fixture.category == "engine":
+		_check(deliveries.any(func(row: Dictionary): return row.wanted >= row.outputFrame and row.wanted < row.inputFrame), "Live engine controls enter after their input samples are already generated")
 	var frames := capture.get_buffer(capture.get_frames_available())
 	var wav_start := _trace(wav_trace.get_buffer(wav_trace.get_frames_available()))
 	var gen_start := _trace(gen_trace.get_buffer(gen_trace.get_frames_available()))
@@ -202,7 +229,9 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 					worst = index
 		var result := {"category": fixture.category, "wet": fixture.wet, "frames": fixture.frames,
 			"maximumError": maximum, "tolerance": _bound(fixture, bank), "worst": worst,
-			"wavStart": wav_start, "generatorStart": gen_start, "start": start}
+			"wavStart": wav_start, "generatorStart": gen_start, "start": start, "deliveries": deliveries,
+			"lateControlFrames": snapshot.get("late_control_frames", -1),
+			"startupBudgetFrames": voice.mixer.startup_budget_frames, "startupHistoryFrames": voice.mixer.startup_history_frames}
 		results.append(result)
 		_check(maximum <= float(result.tolerance), "Native complete movement waveform: " + JSON.stringify(result))
 	voice.free()
@@ -243,9 +272,9 @@ func _run() -> void:
 		_check(not str(AudioServer.get_bus_name(index)).begins_with(prefix), "Movement routes drain after native waveform capture")
 	AudioServer.remove_bus(AudioServer.get_bus_index(sink))
 	DirAccess.make_dir_recursive_absolute("res://artifacts/sol")
-	var label := "audio-move-automation-native" if automation else "audio-move-waveforms-native"
+	var label := "audio-move-automation-live-native" if live else ("audio-move-automation-native" if automation else "audio-move-waveforms-native")
 	var file := FileAccess.open("res://artifacts/sol/" + label + ".json", FileAccess.WRITE)
 	file.store_string(JSON.stringify({"sampleRate": reference.sampleRate, "cases": results, "failures": failures}, "\t"))
 	file.close()
-	print("AUDIO_MOVE_AUTOMATION" if automation else "AUDIO_MOVE_WAVEFORMS", " cases=", results.size(), " failures=", failures.size())
+	print("AUDIO_MOVE_AUTOMATION_LIVE" if live else ("AUDIO_MOVE_AUTOMATION" if automation else "AUDIO_MOVE_WAVEFORMS"), " cases=", results.size(), " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)

@@ -23,8 +23,8 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   cancellation and atomic publication. Bound peak memory through traversal and
   ResourceSaver publication; finish resource reload, complete rendered appearance
   and populated lifecycle checks on the full set, including actual tunnel cases.
-  Use all four `taroko_1_*` seasonal captures as original populated tunnel inputs:
-  retain each world's 198 captured tunnel records, their geometry and source
+  Use all four seasons of both `taroko_1_*` and `taroko_swap_1_*` as original
+  populated tunnel inputs: retain each world's 198 captured tunnel records, their geometry and source
   metadata through native packing/reload before rendered and traversal integration
   acceptance. Their source
   storage/provenance gates do not qualify native numbers, material fidelity,

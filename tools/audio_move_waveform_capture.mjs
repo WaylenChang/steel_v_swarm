@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-export async function captureAudioMoveWaveforms(page,movement,original) {
+export async function captureAudioMoveWaveforms(page,movement,original,{automation=false}={}) {
+  assert.equal(typeof automation,'boolean');
   const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
   assert.equal(movement.scope,'original-movement-shared-sfx-rate');
   assert.equal(hash(original.replace(/\r\n?/g,'\n')),movement.source.audioSha256);
@@ -13,7 +14,7 @@ export async function captureAudioMoveWaveforms(page,movement,original) {
   assert.equal(hash(raw),movement.noiseSha256);
   const cases=Object.keys(movement.graphs).flatMap(category=>(category==='stomp'?[0,.65,1]:[0])
     .map(wet=>({category,gain:.2,pan:.35,rate:1,wet})));
-  return await page.evaluate(async({movement,original,cases})=>{
+  return await page.evaluate(async({movement,original,cases,automation})=>{
     const rate=movement.sampleRate,frames=rate;
     const GameAudio=new Function(original.replace(/^import .*$/gm,'').replace(/^export /gm,'')+';return GameAudio;')();
     const encode=values=>{
@@ -30,14 +31,38 @@ export async function captureAudioMoveWaveforms(page,movement,original) {
     for(const fixture of cases) {
       const context=new OfflineAudioContext(2,frames,rate),buffer=context.createBuffer(1,noise.length,rate);
       buffer.copyToChannel(noise,0);
-      const audio=Object.assign(Object.create(GameAudio.prototype),{_ctx:context,_noise:buffer,
+      let now=0;
+      const clock={get currentTime(){return now;}};
+      for(const key of ['createGain','createStereoPanner','createOscillator','createBiquadFilter','createBufferSource'])clock[key]=context[key].bind(context);
+      const audio=Object.assign(Object.create(GameAudio.prototype),{_ctx:clock,_noise:buffer,
         _sfx:context.destination,_dead:false,lowPower:false,_move:{}});
       const voice=audio._moveVoice(fixture.category);
-      // Static source graph states isolate DSP from the separately tested automation clock.
+      // Begin both static and automated programs at the same source graph state.
       voice.g.gain.value=fixture.gain;voice.sp.pan.value=fixture.pan;
       if(voice.dry){voice.dry.gain.value=1-fixture.wet;voice.wet.gain.value=fixture.wet;}
+      const commands=[];
+      if(automation) {
+        const record=(parameter,key,scale=1)=>{
+          const schedule=parameter.setTargetAtTime.bind(parameter);
+          parameter.setTargetAtTime=(target,time,tau)=>{
+            commands.push({key,target:target/scale,time,tau});
+            return schedule(target,time,tau);
+          };
+        };
+        record(voice.g.gain,'gain');record(voice.sp.pan,'pan');
+        for(const binding of voice.rate)record(binding.p,'rate',binding.base);
+        if(voice.wet){record(voice.wet.gain,'wet');record(voice.dry.gain,'dry');}
+        for(const action of [{time:.125,gain:.8,pan:-.7,wet:.9},{time:.375,gain:.4,pan:.9,wet:.1},{time:.625,gain:.9,pan:0,wet:.65}]) {
+          now=action.time;
+          audio.setMove(fixture.category,action.gain,action.pan,1,action.wet);
+        }
+        now=.875;audio._stopMove();
+        const dry=commands.filter(command=>command.key==='dry'),wet=commands.filter(command=>command.key==='wet');
+        if(dry.length!==wet.length||dry.some((command,index)=>command.time!==wet[index].time||command.tau!==wet[index].tau||Math.abs(command.target+wet[index].target-1)>Number.EPSILON))throw new Error('Original dry/wet targets are not complementary');
+      }
       const rendered=await context.startRendering();
-      waveforms.push({...fixture,frames,channels:[0,1].map(channel=>encode(rendered.getChannelData(channel)))});
+      waveforms.push({...fixture,...(automation?{commands:commands.filter(command=>command.key!=='dry')}:{}),frames,
+        channels:[0,1].map(channel=>encode(rendered.getChannelData(channel)))});
     }
     for(const captured of movement.oscillators) {
       const context=new OfflineAudioContext(1,frames,rate),oscillator=context.createOscillator();
@@ -54,5 +79,5 @@ export async function captureAudioMoveWaveforms(page,movement,original) {
       periodErrors[captured.category+':'+captured.node]=maximum;
     }
     return {sampleRate:rate,frames,waveforms,periodErrors,noisePeak:noise.reduce((peak,value)=>Math.max(peak,Math.abs(value)),0)};
-  },{movement,original,cases});
+  },{movement,original,cases,automation});
 }

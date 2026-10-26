@@ -9,6 +9,7 @@ var movement: Dictionary
 var reference: Dictionary
 var buses: AudioBuses
 var sink: StringName
+var automation := false
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -21,8 +22,11 @@ func _check(value: bool, message: String) -> bool:
 
 func _source() -> bool:
 	var rate := int(AudioServer.get_mix_rate())
-	reference = Content.read_json("res://data/audio_move_waveforms/%d.json" % rate)
-	if not _check(reference.get("scope") == "original-movement-static-waveforms" and reference.get("sampleRate") == rate, "Original movement waveform archive matches the active device"):
+	automation = OS.get_cmdline_user_args().has("--automation")
+	var directory := "audio_move_automation" if automation else "audio_move_waveforms"
+	var scope := "original-movement-automation-waveforms" if automation else "original-movement-static-waveforms"
+	reference = Content.read_json("res://data/%s/%d.json" % [directory, rate])
+	if not _check(reference.get("scope") == scope and reference.get("sampleRate") == rate, "Original movement waveform archive matches the active device"):
 		return false
 	for entry: Dictionary in [reference.source.movementProfile, reference.source.contextProfile]:
 		if not _check(FileAccess.get_sha256("res://" + str(entry.path)) == entry.sha256, "Movement waveform parent archive remains exact: " + str(entry.path)):
@@ -41,6 +45,14 @@ func _source() -> bool:
 		keys.append("%s:%.2f" % [fixture.category, fixture.wet])
 		if not _check(fixture.frames == rate and fixture.channels.size() == 2, "Complete original stereo movement frames"):
 			return false
+		if automation:
+			var counts := {"gain": 0, "pan": 0, "wet": 0, "rate": 0}
+			for command: Dictionary in fixture.commands:
+				if not _check(counts.has(command.key) and (command.key != "rate" or command.target == 1), "Original movement commands stay within the accepted automation scope"):
+					return false
+				counts[command.key] += 1
+			if not _check(counts.gain == 4 and counts.pan == 3 and counts.wet == (3 if fixture.category == "stomp" else 0) and counts.rate > 0, "Complete original gain/pan/wet/stop command corpus"):
+				return false
 	keys.sort()
 	return _check(movement.graphs == Content.balance.audio.moveGraphs and keys == ["engine:0.00", "rotor:0.00", "stomp:0.00", "stomp:0.65", "stomp:1.00", "wingflap:0.00"], "Complete original movement graph corpus")
 
@@ -100,6 +112,10 @@ func _bound(fixture: Dictionary, bank: NativeAudioMoveBank) -> float:
 	for node: int in plan.lfos:
 		modulation_error = float(reference.periodErrors[fixture.category + ":" + str(node)])
 	var total := 0.0
+	var maximum_gain := float(fixture.gain)
+	for command: Dictionary in fixture.get("commands", []):
+		if command.key == "gain":
+			maximum_gain = maxf(maximum_gain, float(command.target))
 	for branch: Dictionary in plan.branches:
 		var l1 := 1.0
 		for filter: Dictionary in branch.filters:
@@ -111,12 +127,13 @@ func _bound(fixture: Dictionary, bank: NativeAudioMoveBank) -> float:
 			var peak := absf(float(branch.modulation.offset)) + absf(float(branch.modulation.depth))
 			error = error * peak + input_peak * l1 * absf(float(branch.modulation.depth)) * modulation_error
 		var weight := 1.0
-		if branch.weight == "dry":
+		if branch.weight == "dry" and not automation:
 			weight = 1.0 - float(fixture.wet)
-		elif branch.weight == "wet":
+		elif branch.weight == "wet" and not automation:
 			weight = float(fixture.wet)
 		total += (error + .000003) * absf(float(branch.gain)) * weight
-	return total * float(fixture.gain) * maxf(AudioPan.mono_coefficients(float(fixture.pan)).x, AudioPan.mono_coefficients(float(fixture.pan)).y)
+	var panning := 1.0 if automation else maxf(AudioPan.mono_coefficients(float(fixture.pan)).x, AudioPan.mono_coefficients(float(fixture.pan)).y)
+	return total * maximum_gain * panning
 
 func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	var capture := AudioEffectCapture.new()
@@ -151,6 +168,8 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	gen_trace.clear_buffer()
 	AudioServer.unlock()
 	_check(voice.activate() == OK, "Activate aligned movement inputs")
+	for command: Dictionary in fixture.get("commands", []):
+		voice.mixer.queue(command.key, command.target, command.tau, voice.mixer.origin + float(command.time))
 	worker.add(voice.mixer)
 	var deadline := Time.get_ticks_msec() + 1400
 	while Time.get_ticks_msec() < deadline:
@@ -167,6 +186,7 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	var wav_start := _trace(wav_trace.get_buffer(wav_trace.get_frames_available()))
 	var gen_start := _trace(gen_trace.get_buffer(gen_trace.get_frames_available()))
 	_check(native_failures.is_empty() and int(snapshot.get("output_skips", -1)) == 0, "Movement capture has no native buffer failures: " + JSON.stringify({"category": fixture.category, "snapshot": snapshot, "errors": native_failures}))
+	_check(int(snapshot.get("late_control_frames", -1)) == 0, "Original movement commands reach their scheduled frames")
 	_check(wav_start >= 0 and gen_start - wav_start == AudioGeneratorFeed.input_latency_frames(true) - AudioGeneratorFeed.input_latency_frames(false), "Independent native traces verify the engine input latency difference")
 	var start := gen_start + voice.mixer.startup_frames
 	if _check(start >= 0 and start + int(fixture.frames) <= frames.size(), "Independent output tracer covers every original source frame"):
@@ -223,8 +243,9 @@ func _run() -> void:
 		_check(not str(AudioServer.get_bus_name(index)).begins_with(prefix), "Movement routes drain after native waveform capture")
 	AudioServer.remove_bus(AudioServer.get_bus_index(sink))
 	DirAccess.make_dir_recursive_absolute("res://artifacts/sol")
-	var file := FileAccess.open("res://artifacts/sol/audio-move-waveforms-native.json", FileAccess.WRITE)
+	var label := "audio-move-automation-native" if automation else "audio-move-waveforms-native"
+	var file := FileAccess.open("res://artifacts/sol/" + label + ".json", FileAccess.WRITE)
 	file.store_string(JSON.stringify({"sampleRate": reference.sampleRate, "cases": results, "failures": failures}, "\t"))
 	file.close()
-	print("AUDIO_MOVE_WAVEFORMS cases=", results.size(), " failures=", failures.size())
+	print("AUDIO_MOVE_AUTOMATION" if automation else "AUDIO_MOVE_WAVEFORMS", " cases=", results.size(), " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)

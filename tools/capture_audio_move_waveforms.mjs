@@ -7,7 +7,8 @@ import {captureAudioMoveWaveforms} from './audio_move_waveform_capture.mjs';
 import {writeFixtureJson} from './fixture_json.mjs';
 
 const [argument,...extra]=process.argv.slice(2),rate=Number(argument);
-if(extra.length||!Number.isSafeInteger(rate)||rate<8000||rate>384000||String(rate)!==argument)
+const automation=extra.length===1&&extra[0]==='--automation';
+if((extra.length&&!automation)||!Number.isSafeInteger(rate)||rate<8000||rate>384000||String(rate)!==argument)
   throw new Error('Select one original movement waveform rate from 8000 to 384000');
 const root=fileURLToPath(new URL('..',import.meta.url));
 const source=resolve(process.env.SVS_SOURCE||join(root,'..','steel_vs_swarm'));
@@ -37,7 +38,7 @@ const flags='--max-old-space-size=8192',browser=await chromium.launch({headless:
 try {
   assert.equal(browser.version(),parent.source.chromiumVersion);
   assert.equal(flags,parent.source.jsFlags);
-  const result=await captureAudioMoveWaveforms(await browser.newPage(),parent,original.toString());
+  const result=await captureAudioMoveWaveforms(await browser.newPage(),parent,original.toString(),{automation});
   assert.equal(result.waveforms.length,6);
   assert.deepEqual(Object.keys(result.periodErrors).sort(),parent.oscillators.map(item=>item.category+':'+item.node).sort());
   for(const fixture of result.waveforms)for(const channel of fixture.channels) {
@@ -45,13 +46,22 @@ try {
     for(let offset=0;offset<bytes.length;offset+=4)assert.ok(Number.isFinite(bytes.readFloatLE(offset)));
   }
   for(const value of Object.values(result.periodErrors))assert.ok(Number.isFinite(value)&&value>=0);
+  if(automation)for(const fixture of result.waveforms) {
+    assert.equal(fixture.commands.filter(command=>command.key==='gain').length,4);
+    assert.equal(fixture.commands.filter(command=>command.key==='pan').length,3);
+    assert.equal(fixture.commands.filter(command=>command.key==='wet').length,fixture.category==='stomp'?3:0);
+    assert.ok(fixture.commands.filter(command=>command.key==='rate').every(command=>command.target===1),'Rate/filter automation remains outside this corpus');
+    for(const command of fixture.commands)assert.ok(['gain','pan','rate','wet'].includes(command.key)&&
+      Number.isFinite(command.target)&&Number.isFinite(command.time)&&command.time>=0&&command.time<1&&Number.isFinite(command.tau)&&command.tau>0);
+  }
   await verify();
-  await mkdir(join(root,'data/audio_move_waveforms'),{recursive:true});
-  await writeFixtureJson(join(root,'data/audio_move_waveforms',rate+'.json'),{
-    formatVersion:1,scope:'original-movement-static-waveforms',...result,
+  const directory=automation?'data/audio_move_automation':'data/audio_move_waveforms';
+  await mkdir(join(root,directory),{recursive:true});
+  await writeFixtureJson(join(root,directory,rate+'.json'),{
+    formatVersion:1,scope:automation?'original-movement-automation-waveforms':'original-movement-static-waveforms',...result,
     source:{audioSha256:parent.source.audioSha256,sourceInputs:parent.source.sourceInputs,inputs,
       movementProfile:{path:parentPath,sha256:hash(parentBytes)},contextProfile:parent.source.contextProfile,
       chromiumVersion:browser.version(),jsFlags:flags},
   });
-  console.log('SOURCE_MOVE_WAVEFORMS_PASS '+JSON.stringify({sampleRate:rate,cases:result.waveforms.length,periodErrors:result.periodErrors}));
+  console.log('SOURCE_MOVE_WAVEFORMS_PASS '+JSON.stringify({sampleRate:rate,cases:result.waveforms.length,automation,periodErrors:result.periodErrors}));
 } finally {await browser.close();}

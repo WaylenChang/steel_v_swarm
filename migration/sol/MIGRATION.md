@@ -552,8 +552,15 @@ The wrapper runs capture, source references and native packing sequentially.
   through private muted native routes. Use independent WAV/generator timing
   traces, source-measured oscillator-table errors, original filter impulses and
   PCM conversion bounds; never align by searching the audio being tested.
-  Static graph acceptance does not certify automated gain/pan/rate/wet changes,
-  changing filter cutoffs, device suspension or complete audible delivery.
+  Add `--automation` to that capture command and `-- --automation` to the native
+  scene to exercise the original `setMove`/`_stopMove` gain, pan, complementary
+  dry/wet and stop curves. Keep source-recorded targets/times/time constants in
+  `data/audio_move_automation/`; native cases submit those future commands through
+  the real mixer queue and require zero late control frames. Bound dynamic
+  numerical error with the source target gain maximum and the same independent
+  oscillator/filter/PCM limits. These prequeued programs do not certify realtime
+  frame delivery, changing playback rates/filter cutoffs, device suspension or
+  complete audible delivery.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)

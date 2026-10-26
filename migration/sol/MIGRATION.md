@@ -471,6 +471,11 @@ The wrapper runs capture, source references and native packing sequentially.
   Keep this gate in `tools/import_audio.gd` and the mismatched-cohort publication
   cases in `tests/audio_resource_catalogue.tscn`. A consistent declaration alone
   does not establish source waveform parity or qualify cross-rate reconstruction.
+  Verify raw shared-noise Float32 bytes against their SHA-256 before movement
+  PCM conversion or rate-profile qualification. Reuse `tools/audio_noise_import.gd`
+  for exact one-second dimensions, canonical encoding and finite-word checks;
+  `tests/audio_noise_import.tscn` compares the actual original capture generations
+  and retains the existing movement resource identity after verified import.
   Preserve the existing 47,360 Hz music representation and its integral onsets;
   do not relabel or rescale captured SFX rates. Run `tests/audio_sfx_rate.test.mjs`
   alongside full-source capture checks. Other device rates, codecs, resampling

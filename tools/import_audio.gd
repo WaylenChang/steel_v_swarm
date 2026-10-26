@@ -5,6 +5,7 @@ const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 const ResourceIdentity = preload("res://scripts/audio_resource_identity.gd")
 const SynthesisImport = preload("res://tools/audio_synthesis_import.gd")
 const ResourceSnapshot = preload("res://scripts/audio_resource_snapshot.gd")
+const NoiseImport = preload("res://tools/audio_noise_import.gd")
 var catalogue_path := AudioSampleLibrary.CATALOGUE_PATH
 
 func _ready() -> void:
@@ -221,13 +222,13 @@ func _movement(provenance: Dictionary, catalogue: NativeAudioCatalogue) -> bool:
 		return false
 	var bank := NativeAudioMoveBank.new()
 	bank.source = provenance.duplicate(true)
-	bank.source.noiseSha256 = data.noiseSha256
-	var bytes := Marshalls.base64_to_raw(data.noise.values)
-	if bytes.size() != int(data.noise.frames) * 4 or int(data.noise.frames) != int(data.noise.sampleRate):
+	var noise_values := NoiseImport.decode(data.noise, data.get("noiseSha256"))
+	if noise_values.is_empty():
 		_fail("Invalid original shared movement noise buffer")
 		return false
+	bank.source.noiseSha256 = data.noiseSha256
 	var stem := NativeAudioStem.new()
-	stem.values = bytes.to_float32_array()
+	stem.values = noise_values
 	stem.envelope.assign([{"operation": "setValueAtTime", "time": 0.0, "constant": 1.0}])
 	var rendered := stem.render(1, int(data.noise.sampleRate))
 	if rendered.is_empty():

@@ -1,6 +1,7 @@
 extends Node
 
 const Importer = preload("res://tools/audio_synthesis_import.gd")
+const NoiseImport = preload("res://tools/audio_noise_import.gd")
 const PAD := 4096
 const TRACE_ERROR := 8.0 * 0.00000011920928955078125
 const ENVELOPE_ERROR := .000003
@@ -63,11 +64,7 @@ func _source() -> bool:
 		var text := FileAccess.get_file_as_string("res://" + path_name).replace("\r\n", "\n").replace("\r", "\n")
 		if not _check(text.sha256_text() == profile.source.inputs[path_name], "Original SFX producer is current: " + path_name):
 			return false
-	var noise := Marshalls.base64_to_raw(profile.noise.data)
-	var hash := HashingContext.new()
-	hash.start(HashingContext.HASH_SHA256)
-	hash.update(noise)
-	if not _check(hash.finish().hex_encode() == profile.noise.sha256 and noise.size() == int(profile.noise.frames) * 4, "Original shared noise bytes match the synthesis profile"):
+	if not _check(not NoiseImport.decode(profile.noise, profile.noise.sha256, "data").is_empty(), "Original finite shared noise bytes match the synthesis profile"):
 		return false
 	var mixer: Dictionary = Content.read_json("res://data/audio_mixer.json")
 	if not _check(mixer.source.audioSha256 == profile.source.audioSha256, "Source panning and synthesis share the same original audio module"):

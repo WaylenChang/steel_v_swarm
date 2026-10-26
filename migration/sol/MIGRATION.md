@@ -34,6 +34,24 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   each with 248 captured tunnels and 46 decks, and team size 5, with 239 tunnels
   and 50 decks. Preserve the distinct source geometry, cel programs and climb
   records; another team-size recipe cannot stand in for a required configuration.
+  Qualify all four seasons of `berlin_1_*` and `berlin_swap_1_*` through native
+  packing/reload with their own original elevation frame, deck tables and complete
+  scenery. Preserve the source grid and lane-height words; old largest-variant
+  elevation samples cannot stand in for these smaller configurations. Source
+  storage/provenance and frame checks do not discharge native materials,
+  rendered appearance, populated retention or transport acceptance.
+  Berlin small-team capture provenance declares `public/js/charPreview.js` hash
+  `20051639891092dd6ad2303a9c95c3484b7d778e567175e4548b2fed897686ea`.
+  The original working tree changed that input after capture, so the current
+  provenance gate rejects these archives. Obtain the matching original input or
+  regenerate against stable source inputs before reuse/reference/native
+  publication; do not replace declared hashes to make stale captures pass.
+  Both capture and reuse revalidate complete original provenance immediately
+  before atomic manifest publication. Retain the previous manifest and published
+  sidecars when inputs, existing assets or declared missing assets change during
+  capture. Keep `tests/world_capture_publication.test.mjs` with provenance and
+  storage regression coverage. Publication-helper fingerprints participate in
+  source identity; archived captures need regeneration before current-tool reuse.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
   Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference

@@ -1,5 +1,5 @@
 import { readFile, mkdir, readdir } from 'node:fs/promises';
-import {writeFixtureJson} from './fixture_json.mjs';
+import {publishWorldCapture} from './world_capture_publication.mjs';
 import {WorldSourceWriter} from './world_source_writer.mjs';
 import {stringifySourceJson,prepareSourceJson} from './source_json.mjs';
 import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
@@ -59,6 +59,9 @@ for (const name of (await readdir(join(source,'out/forest_review'))).filter(name
 const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString() + '\n' + instrumentWorldTextCapture.toString() + '\n' + captureWorldTextMesh.toString());
 const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+encodeSourceNumericPart.toString()+'\n'+decodeSourceNumericPart.toString()+'\n'+WorldSourceWriter.toString()+'\n'+captureWorldAttribute.toString()+'\n'+createWorldMeshTransport.toString());
 const elevationCaptureSha256 = sha256(worldElevationFrames.toString()+'\n'+captureWorldElevation.toString());
+const publicationSha256 = sha256(JSON.stringify(await Promise.all(
+  ['world_capture_publication.mjs','world_provenance.mjs','fixture_json.mjs'].map(async name=>
+    [name,sha256(await readFile(new URL(name,import.meta.url)))]))));
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const {mapSourceCenter} = await load('public/js/mapLayerSources.js');
@@ -360,7 +363,7 @@ try {
         tiles: fixture.elevation.source.tiles.map(({url,sha256}) => ({url,sha256})),
         terrainSha256: sha256(terrainSource), roadsSha256: sha256(biomesSource),
         configSha256: sha256(JSON.stringify(worldConfig)),
-        generatorSha256, serializationSha256, elevationCaptureSha256, selectorSha256: sha256(selectWorldBundles.toString()), minimapCanvasSourceSha, inputs: sourceInputs,
+        generatorSha256, serializationSha256, elevationCaptureSha256, publicationSha256, selectorSha256: sha256(selectWorldBundles.toString()), minimapCanvasSourceSha, inputs: sourceInputs,
       };
       provenance.inputFingerprint = sha256(JSON.stringify(provenance));
       if(reuse) {
@@ -375,7 +378,7 @@ try {
           const b=previous.bounds;
           previous.laneHeights=map.variants[String(size)].lanes.map(lane=>lane.map(([x,z])=>
             tunnelAt(x,z)?.floor ?? Math.max(fieldSample(heights,x,z,previous.grid,b.minX,b.maxX,b.minZ,b.maxZ),deckAt(x,z)??-Infinity)));
-          await writeFixtureJson(target,prepareSourceJson(previous));
+          await publishWorldCapture(target,previous,source);
           console.log(`${map.id}/${size}/${season}: source geometry reused`);
           continue;
         }
@@ -683,7 +686,7 @@ try {
       provenance.assets = Object.fromEntries(Array.from(sourceAssets).sort(([a],[b])=>a.localeCompare(b)));
       provenance.fingerprint = sha256(JSON.stringify(provenance));
       bundle.source = provenance;
-      await writeFixtureJson(target,prepareSourceJson(bundle));
+      await publishWorldCapture(target,bundle,source);
       console.log(`${map.id}/${size}/${season}: ${bundle.meshCount} meshes, ${bundle.decks.length} decks, ${bundle.tunnels.length} tunnels`);
     }
   }

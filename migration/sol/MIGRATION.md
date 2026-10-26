@@ -67,6 +67,14 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   instead of falling back to ordinary `JSON.stringify`. Capture fingerprints
   include the serialization helpers/storage writer, so prior captures require
   regeneration. Keep `tests/source_json.test.mjs` alongside storage regression tests.
+  Browser and legacy mesh transfer share `tools/source_mesh_transfer.mjs`.
+  Within one mesh, transmit identical large numeric arrays once, using full
+  scalar-bit, rank and row-width equality, including signed zero. Retain first
+  encounter order and independent transfers for any differing word/shape;
+  never merge by approximate equality or a sampled/hash-only match. The helper
+  belongs in serialization fingerprints. Keep `tests/source_mesh_transfer.test.mjs`
+  and the original Chromium sphere probes in `tools/source_json_capture.mjs`;
+  complete chunk bytes must equal the prior separate-field wire contract.
   `node tools/source_json_capture.mjs` records original Chromium sphere-buffer bits;
   real-driver `tests/source_json.tscn` checks JSON, sidecar and native resource
   roundtrips. Retain its strict inline-number failures until the shared native

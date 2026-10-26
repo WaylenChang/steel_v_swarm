@@ -7,6 +7,7 @@ import {createReadStream,createWriteStream} from 'node:fs';
 import {pipeline} from 'node:stream/promises';
 import {writeSourceFile,publishSourceFile} from './fixture_json.mjs';
 import {stringifySourceJson} from './source_json.mjs';
+import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
 
 export async function bufferDigest(path) {
   const hash=createHash('sha256');
@@ -123,13 +124,7 @@ export class WorldSourceWriter {
     if(this.rows.length>=256)await this._flush();
   }
   async _append(mesh) {
-    const parts=[];
-    const header=JSON.parse(stringifySourceJson(mesh,(_key,value)=>{
-      if(value&&typeof value==='object'&&(Object.hasOwn(value,'$sourceArray')||Object.hasOwn(value,'$sourceNumericArray')))
-        throw new Error('Reserved source mesh storage property');
-      if(Array.isArray(value)&&value.length>4096){parts.push(value);return {$sourceArray:parts.length-1};}
-      return value;
-    }));
+    const {header,arrays:parts}=sourceMeshTransfer(mesh,stringifySourceJson);
     await this.begin(this.count,header,parts.map(values=>values.length));
     for(let index=0;index<parts.length;index++) {
       const values=parts[index],size=typeof values[0]==='number'?65536:64;

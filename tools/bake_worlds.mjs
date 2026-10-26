@@ -2,6 +2,7 @@ import { readFile, mkdir, readdir } from 'node:fs/promises';
 import {writeFixtureJson} from './fixture_json.mjs';
 import {WorldSourceWriter} from './world_source_writer.mjs';
 import {stringifySourceJson,prepareSourceJson} from './source_json.mjs';
+import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
 import {selectWorldBundles} from './world_selection.mjs';
 import { readFileSync } from 'node:fs';
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
@@ -52,7 +53,7 @@ for (const name of ['public/index.html', 'server/sim.js', 'tools/elevation_fixtu
 for (const name of (await readdir(join(source,'out/forest_review'))).filter(name=>name.endsWith('.js')).sort())
   sourceInputs['out/forest_review/'+name] = sha256(await readFile(join(source,'out/forest_review',name)));
 const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString() + '\n' + instrumentWorldTextCapture.toString() + '\n' + captureWorldTextMesh.toString());
-const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+WorldSourceWriter.toString());
+const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+WorldSourceWriter.toString());
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
 const campaignMaps = JSON.parse(await readFile(join(root, 'data/campaign.json'), 'utf8')).maps;
@@ -182,6 +183,7 @@ try {
   const page = await browser.newPage();
   await page.addInitScript({content:'globalThis.__sourceWorldTextCapture = ('+captureWorldTextMesh.toString()+');'});
   await page.addInitScript({content:'globalThis.__sourceJsonStringify = ('+stringifySourceJson.toString()+');'});
+  await page.addInitScript({content:'globalThis.__sourceMeshTransfer = ('+sourceMeshTransfer.toString()+');'});
   let worldSections = Object.create(null);
   await page.exposeFunction('__sourceWorldMesh', async (operation,index,offset,json) => {
     if(!Number.isInteger(index)||index<0||!Number.isInteger(offset)||offset<0||typeof json!=='string')
@@ -397,12 +399,7 @@ try {
           if(!meshes.length)return;
           for(const mesh of meshes){
             if(meshCount<16||mesh.positions.length>1000000)console.log('SOURCE_WORLD_CAPTURE mesh-transfer '+JSON.stringify({index:meshCount,name:mesh.name,positions:mesh.positions.length,instances:mesh.instances?.length||0}));
-            const arrays=[];
-            const header=JSON.parse(globalThis.__sourceJsonStringify(mesh,(_key,value)=>{
-              if(value&&typeof value==='object'&&Object.hasOwn(value,'$sourceArray'))throw new Error('Reserved source mesh transfer property');
-              if(Array.isArray(value)&&value.length>4096){arrays.push(value);return {$sourceArray:arrays.length-1};}
-              return value;
-            }));
+            const {header,arrays}=globalThis.__sourceMeshTransfer(mesh,globalThis.__sourceJsonStringify);
             await window.__sourceWorldMesh('begin',meshCount,0,globalThis.__sourceJsonStringify({header,lengths:arrays.map(values=>values.length)}));
             for(let id=0;id<arrays.length;id++){
               const values=arrays[id],size=typeof values[0]==='number'?65536:64;

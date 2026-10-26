@@ -4,6 +4,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {stringifySourceJson,prepareSourceJson} from './source_json.mjs';
 import {WorldSourceWriter} from './world_source_writer.mjs';
+import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
 import {writeFixtureJson} from './fixture_json.mjs';
 import {verifyWorldStorage} from './world_source.mjs';
 
@@ -23,8 +24,9 @@ try {
   process.chdir(directory);
   browser=await chromium.launch({headless:true,executablePath:chromePath()});
   const version=browser.version(),page=await browser.newPage();
-  const cases=await page.evaluate(async({library,stringifier})=>{
+  const cases=await page.evaluate(async({library,stringifier,transferSource})=>{
     const THREE=await import(library),encode=new Function('return ('+stringifier+');')();
+    const transfer=new Function('return ('+transferSource+');')();
     const results=[];
     for(const [width,height]of [[8,6],[64,32]]) {
       const geometry=new THREE.SphereGeometry(1,width,height);
@@ -36,10 +38,14 @@ try {
         for(let offset=0;offset<bytes.length;offset+=8192)parts.push(String.fromCharCode(...bytes.subarray(offset,offset+8192)));
         expected[key]=btoa(parts.join(''));negativeZero[key]=mesh[key].filter(value=>Object.is(value,-0)).length;
       }
-      results.push({payload:encode(mesh),expected,negativeZero});geometry.dispose();
+      const probe=transfer({primary:mesh.positions,copy:mesh.positions.slice()},encode);
+      const arrayCount=mesh.positions.length>4096?1:0;
+      if(probe.arrays.length!==arrayCount||arrayCount&&probe.header.primary.$sourceArray!==probe.header.copy.$sourceArray)
+        throw new Error('Browser source geometry transfer failed exact duplicate admission');
+      results.push({payload:encode(mesh),expected,negativeZero,transferArrays:probe.arrays.length});geometry.dispose();
     }
     return results;
-  },{library:'data:text/javascript;base64,'+bytes.toString('base64'),stringifier:stringifySourceJson.toString()});
+  },{library:'data:text/javascript;base64,'+bytes.toString('base64'),stringifier:stringifySourceJson.toString(),transferSource:sourceMeshTransfer.toString()});
   await browser.close();browser=null;process.chdir(previous);
   for(const item of cases) {
     const mesh=JSON.parse(item.payload);
@@ -54,7 +60,7 @@ try {
   await verifyWorldStorage(manifest,directory,resourceRoot);
   if(digest(await readFile(join(source,library)))!==digest(bytes))throw new Error('Source changed during numeric capture');
   const inputs={};
-  for(const file of ['tools/source_json_capture.mjs','tools/source_json.mjs','tools/world_source_writer.mjs','tools/fixture_json.mjs'])
+  for(const file of ['tools/source_json_capture.mjs','tools/source_json.mjs','tools/source_mesh_transfer.mjs','tools/world_source_writer.mjs','tools/fixture_json.mjs'])
     inputs[file]=digest((await readFile(join(root,file),'utf8')).replace(/\r\n?/g,'\n'));
   await writeFixtureJson(join(directory,'fixture.json'),prepareSourceJson({formatVersion:1,source:{inputs,sourceInputs:{[library]:digest(bytes)},chromium:version},resourceRoot,manifest,cases}));
   console.log('SOURCE_JSON_CAPTURE_PASS '+JSON.stringify({cases:cases.length,negativeZero:cases.map(item=>item.negativeZero)}));

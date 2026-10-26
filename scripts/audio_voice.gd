@@ -1,6 +1,8 @@
 class_name AudioVoice
 extends Node
 
+const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
+
 var buses: AudioBuses
 var players: Array[AudioStreamPlayer] = []
 var routes: Array[StringName] = []
@@ -105,7 +107,7 @@ func _player(stream: AudioStream, bus: StringName, gain: float, rate: float) -> 
 	player.stream = stream
 	player.bus = bus
 	player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
-	player.volume_linear = gain
+	player.volume_linear = PcmGain.native_gain(stream, gain)
 	player.pitch_scale = rate
 	player.finished.connect(_finished)
 	player.tree_exiting.connect(dispose, CONNECT_ONE_SHOT)

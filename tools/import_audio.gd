@@ -3,6 +3,7 @@ extends Node
 const ResourcePublisher = preload("res://tools/source_resource_publisher.gd")
 const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 const ResourceIdentity = preload("res://scripts/audio_resource_identity.gd")
+const SynthesisImport = preload("res://tools/audio_synthesis_import.gd")
 var catalogue_path := AudioSampleLibrary.CATALOGUE_PATH
 
 func _ready() -> void:
@@ -75,27 +76,15 @@ func _import() -> void:
 		if not str(sound.get("id", "")).is_valid_identifier() or catalogue.synthesis_ids.has(str(sound.id)):
 			_fail("Invalid original synthesis identifier")
 			return
-		var synthesis := NativeAudioSynthesis.new()
-		synthesis.sample_rate = int(sound.sampleRate)
-		synthesis.frames = int(sound.frames)
-		synthesis.reservation_seconds = float(sound.reservationSeconds)
-		synthesis.maximum_gain = float(sound.maximumGain)
-		synthesis.source = {"id": sound.id, "audioSha256": data.source.audioSha256, "noiseSha256": synth_data.noiseSha256}
-		for captured: Dictionary in sound.stems:
-			var stem := NativeAudioStem.new()
-			var bytes := Marshalls.base64_to_raw(captured.values)
-			if bytes.size() != synthesis.frames * 4:
-				_fail("Captured synthesis stem byte count mismatch: " + str(sound.id))
-				return
-			stem.values = bytes.to_float32_array()
-			stem.route = captured.route
-			stem.envelope.assign(captured.envelope)
-			stem.effects.assign(captured.effects)
+		var synthesis := SynthesisImport.build(sound, {"id": sound.id, "audioSha256": data.source.audioSha256, "noiseSha256": synth_data.noiseSha256})
+		if synthesis == null:
+			_fail("Invalid captured source synthesis: " + str(sound.id))
+			return
+		for stem: NativeAudioStem in synthesis.stems:
 			for effect: Dictionary in stem.effects:
 				if AudioSourceFilter.create(effect) == null:
 					_fail("Unsupported original post-envelope synthesis effect: " + str(sound.id))
 					return
-			synthesis.stems.append(stem)
 		if not await _publish_resource(catalogue, "synthesis_" + str(sound.id), synthesis):
 			return
 		catalogue.synthesis_ids.append(str(sound.id))

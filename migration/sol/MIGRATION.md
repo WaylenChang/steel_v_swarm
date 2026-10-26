@@ -451,8 +451,16 @@ The wrapper runs capture, source references and native packing sequentially.
   shared original noise, post-envelope filters, source/producer fingerprints and
   Chromium identity in `data/audio_sfx_rates/`. The 48,000 Hz profile supplies
   source waveforms and stems for native mixer integration; it does not switch
-  the resource catalogue or qualify playback by itself. Bind matching-rate native
-  resources and compare full mixed waveforms before rate selection is available.
+  the resource catalogue. Bind matching-rate native resources before rate
+  selection is available. `tests/audio_sfx_mix_render.tscn` compares every source
+  sound/gain waveform through the actual device mixer, using a separate PCM
+  timing tracer and the existing quantization/envelope/filter error budgets.
+  Run it with WASAPI at the captured device rate; its private muted routes do not
+  establish complete audible delivery. `tests/audio_synthesis_import.tscn` checks
+  the shared import factory against existing resource identities and rejects
+  malformed captures. Keep WAV decoder compensation at the playback boundary
+  (`scripts/audio_pcm_gain.gd`); preserve captured PCM, logical gains and generator
+  gains. Requalify this decoder contract when changing the Godot version.
   Preserve the original context's shared noise across synthesis, movement and
   music; do not silently combine an isolated rate profile with another capture's
   noise generation when publishing a complete native catalogue.
@@ -1212,6 +1220,12 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   `tools/audio_references.mjs` and `tools/audio_pan_capture.mjs`; do not invent
   outputs or relax the entry guard. The independent native resource/mixer scenes
   use Sol-owned captures and cannot certify the missing shared decision fixtures.
+  In `tests/audio_suite.gd::_buses`, compare the centered player's physical WAV
+  gain with `audio_pcm_gain.gd::native_gain(stream, .35)` after decoder
+  compensation. Preserve the source logical gain `.5 * .7`, centered SFX route
+  and existing tolerance; do not assert the logical gain directly on the native
+  WAV player. Acceptance: the shared routing checks run after fixture publication
+  and verify both source gain semantics and the decoder boundary.
   The shared gate/count/sample sections still declare producer input
   `tools/audio_references.mjs` as
   `d1a87b6357256bf6059f017f3eee3f2bea8e4f6ccf74b445402d0b35cec084d1`,

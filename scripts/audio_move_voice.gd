@@ -1,6 +1,8 @@
 class_name AudioMoveVoice
 extends Node
 
+const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
+
 signal failed(operation: String, error: Error)
 
 var mixer := AudioMoveMixer.new()
@@ -60,8 +62,8 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		var player := AudioStreamPlayer.new()
 		player.bus = route
 		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
-		player.volume_linear = correction * (bank.noise_gain if branch.kind == "noise" else 1.0)
 		player.stream = bank.noise if branch.kind == "noise" else _generator(rate)
+		player.volume_linear = PcmGain.native_gain(player.stream, correction * (bank.noise_gain if branch.kind == "noise" else 1.0))
 		input_players.append(player)
 		add_child(player)
 		if not _admitting():

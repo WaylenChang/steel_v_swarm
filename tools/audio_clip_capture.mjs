@@ -15,10 +15,12 @@ export function audioCaptureBundles(audio) {
   };
 }
 
-export async function captureAudioClips(page,source) {
+export async function captureAudioClips(page,source,{synthesisRate=0}={}) {
+  if(!Number.isSafeInteger(synthesisRate)||(synthesisRate!==0&&(synthesisRate<8000||synthesisRate>384000)))
+    throw new Error('Invalid original SFX synthesis rate');
   const script=(await readFile(join(source,'public/js/audio.js'),'utf8')).replace(/\r\n?/g,'\n');
   const body=script.replace(/^import .*$/gm,'').replace(/^export /gm,'');
-  const manifest=new Function(body+'\nreturn SFX_MANIFEST;')();
+  const manifest=synthesisRate?{}:new Function(body+'\nreturn SFX_MANIFEST;')();
   const root=resolve(source,'public/audio');
   const files=await Promise.all(Object.entries(manifest).flatMap(([id,entry])=>(Array.isArray(entry)?entry:[entry]).map(async(url,index)=>{
     const path=resolve(source,'public',url);
@@ -31,10 +33,10 @@ export async function captureAudioClips(page,source) {
       return {id,url,index,missing:true};
     }
   })));
-  const result=await page.evaluate(async({body,files,synthStemSource,filterSource,moveGraphs,moveBankSource})=>{
+  const result=await page.evaluate(async({body,files,synthStemSource,filterSource,moveGraphs,moveBankSource,synthesisRate})=>{
     const api=new Function('setInterval','clearInterval',body+'\nreturn {GameAudio,SFX_MANIFEST};')(()=>0,()=>{});
     const musicConfigurations=[];
-    for(const mood of ['menu','battle']){
+    for(const mood of synthesisRate?[]:['menu','battle']){
       const clock={currentTime:0,createGain:()=>({gain:{value:1,exponentialRampToValueAtTime(){}},connect(){}})};
       const audio=Object.assign(Object.create(api.GameAudio.prototype),{_ctx:clock,_dead:false,_proc:null,_master:{},bgmOn:true,bgmVol:1});
       audio._procStart(mood);
@@ -52,7 +54,7 @@ export async function captureAudioClips(page,source) {
     // Integral sixteenth-note frames also keep repeated noise onsets aligned.
     // An integral full cycle alone can shift a drum onset by one sample.
     // Source note frequencies, durations, envelopes and harmony remain unchanged.
-    const sampleRate=Math.round(48000/multiple)*multiple;
+    const sampleRate=synthesisRate||Math.round(48000/multiple)*multiple;
     if(sampleRate<8000||sampleRate>384000)throw new Error('Unsupported exact source music representation rate');
     const base64=bytes=>{
       const chunks=[];
@@ -148,7 +150,7 @@ export async function captureAudioClips(page,source) {
     }
     const captureFilters=new Function('return ('+filterSource+');')();
     const synth=await new Function('return ('+synthStemSource+');')()(api,probes,noise,sampleRate,moveGraphs,captureFilters);
-    const move=await new Function('return ('+moveBankSource+');')()(moveGraphs,noise);
+    const move=synthesisRate?null:await new Function('return ('+moveBankSource+');')()(moveGraphs,noise);
     const music=[];
     for(const configuration of musicConfigurations){
       const period=configuration.cycleSteps*15/configuration.cfg.bpm;
@@ -178,7 +180,7 @@ export async function captureAudioClips(page,source) {
     const noiseValues=noise.getChannelData(0),noiseBytes=new Uint8Array(noiseValues.length*4),noiseView=new DataView(noiseBytes.buffer);
     noiseValues.forEach((value,index)=>noiseView.setFloat32(index*4,value,true));
     return {sampleRate,samples,failures,music,synth,move,synthProbes:probes,noise:{sampleRate,frames:noiseValues.length,encoding:'float32le',data:base64(noiseBytes)}};
-  },{body,files,synthStemSource:captureSynthStems.toString(),filterSource:captureFilterImpulses.toString(),moveGraphs:audioMoveReferences(script).graphs,moveBankSource:captureMoveBank.toString()});
+  },{body,files,synthStemSource:captureSynthStems.toString(),filterSource:captureFilterImpulses.toString(),moveGraphs:synthesisRate?{}:audioMoveReferences(script).graphs,moveBankSource:captureMoveBank.toString(),synthesisRate});
   result.noise.sha256=createHash('sha256').update(Buffer.from(result.noise.data,'base64')).digest('hex');
   return {...result,formatVersion:1,source:{audioSha256:createHash('sha256').update(script).digest('hex')},
     inputs:files.filter(file=>!file.missing).map(file=>'public/'+file.url)};

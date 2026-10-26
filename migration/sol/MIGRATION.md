@@ -445,6 +445,21 @@ The wrapper runs capture, source references and native packing sequentially.
   frames, normalization, mono/stereo routing, PCM/synthesis resources, retained
   BGM position/fallback, first gesture and independent sample RNG. Verify original
   sample rate/resampling, source codec failure and complete native audible output.
+  `node tools/capture_audio_sfx_rate.mjs <rate>` captures the original SFX
+  synthesis at an explicit context rate without executing procedural music,
+  movement construction or sample decoding. Keep its complete sound/gain corpus,
+  shared original noise, post-envelope filters, source/producer fingerprints and
+  Chromium identity in `data/audio_sfx_rates/`. The 48,000 Hz profile supplies
+  source waveforms and stems for native mixer integration; it does not switch
+  the resource catalogue or qualify playback by itself. Bind matching-rate native
+  resources and compare full mixed waveforms before rate selection is available.
+  Preserve the original context's shared noise across synthesis, movement and
+  music; do not silently combine an isolated rate profile with another capture's
+  noise generation when publishing a complete native catalogue.
+  Preserve the existing 47,360 Hz music representation and its integral onsets;
+  do not relabel or rescale captured SFX rates. Run `tests/audio_sfx_rate.test.mjs`
+  alongside full-source capture checks. Other device rates, codecs, resampling
+  and delivery remain separate acceptance requirements.
   Keep SFX clips content-addressed by PCM, full-precision normalization gains,
   stream format/rate/loop layout and original take/source identity. Publish the
   catalogue last through the atomic native resource publisher; never overwrite

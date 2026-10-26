@@ -116,14 +116,14 @@ func _read_bytes(spec: Dictionary, folder: String, extension: String) -> PackedB
 	if bytes.size() != int(spec.bytes):
 		_fail("Incomplete source world buffer read: " + expected)
 		return PackedByteArray()
-	if not _verified.has(sha):
+	if not _verified.has(expected):
 		var hash := HashingContext.new()
 		hash.start(HashingContext.HASH_SHA256)
 		hash.update(bytes)
 		if hash.finish().hex_encode() != sha:
 			_fail("Source world buffer hash mismatch: " + expected)
 			return PackedByteArray()
-		_verified[sha] = true
+		_verified[expected] = true
 	return bytes
 
 func _decode(value: Variant, packed_metadata := false) -> Variant:

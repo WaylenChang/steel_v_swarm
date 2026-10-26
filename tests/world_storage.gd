@@ -16,6 +16,7 @@ func _ready() -> void:
 	for name: String in ["native-raw-case.json", "native-case.json"]:
 		_run_case(name)
 	_rejections()
+	_path_verification()
 	print("WORLD_STORAGE assertions=", assertions, " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)
 
@@ -86,6 +87,58 @@ func _rejections() -> void:
 		var bytes := invalid._read_bytes({"sha256": sha, "bytes": 8}, "/buffers/", ".f64")
 		_check(not invalid.valid and bytes.is_empty() and invalid.rejections == ["Invalid source world buffer declaration"],
 			"Invalid SHA declarations fail without invoking a native decoder or file read: " + sha)
+
+func _path_verification() -> void:
+	var root := "user://world-storage-integrity-%d" % Time.get_ticks_usec()
+	for folder: String in ["buffers", "mesh_chunks"]:
+		_check(DirAccess.make_dir_recursive_absolute(root + "/" + folder) == OK,
+			"Storage verification probe directory is created")
+	var original := "[{\"name\":\"verified\"}]".to_utf8_buffer().compress(FileAccess.COMPRESSION_GZIP)
+	var hash := HashingContext.new()
+	hash.start(HashingContext.HASH_SHA256)
+	hash.update(original)
+	var sha := hash.finish().hex_encode()
+	var corrupted := original.duplicate()
+	corrupted[0] = corrupted[0] ^ 1
+	var paths := [root + "/buffers/" + sha + ".f64", root + "/buffers/" + sha + ".f64.gz", root + "/mesh_chunks/" + sha + ".json.gz"]
+	var folders := ["/buffers/", "/buffers/", "/mesh_chunks/"]
+	var extensions := [".f64", ".f64.gz", ".json.gz"]
+	for source in range(paths.size()):
+		for destination in range(paths.size()):
+			if source == destination:
+				continue
+			for path: String in paths:
+				var output := FileAccess.open(path, FileAccess.WRITE)
+				_check(output != null, "Storage verification probe file opens")
+				if output == null:
+					return
+				output.store_buffer(corrupted if path == paths[destination] else original)
+				output.close()
+			var reader := RejectionReader.new({"meshes": []}, root)
+			var spec := {"sha256": sha, "bytes": original.size(), "path": paths[source]}
+			_check(reader._read_bytes(spec, folders[source], extensions[source]) == original and reader.valid,
+				"Original bytes verify before another storage path is read")
+			spec.path = paths[destination]
+			var rejected := reader._read_bytes(spec, folders[destination], extensions[destination])
+			_check(not reader.valid and rejected.is_empty() and reader.rejections == ["Source world buffer hash mismatch: " + paths[destination]],
+				"A verified digest cannot authenticate a different storage path: %d -> %d" % [source, destination])
+	var shared := RejectionReader.new({"meshes": []}, root)
+	for offset in range(paths.size()):
+		var output := FileAccess.open(paths[offset], FileAccess.WRITE)
+		_check(output != null, "Valid shared-digest probe file opens")
+		if output == null:
+			return
+		output.store_buffer(original)
+		output.close()
+		var spec := {"sha256": sha, "bytes": original.size(), "path": paths[offset]}
+		_check(shared._read_bytes(spec, folders[offset], extensions[offset]) == original and shared.valid,
+			"Identical bytes remain valid under each complete storage path")
+		_check(shared._read_bytes(spec, folders[offset], extensions[offset]) == original and shared.valid,
+			"Repeated reads of an authenticated storage path remain valid")
+	for path: String in paths:
+		_check(DirAccess.remove_absolute(path) == OK, "Storage verification probe file is released")
+	for suffix: String in ["/buffers", "/mesh_chunks", ""]:
+		_check(DirAccess.remove_absolute(root + suffix) == OK, "Storage verification probe directory is released")
 
 func _check_bits(mesh: Dictionary, fixture: Dictionary, label: String) -> void:
 	for entry: Dictionary in fixture.checks:

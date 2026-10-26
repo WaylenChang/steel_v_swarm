@@ -43,7 +43,9 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   Content-addressed mesh chunks also require length/hash validation before reuse;
   reject corrupt existing chunks without rewriting them. Cache verification by
   complete storage path: identical bytes can belong to both numeric and chunk
-  namespaces. Legacy packing must
+  namespaces, and raw/GZIP suffixes require independent native authentication.
+  Keep the six cross-path corruption cases and valid repeated/shared-digest
+  reads in `tests/world_storage.tscn`. Legacy packing must
   dispose its writer on failure while retaining the original manifest and any
   already-published sidecars. Keep the child-process failure cases in
   `tests/world_source.test.mjs` alongside native reload coverage.

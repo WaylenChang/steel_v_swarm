@@ -45,6 +45,13 @@ static func build(data: Dictionary, origin: Dictionary, graphs: Dictionary) -> N
 		if bank.oscillators[captured.category].has(node):
 			return null
 		bank.oscillators[captured.category][node] = values
+		var cycles: Variant = captured.get("cycles", 1)
+		if not (cycles is int or cycles is float) or not is_finite(float(cycles)) or float(cycles) != floor(float(cycles)) or float(cycles) < 1 or float(cycles) > float(captured.frames):
+			return null
+		if int(cycles) != 1:
+			if not bank.oscillator_cycles.has(captured.category):
+				bank.oscillator_cycles[captured.category] = {}
+			bank.oscillator_cycles[captured.category][node] = int(cycles)
 	if bank.oscillators.size() != graphs.size():
 		return null
 	for category: String in graphs:

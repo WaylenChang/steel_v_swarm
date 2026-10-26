@@ -472,9 +472,11 @@ The wrapper runs capture, source references and native packing sequentially.
   native bank factory for the existing importer and explicit rate captures.
   `tests/audio_move_rate_import.tscn` checks matching-rate native reload and
   unchanged legacy resource identity. Keep `tests/audio_move_rate.test.mjs`
-  alongside the SFX capture tests. These captures/imports do not qualify complete
-  movement waveforms or switch the runtime catalogue; finish device mixer
-  comparisons and a compatible shared-noise music cohort before that switch.
+  alongside the SFX capture tests. Tonal oscillators use complete integer cycles
+  at the native rate when one original period has a fractional frame count;
+  retain the cycle count in the bank, playback phase and resource fingerprint.
+  Preserve legacy one-period resource identities. A compatible shared-noise
+  music cohort remains required before switching the runtime catalogue.
   Full publication and samples-only retention must load and verify every
   synthesis/movement/music dependency and reject missing or differing shared
   noise fingerprints/context rates before changing the catalogue. Oscillator
@@ -544,6 +546,20 @@ The wrapper runs capture, source references and native packing sequentially.
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.
   Verify fade-out retention, driver suspension, buffer latency, thread shutdown,
   scheduling/performance and threaded Web export with actual mixer output.
+  `node tools/capture_audio_move_waveforms.mjs <rate>` captures the original
+  static movement graphs with the exact archived shared noise, including dry,
+  blended and wet stomp. `tests/audio_move_waveforms.tscn` compares every frame
+  through private muted native routes. Use independent WAV/generator timing
+  traces, source-measured oscillator-table errors, original filter impulses and
+  PCM conversion bounds; never align by searching the audio being tested.
+  Static graph acceptance does not certify automated gain/pan/rate/wet changes,
+  changing filter cutoffs, device suspension or complete audible delivery.
+  Discard each input's native startup history before advancing the common
+  source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
+  Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)
+  and [generator startup](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/effects/audio_stream_generator.cpp)
+  on engine upgrades. Keep the original two-period output budget; do not mask
+  branch phase errors with more buffering or output-dependent error bounds.
   Reuse panning coefficients only for an exactly unchanged double control value;
   retain per-sample evaluation during automation and the existing buffer latency.
   Movement owners and voices retire permanently on tree exit; reattachment must

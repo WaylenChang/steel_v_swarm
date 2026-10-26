@@ -44,7 +44,7 @@ func configure(name: String, graph_plan: Dictionary, wave_bank: NativeAudioMoveB
 		has_oscillator_input = has_oscillator_input or branch.kind == "oscillator"
 	for node: int in plan.lfos:
 		lfo_waveform = bank.waveform(category, node)
-		lfo_frequency = float(plan.lfos[node].frequency)
+		lfo_frequency = float(plan.lfos[node].frequency) / bank.cycles(category, node)
 		lfo_scaled = bool(plan.lfos[node].rate_scaled)
 
 func queue(key: String, target: float, tau: float, time: float) -> void:
@@ -86,13 +86,14 @@ func prime_inputs() -> bool:
 		var count := mini(available, maxi(0, input_ahead - queued))
 		var branch: Dictionary = input.branch
 		var waveform := bank.waveform(category, int(branch.source))
+		var base_frequency := float(branch.frequency) / bank.cycles(category, int(branch.source))
 		var frames := PackedVector2Array()
 		frames.resize(count)
 		for index in range(count):
 			input_controls.begin_frame()
 			var value := _lookup(waveform, oscillator_phase)
 			frames[index] = Vector2(value, value)
-			var frequency := float(branch.frequency) * (input_controls.values[2] if branch.rate_scaled else 1.0)
+			var frequency := base_frequency * (input_controls.values[2] if branch.rate_scaled else 1.0)
 			oscillator_phase = fposmod(oscillator_phase + frequency / sample_rate, 1.0)
 			input_controls.end_frame()
 		if count > 0 and not playback.push_buffer(frames):
@@ -129,6 +130,12 @@ func pump() -> bool:
 	AudioServer.lock()
 	for input: Dictionary in inputs:
 		var capture: AudioEffectCapture = input.capture
+		# Native playback history is not source time. Align each branch before
+		# advancing the common gain/pan/LFO clock or combining dry and wet beds.
+		var discard := mini(int(input.get("startup_discard", 0)), capture.get_frames_available())
+		if discard > 0:
+			capture.get_buffer(discard)
+			input.startup_discard = int(input.startup_discard) - discard
 		count = mini(count, capture.get_frames_available())
 		discarded = discarded or capture.get_discarded_frames() > int(input.discard_origin)
 	if count > 0 and not discarded:

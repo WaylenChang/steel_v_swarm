@@ -68,7 +68,8 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		add_child(player)
 		if not _admitting():
 			return ERR_UNCONFIGURED
-		var input := {"branch": branch, "capture": capture, "filters": filters}
+		var input := {"branch": branch, "capture": capture, "filters": filters,
+			"startup_discard": AudioGeneratorFeed.input_latency_frames(branch.kind == "oscillator")}
 		if branch.kind == "oscillator":
 			var feed := player.stream as AudioGeneratorFeed
 			input.playback = feed.playback

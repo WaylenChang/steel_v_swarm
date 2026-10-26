@@ -11,7 +11,7 @@ const root=fileURLToPath(new URL('..',import.meta.url));
 const source=resolve(process.env.SVS_SOURCE||join(root,'..','steel_vs_swarm'));
 const profile=JSON.parse(await readFile(join(root,'data/audio_sfx_rates/48000.json'),'utf8'));
 const original=await readFile(join(source,'public/js/audio.js'),'utf8');
-const oscillators=JSON.parse(await readFile(join(root,'data/audio_move.json'),'utf8')).oscillators;
+const oscillators=JSON.parse(await readFile(join(root,'data/audio_move_rates/48000.json'),'utf8')).oscillators;
 function pageProbe(change=result=>result) {
   const calls=[];
   return {calls,async evaluate(_callback,args) {
@@ -46,6 +46,7 @@ test('invalid context identities and raw noise reject before browser evaluation'
 test('movement output cannot substitute another noise generation or omit an oscillator',async()=>{
   for(const change of [result=>{result.move.noise.values='';return result;},
     result=>{result.move.oscillators.pop();return result;},
+    result=>{result.move.oscillators.find(item=>item.category==='engine').cycles=0;return result;},
     result=>{result.move.oscillators[0].values='';return result;}])
     await assert.rejects(captureAudioMoveRate(pageProbe(change),profile,original));
 });

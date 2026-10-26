@@ -29,7 +29,7 @@ export async function captureAudioMoveRate(page,profile,original) {
     const shared=context.createBuffer(1,noise.frames,noise.sampleRate);
     shared.copyToChannel(values,0);
     // Continue the captured context's noise generation; never call _buildNoise again.
-    const move=await new Function('return ('+captureSource+');')()(graphs,shared);
+    const move=await new Function('return ('+captureSource+');')()(graphs,shared,{nativeRate:true});
     const filters=await new Function('return ('+filterSource+');')()(
       Object.values(graphs).flatMap(graph=>graph.nodes.filter(node=>node.kind==='createBiquadFilter')));
     return {move,filters};
@@ -46,6 +46,15 @@ export async function captureAudioMoveRate(page,profile,original) {
     assert.ok(Number.isFinite(oscillator.sampleRate)&&oscillator.sampleRate>=8000&&oscillator.sampleRate<=384000);
     assert.equal(raw.length,oscillator.frames*4);
     assert.equal(raw.toString('base64'),oscillator.values);
+    const cycles=oscillator.cycles??1;
+    assert.ok(Number.isSafeInteger(cycles)&&cycles>=1&&cycles<=oscillator.frames);
+    const graph=graphs[oscillator.category];
+    const lfo=graph.connections.some(edge=>edge.from===oscillator.node&&graph.connections.some(next=>
+      next.from===edge.to&&typeof next.to==='object'));
+    if(!lfo) {
+      assert.equal(oscillator.sampleRate,rate,'Native tonal oscillator context rate');
+      assert.equal(oscillator.frames*oscillator.frequency,rate*cycles,'Complete original tonal cycles at native rate');
+    }
     for(let offset=0;offset<raw.length;offset+=4)assert.ok(Number.isFinite(raw.readFloatLE(offset)));
   }
   return {sampleRate:rate,noiseSha256:noise.sha256,graphs,...result.move,filters:result.filters};

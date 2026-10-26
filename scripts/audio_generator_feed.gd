@@ -3,9 +3,16 @@ extends AudioStream
 
 var playback: AudioStreamGeneratorPlayback
 
+const REFILL_FRAMES := 128
+
+static func input_latency_frames(generator: bool) -> int:
+	# Godot 4.7.2: 64-frame server lookahead, two interpolation history frames.
+	# Generator.start() primes its first refill while the playback is inactive.
+	return 64 + 2 + (REFILL_FRAMES if generator else 0)
+
 static func startup_frames(interval: float, rate: float) -> int:
 	# Godot 4.7.2's AudioStreamPlaybackResampled refills whole 128-frame blocks.
-	return clampi(ceili(interval * rate / 128.0) * 128, 128, 4096) * 2
+	return clampi(ceili(interval * rate / REFILL_FRAMES) * REFILL_FRAMES, REFILL_FRAMES, 4096) * 2
 
 func configure(rate: float) -> void:
 	var generator := AudioStreamGenerator.new()

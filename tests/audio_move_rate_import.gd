@@ -41,14 +41,20 @@ func _run() -> void:
 	_check(await Publisher.publish(bank, path, get_tree()) == OK, "Publish an isolated native movement resource without switching the runtime catalogue")
 	var reloaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as NativeAudioMoveBank
 	_check(reloaded != null and Identity.digest(bank) == Identity.digest(reloaded), "Matching-rate native movement reload retains its full resource identity")
+	_check(reloaded.cycles("engine", 2) == 23 and reloaded.waveform("engine", 2).size() == 24000, "Native 46 Hz engine retains 23 complete source cycles at 48 kHz")
+	var changed_cycles := bank.duplicate(true) as NativeAudioMoveBank
+	changed_cycles.oscillator_cycles.engine["2"] = 24
+	_check(Identity.digest(changed_cycles) != Identity.digest(bank), "Source oscillator cycle count participates in native resource identity")
 	_check(DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) == OK, "Remove only the test-owned movement resource")
-	for change: String in ["noise", "missing", "duplicate", "fractional", "nonfinite"]:
+	for change: String in ["noise", "missing", "duplicate", "fractional", "nonfinite", "cycles", "fractional_cycles"]:
 		var invalid := data.duplicate(true)
 		match change:
 			"noise": invalid.noiseSha256 = old.noiseSha256
 			"missing": invalid.oscillators.pop_back()
 			"duplicate": invalid.oscillators.append(invalid.oscillators[0].duplicate(true))
 			"fractional": invalid.oscillators[0].frames = 2.5
+			"cycles": invalid.oscillators[0].cycles = 0
+			"fractional_cycles": invalid.oscillators[0].cycles = 1.5
 			"nonfinite":
 				var bytes := Marshalls.base64_to_raw(invalid.oscillators[0].values)
 				bytes.encode_float(0, NAN)

@@ -1,5 +1,5 @@
 import {createReadStream} from 'node:fs';
-import {readFile,stat} from 'node:fs/promises';
+import {open,readFile,stat} from 'node:fs/promises';
 import {compose} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import json from 'stream-json';
@@ -7,7 +7,7 @@ import Ignore from 'stream-json/filters/Ignore.js';
 import Pick from 'stream-json/filters/Pick.js';
 import StreamValues from 'stream-json/streamers/StreamValues.js';
 import StreamArray from 'stream-json/streamers/StreamArray.js';
-import {createGunzip} from 'node:zlib';
+import {createInflateRaw,crc32} from 'node:zlib';
 import {join} from 'node:path';
 import {bufferDigest} from './world_source_writer.mjs';
 
@@ -80,17 +80,32 @@ export async function verifyWorldStorage(world,directory,resourceDirectory='res:
     return path;
   };
   const gzip=async(path,expected,retain)=>{
-    let size=0;
-    const chunks=[];
-    await pipeline(createReadStream(path),createGunzip(),async values=>{
-      for await(const bytes of values) {
-        size+=bytes.length;
-        if(size>expected)throw new Error('Source world decompression extent exceeded: '+path);
-        if(retain)chunks.push(bytes);
-      }
-    });
-    if(size!==expected)throw new Error('Source world decompression length mismatch: '+path);
-    return retain?Buffer.concat(chunks,size):undefined;
+    const file=await open(path,'r');
+    try {
+      const length=(await file.stat()).size,header=Buffer.alloc(10),trailer=Buffer.alloc(8);
+      if(length<20||(await file.read(header,0,10,0)).bytesRead!==10
+        ||header[0]!==31||header[1]!==139||header[2]!==8||header[3]!==0)
+        throw new Error('Invalid source world GZIP header: '+path);
+      if((await file.read(trailer,0,8,length-8)).bytesRead!==8)
+        throw new Error('Incomplete source world GZIP trailer: '+path);
+      const decoder=createInflateRaw(),chunks=[];
+      let size=0,checksum=0;
+      // Gunzip accepts concatenated empty members and padding. Decode only the
+      // declared member body, then require complete input consumption and trailer.
+      await pipeline(file.createReadStream({start:10,end:length-9,autoClose:false}),decoder,async values=>{
+        for await(const bytes of values) {
+          size+=bytes.length;
+          if(size>expected)throw new Error('Source world decompression extent exceeded: '+path);
+          checksum=crc32(bytes,checksum);
+          if(retain)chunks.push(bytes);
+        }
+      });
+      if(decoder.bytesWritten!==length-18)throw new Error('Trailing source world GZIP input: '+path);
+      if(size!==expected)throw new Error('Source world decompression length mismatch: '+path);
+      if(checksum!==trailer.readUInt32LE(0))throw new Error('Source world GZIP checksum mismatch: '+path);
+      if(size!==trailer.readUInt32LE(4))throw new Error('Source world GZIP size trailer mismatch: '+path);
+      return retain?Buffer.concat(chunks,size):undefined;
+    } finally {await file.close();}
   };
   const numeric=new Map();
   const visit=async value=>{

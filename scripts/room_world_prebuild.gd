@@ -126,9 +126,14 @@ func _transfer(ticket: int, destination: Node) -> BattleWorld:
 			prepared_viewport = viewport
 			selected = previous_selection
 			settings = previous_settings
+			_watch_stage(viewport, consumed, viewport.get_instance_id())
 			world.reparent(viewport, false)
 			if is_instance_valid(self) and _active() and generation == consumed:
-				changed.emit()
+				if not _viewport_alive(self, viewport) or not _world_alive(world, viewport) or prepared != world or prepared_viewport != viewport:
+					_fail("Cancelled native world transfer lost its staging tree")
+				else:
+					_watch_stage(world, consumed, viewport.get_instance_id())
+					changed.emit()
 		else:
 			if recoverable:
 				world.queue_free()
@@ -167,15 +172,32 @@ static func _build_selected(reference: WeakRef, ticket: int) -> void:
 	viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	cache.building_viewport = viewport
+	var stage_id := viewport.get_instance_id()
+	cache._watch_stage(viewport, ticket, stage_id)
 	cache.add_child(viewport)
 	cache = _current(reference, ticket)
 	if cache == null:
 		return
+	if not _stage_alive(cache, viewport):
+		cache._fail("Native world staging was retired before world allocation")
+		return
 	var world := cache._create_world()
+	cache = _current(reference, ticket)
+	if cache == null:
+		_discard_unadmitted(world)
+		return
+	if not _stage_alive(cache, viewport) or not is_instance_valid(world) or world.is_queued_for_deletion() or world.get_parent() != null:
+		_discard_unadmitted(world)
+		cache._fail("Native world staging rejected world allocation")
+		return
 	world.process_mode = Node.PROCESS_MODE_DISABLED
+	cache._watch_stage(world, ticket, stage_id)
 	viewport.add_child(world)
 	cache = _current(reference, ticket)
 	if cache == null:
+		return
+	if not _stage_alive(cache, viewport) or not _world_alive(world, viewport):
+		cache._fail("Native world staging was retired before build admission")
 		return
 	world.build_progress.connect(cache._forward_progress.bind(ticket))
 	cache = null
@@ -183,7 +205,10 @@ static func _build_selected(reference: WeakRef, ticket: int) -> void:
 	cache = _current(reference, ticket)
 	if cache == null:
 		return
-	if not is_instance_valid(world) or not world.build_complete:
+	if not _stage_alive(cache, viewport) or not _world_alive(world, viewport):
+		cache._fail("Native world staging was retired during preparation")
+		return
+	if not world.build_complete:
 		var reason := world.build_error if is_instance_valid(world) else ""
 		cache._fail(reason if not reason.is_empty() else "Native room world preparation did not finish")
 		return
@@ -196,6 +221,46 @@ static func _build_selected(reference: WeakRef, ticket: int) -> void:
 	cache = _current(reference, ticket)
 	if cache != null:
 		cache.progress.emit()
+
+static func _stage_alive(cache: RoomWorldPrebuild, viewport: Variant) -> bool:
+	return _viewport_alive(cache, viewport) and cache.building_viewport == viewport
+
+static func _viewport_alive(cache: RoomWorldPrebuild, viewport: Variant) -> bool:
+	return is_instance_valid(viewport) and not viewport.is_queued_for_deletion() \
+		and viewport.is_inside_tree() and viewport.get_parent() == cache
+
+static func _world_alive(world: Variant, viewport: Variant) -> bool:
+	return is_instance_valid(world) and not world.is_queued_for_deletion() \
+		and world.is_inside_tree() and world.get_parent() == viewport
+
+static func _discard_unadmitted(world: Variant) -> void:
+	if is_instance_valid(world) and world.get_parent() == null:
+		world.queue_free()
+
+func _watch_stage(node: Node, ticket: int, stage_id: int) -> void:
+	for connection: Dictionary in node.tree_exiting.get_connections():
+		var callback: Callable = connection.callable
+		if callback.get_object() == self and callback.get_method() == &"_staging_lost":
+			node.tree_exiting.disconnect(callback)
+	node.tree_exiting.connect(_staging_lost.bind(ticket, stage_id), CONNECT_ONE_SHOT)
+
+func _staging_lost(ticket: int, stage_id: int) -> void:
+	if not _active() or generation != ticket:
+		return
+	var tracked := is_instance_valid(building_viewport) and building_viewport.get_instance_id() == stage_id
+	tracked = tracked or (is_instance_valid(prepared_viewport) and prepared_viewport.get_instance_id() == stage_id)
+	if not tracked:
+		return
+	_stop_build()
+	_release_prepared()
+	failure = "Native world staging left its SceneTree"
+	# A readiness listener may start a replacement. Wait until native tree-exit
+	# notifications finish before it is allowed to add another staging viewport.
+	_notify_staging_loss.call_deferred(ticket)
+
+func _notify_staging_loss(ticket: int) -> void:
+	if _active() and generation == ticket and not failure.is_empty():
+		changed.emit()
 
 func _active() -> bool:
 	return is_inside_tree() and not retiring and not is_queued_for_deletion()
@@ -210,6 +275,7 @@ func _forward_progress(ticket: int) -> void:
 
 func _fail(reason: String) -> void:
 	_stop_build()
+	_release_prepared()
 	failure = reason
 	changed.emit()
 

@@ -3,6 +3,9 @@ extends Node
 const ResourcePublisher = preload("res://tools/source_resource_publisher.gd")
 const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
 const ResourceIdentity = preload("res://scripts/audio_resource_identity.gd")
+const SynthesisImport = preload("res://tools/audio_synthesis_import.gd")
+const ResourceSnapshot = preload("res://scripts/audio_resource_snapshot.gd")
+const MoveImport = preload("res://tools/audio_move_import.gd")
 var catalogue_path := AudioSampleLibrary.CATALOGUE_PATH
 
 func _ready() -> void:
@@ -75,27 +78,15 @@ func _import() -> void:
 		if not str(sound.get("id", "")).is_valid_identifier() or catalogue.synthesis_ids.has(str(sound.id)):
 			_fail("Invalid original synthesis identifier")
 			return
-		var synthesis := NativeAudioSynthesis.new()
-		synthesis.sample_rate = int(sound.sampleRate)
-		synthesis.frames = int(sound.frames)
-		synthesis.reservation_seconds = float(sound.reservationSeconds)
-		synthesis.maximum_gain = float(sound.maximumGain)
-		synthesis.source = {"id": sound.id, "audioSha256": data.source.audioSha256, "noiseSha256": synth_data.noiseSha256}
-		for captured: Dictionary in sound.stems:
-			var stem := NativeAudioStem.new()
-			var bytes := Marshalls.base64_to_raw(captured.values)
-			if bytes.size() != synthesis.frames * 4:
-				_fail("Captured synthesis stem byte count mismatch: " + str(sound.id))
-				return
-			stem.values = bytes.to_float32_array()
-			stem.route = captured.route
-			stem.envelope.assign(captured.envelope)
-			stem.effects.assign(captured.effects)
+		var synthesis := SynthesisImport.build(sound, {"id": sound.id, "audioSha256": data.source.audioSha256, "noiseSha256": synth_data.noiseSha256})
+		if synthesis == null:
+			_fail("Invalid captured source synthesis: " + str(sound.id))
+			return
+		for stem: NativeAudioStem in synthesis.stems:
 			for effect: Dictionary in stem.effects:
 				if AudioSourceFilter.create(effect) == null:
 					_fail("Unsupported original post-envelope synthesis effect: " + str(sound.id))
 					return
-			synthesis.stems.append(stem)
 		if not await _publish_resource(catalogue, "synthesis_" + str(sound.id), synthesis):
 			return
 		catalogue.synthesis_ids.append(str(sound.id))
@@ -151,12 +142,8 @@ func _retain_resources(catalogue: NativeAudioCatalogue) -> bool:
 	if not previous.valid() or previous.source != catalogue.source:
 		_fail("Samples-only import requires the same complete source catalogue; run the full audio importer")
 		return false
-	for key: String in previous.resource_paths:
-		var path: String = previous.resource_paths[key]
-		var stored := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE_DEEP) if ResourceLoader.exists(path) else null
-		if stored == null or ResourceIdentity.digest(stored) != previous.resource_hashes[key]:
-			_fail("Missing or invalid retained native audio resource: " + path)
-			return false
+	if not _resource_cohort(previous):
+		return false
 	catalogue.complete_resources = true
 	catalogue.synthesis_ids = previous.synthesis_ids.duplicate()
 	catalogue.resource_paths = previous.resource_paths.duplicate()
@@ -182,62 +169,58 @@ func _publish_resource(catalogue: NativeAudioCatalogue, key: String, resource: R
 	return true
 
 func _publish_catalogue(catalogue: NativeAudioCatalogue, count: int) -> void:
-	if not catalogue.valid() or await ResourcePublisher.publish(catalogue, catalogue_path, get_tree()) != OK:
+	if not catalogue.valid():
+		_fail("Cannot save invalid native source audio catalogue")
+		return
+	if catalogue.complete_resources and not _resource_cohort(catalogue):
+		return
+	if await ResourcePublisher.publish(catalogue, catalogue_path, get_tree()) != OK:
 		_fail("Cannot save native source audio catalogue")
 		return
 	print("Imported original audio takes: ", count, " synthesisProbesRemainReferenceOnly=true")
 	get_tree().quit()
 
+func _resource_cohort(catalogue: NativeAudioCatalogue) -> bool:
+	var reader := ResourceSnapshot.new()
+	reader.catalogue = catalogue
+	var noise_hash := ""
+	var sample_rate := 0
+	for key: String in catalogue.resource_paths:
+		var resource: Resource
+		var rate := 0
+		if key == "movement":
+			resource = reader.movement()
+			if resource != null:
+				rate = resource.noise.mix_rate
+		elif key.begins_with("synthesis_"):
+			resource = reader.synthesis(key.trim_prefix("synthesis_"))
+			if resource != null:
+				rate = resource.sample_rate
+		elif key in ["music_menu", "music_battle"]:
+			resource = reader.music(key.trim_prefix("music_"))
+			if resource != null:
+				rate = resource.centered.mix_rate
+		if resource == null:
+			_fail("Missing or invalid native audio cohort resource: " + key)
+			return false
+		var hash: Variant = resource.source.get("noiseSha256")
+		if not NativeAudioCatalogue._valid_hash(hash) or rate <= 0:
+			_fail("Missing original shared noise identity/rate: " + key)
+			return false
+		if noise_hash.is_empty():
+			noise_hash = hash
+			sample_rate = rate
+		elif hash != noise_hash or rate != sample_rate:
+			_fail("Mixed original shared noise or context rates: " + key)
+			return false
+	return not noise_hash.is_empty()
+
 func _movement(provenance: Dictionary, catalogue: NativeAudioCatalogue) -> bool:
 	var data: Dictionary = Content.read_json("res://data/audio_move.json")
-	if data.get("formatVersion") != 1 or data.get("source") != provenance or not data.get("noise") is Dictionary or not data.get("oscillators") is Array:
-		_fail("Regenerate original movement noise and oscillator periods")
+	var bank := MoveImport.build(data, provenance, Content.balance.audio.moveGraphs)
+	if bank == null:
+		_fail("Invalid original movement noise or oscillator periods")
 		return false
-	var bank := NativeAudioMoveBank.new()
-	bank.source = provenance.duplicate(true)
-	bank.source.noiseSha256 = data.noiseSha256
-	var bytes := Marshalls.base64_to_raw(data.noise.values)
-	if bytes.size() != int(data.noise.frames) * 4 or int(data.noise.frames) != int(data.noise.sampleRate):
-		_fail("Invalid original shared movement noise buffer")
-		return false
-	var stem := NativeAudioStem.new()
-	stem.values = bytes.to_float32_array()
-	stem.envelope.assign([{"operation": "setValueAtTime", "time": 0.0, "constant": 1.0}])
-	var rendered := stem.render(1, int(data.noise.sampleRate))
-	if rendered.is_empty():
-		_fail("Cannot convert original movement noise to native PCM")
-		return false
-	bank.noise = rendered.stream
-	bank.noise_gain = rendered.gain
-	bank.noise.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	bank.noise.loop_begin = 0
-	bank.noise.loop_end = int(data.noise.frames)
-	for captured: Dictionary in data.oscillators:
-		var values := Marshalls.base64_to_raw(captured.values)
-		if values.size() != int(captured.frames) * 4:
-			_fail("Invalid original movement oscillator period")
-			return false
-		if not bank.oscillators.has(captured.category):
-			bank.oscillators[captured.category] = {}
-		var node := str(int(captured.node))
-		if bank.oscillators[captured.category].has(node):
-			_fail("Duplicate original movement oscillator period")
-			return false
-		bank.oscillators[captured.category][node] = values.to_float32_array()
-	if bank.oscillators.size() != Content.balance.audio.moveGraphs.size():
-		_fail("Unexpected original movement oscillator category")
-		return false
-	for category: String in Content.balance.audio.moveGraphs:
-		var expected := []
-		for node: Dictionary in Content.balance.audio.moveGraphs[category].nodes:
-			if node.kind == "createOscillator":
-				expected.append(str(int(node.id)))
-		var actual: Array = bank.oscillators.get(category, {}).keys()
-		expected.sort()
-		actual.sort()
-		if actual != expected:
-			_fail("Incomplete original movement oscillator periods: " + category)
-			return false
 	return await _publish_resource(catalogue, "movement", bank)
 
 func _clip(id: String, sample: Dictionary) -> NativeAudioClip:

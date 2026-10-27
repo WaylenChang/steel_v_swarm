@@ -12,6 +12,18 @@ import {verifyWorldStorage} from '../tools/world_source.mjs';
 const transfer=value=>sourceMeshTransfer(value,stringifySourceJson);
 const values=()=>Array.from({length:5000},(_,index)=>index%3===0?-0:index/7);
 
+test('float64 capture buffers retain inline arrays, alias order and exact numeric identity',()=>{
+  const numbers=values(),typed=new Float64Array(numbers),small=typed.slice(0,4096);
+  const result=transfer({first:typed,copy:numbers,small});
+  assert.equal(result.arrays.length,1);assert.equal(result.arrays[0],typed);
+  assert.deepEqual(result.header.first,result.header.copy);
+  assert.deepEqual(result.header.small,Array.from(small));
+  assert.ok(Object.is(result.header.small[0],-0));
+  const positive=typed.slice();positive[0]=0;
+  assert.equal(transfer({typed,positive}).arrays.length,2);
+  assert.deepEqual(typed,new Float64Array(numbers));
+});
+
 test('mesh transfer shares only exactly equal captured arrays without mutating source metadata',()=>{
   const numbers=values(),copy=numbers.slice(),mesh={positions:numbers,celGeometry:{positions:copy},inline:[-0,0],name:'source'};
   const {header,arrays}=transfer(mesh);

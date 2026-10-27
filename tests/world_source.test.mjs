@@ -348,7 +348,7 @@ for(const compressed of [false,true])test(`completed bundle verification rejects
     await writeFile(join(directory,'buffers',sha256+'.f64.gz'),invalid);
     const invalidStream=await changedRows(value=>Object.assign(value[0].positions.$sourceNumericArray,
       {sha256,bytes:invalid.length,path:'res://fixture/buffers/'+sha256+'.f64.gz'}));
-    await assert.rejects(verify(invalidStream),{code:'Z_DATA_ERROR'});
+    await assert.rejects(verify(invalidStream),/Invalid source world GZIP header/);
   }
   await assert.rejects(verify({...manifest,worldSourceVersion:3}),/Unsupported source world mesh manifest/);
   await assert.rejects(verify({...manifest,meshCount:2}),/Incomplete source world mesh manifest/);
@@ -374,6 +374,77 @@ test('source bundle verifier rejects invalid selections before reading captures'
       assert.doesNotMatch(error.stderr,/ENOENT/);
       return true;
     });
+  }
+});
+
+for(const target of ['numeric','chunk'])test(`source GZIP requires a single member with no trailing input (${target})`,async()=>{
+  await mkdir(artifacts,{recursive:true});
+  const directory=await mkdtemp(join(artifacts,'gzip-boundary-'));
+  const writer=new WorldSourceWriter(directory,'res://fixture');
+  await writer.begin(0,{positions:{$sourceArray:0}},[128]);
+  await writer.part(0,0,Array.from({length:128},(_,index)=>index/7));
+  await writer.end(0);
+  const manifest=await writer.finish();await writer.dispose();
+  const chunk=manifest.meshChunks[0],packed=await readFile(join(directory,'mesh_chunks',chunk.path.split('/').at(-1)));
+  const rows=JSON.parse(gunzipSync(packed)),numeric=rows[0].positions.$sourceNumericArray;
+  const original=target==='chunk'?packed:await readFile(join(directory,'buffers',numeric.path.split('/').at(-1)));
+  const cases=[['empty-member',Buffer.concat([original,gzipSync(Buffer.alloc(0))])],
+    ['zero-padding',Buffer.concat([original,Buffer.alloc(1)])],
+    ['window-padding',Buffer.concat([original,Buffer.alloc(65537)])],
+    ['garbage',Buffer.concat([original,Buffer.from('tail')])],
+    ['nonempty-member',Buffer.concat([original,gzipSync(Buffer.from('extra'))])],
+    ['truncated-trailer',original.subarray(0,original.length-1)],
+    ['truncated-deflate',Buffer.concat([original.subarray(0,original.length-9),original.subarray(original.length-8)])]];
+  for(const [mode,index]of [['crc',original.length-8],['size',original.length-4],['flags',3]]) {
+    const bytes=Buffer.from(original);bytes[index]^=1;cases.push([mode,bytes]);
+  }
+  for(const [mode,bytes]of cases) {
+    const sha256=digest(bytes),folder=target==='chunk'?'mesh_chunks':'buffers';
+    const suffix=target==='chunk'?'.json.gz':'.f64.gz',path=join(directory,folder,sha256+suffix);
+    await writeFile(path,bytes);
+    let candidate;
+    if(target==='chunk')candidate={...manifest,meshChunks:[{...chunk,path:'res://fixture/mesh_chunks/'+sha256+suffix,sha256,bytes:bytes.length}]};
+    else {
+      const changed=structuredClone(rows);
+      Object.assign(changed[0].positions.$sourceNumericArray,{path:'res://fixture/buffers/'+sha256+suffix,sha256,bytes:bytes.length});
+      const plain=Buffer.from(JSON.stringify(changed)),encoded=gzipSync(plain),chunkHash=digest(encoded);
+      await writeFile(join(directory,'mesh_chunks',chunkHash+'.json.gz'),encoded);
+      candidate={...manifest,meshChunks:[{...chunk,path:'res://fixture/mesh_chunks/'+chunkHash+'.json.gz',sha256:chunkHash,bytes:encoded.length,plainBytes:plain.length}]};
+    }
+    await assert.rejects(verifyWorldStorage(candidate,directory,'res://fixture'),undefined,target+': '+mode);
+    assert.deepEqual(await readFile(path),bytes);
+  }
+  assert.deepEqual(await verifyWorldStorage(manifest,directory,'res://fixture'),{meshes:1,chunks:1,buffers:1});
+});
+
+test('single-member source GZIP retains bounded high-ratio output and multiple input windows',async()=>{
+  for(const kind of ['zeros','varied','chunk']) {
+    await mkdir(artifacts,{recursive:true});
+    const directory=await mkdtemp(join(artifacts,'gzip-window-')),writer=new WorldSourceWriter(directory,'res://fixture');
+    if(kind==='chunk')await writer.append({name:'x'.repeat(1048577)});
+    else {
+      await writer.begin(0,{positions:{$sourceArray:0}},[131073]);
+      await writer.part(0,0,Array.from({length:131073},(_,index)=>kind==='zeros'?0:Math.sin(index)*index));
+      await writer.end(0);
+    }
+    const manifest=await writer.finish();await writer.dispose();
+    const chunk=manifest.meshChunks[0];
+    let overflow;
+    if(kind==='chunk') {
+      assert.ok(chunk.plainBytes>1048576&&chunk.bytes<65536);
+      overflow={...manifest,meshChunks:[{...chunk,plainBytes:1}]};
+    } else {
+      const rows=JSON.parse(gunzipSync(await readFile(join(directory,'mesh_chunks',chunk.path.split('/').at(-1)))));
+      const spec=rows[0].positions.$sourceNumericArray;
+      assert.equal(spec.encoding,'float64le-gzip');
+      assert.equal(spec.bytes>65536,kind==='varied');
+      spec.shape=[1];
+      const plain=Buffer.from(JSON.stringify(rows)),bytes=gzipSync(plain),sha256=digest(bytes);
+      await writeFile(join(directory,'mesh_chunks',sha256+'.json.gz'),bytes);
+      overflow={...manifest,meshChunks:[{...chunk,path:'res://fixture/mesh_chunks/'+sha256+'.json.gz',sha256,bytes:bytes.length,plainBytes:plain.length}]};
+    }
+    await assert.rejects(verifyWorldStorage(overflow,directory,'res://fixture'),/decompression extent exceeded/);
+    assert.deepEqual(await verifyWorldStorage(manifest,directory,'res://fixture'),{meshes:1,chunks:1,buffers:kind==='chunk'?0:1});
   }
 });
 

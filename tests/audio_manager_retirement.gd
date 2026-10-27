@@ -31,6 +31,17 @@ class LoadingSamples extends AudioSampleLibrary:
 		callback.call()
 		return OK
 
+class RejectedManager extends Manager:
+	var rejected: Array[Dictionary] = []
+	func _failure(operation: String, error: Error) -> void:
+		rejected.append({"operation": operation, "error": error})
+
+class QueuingRoutes extends AudioBuses:
+	func effect_bus(effects: Array[AudioEffect]) -> StringName:
+		var result := super.effect_bus(effects)
+		queue_free()
+		return result
+
 var assertions := 0
 var failures: Array[String] = []
 var prefixes: Array[String] = []
@@ -86,8 +97,8 @@ func _source_programs() -> void:
 			Helper.compare(self, choice, {"index": frame.index, "rate": frame.rate, "duration": frame.duration}, "Preserve original sample selection, jitter and counted duration")
 			_check(cursor.value == int(frame.draws), "Preserve the exact private random draw budget")
 
-func _manager() -> Manager:
-	var manager := Manager.new()
+func _manager(value: Manager = null) -> Manager:
+	var manager: Manager = value if value != null else Manager.new()
 	add_child(manager)
 	_check(manager.configure(Content.balance.audio) == OK, "Configure a native manager without starting BGM or movement")
 	prefixes.append("SVS_%d_" % manager.buses.get_instance_id())
@@ -185,6 +196,125 @@ func _loading() -> void:
 		"Synchronous sample-load retirement cannot continue unlocking later consumers")
 	manager.free()
 
+func _player_admissions() -> void:
+	for synthesized: bool in [false, true]:
+		var manager := _manager(RejectedManager.new()) as RejectedManager
+		manager.low_power = synthesized
+		manager.child_entered_tree.connect(func(voice: Node):
+			voice.child_entered_tree.connect(func(player: Node): player.queue_free(), CONNECT_ONE_SHOT), CONNECT_ONE_SHOT)
+		manager._play("ui_click", .5, 0)
+		_check(manager.budget.active == 0 and manager.get_children().all(func(child): return not child is AudioVoice),
+			"Queued native player admission cannot reserve or retain a failed voice")
+		_check(manager.rejected == [{"operation": "start_voice", "error": ERR_UNCONFIGURED}],
+			"Sample and synthesis report rejected native player admission")
+		_check(manager.draws == (0 if synthesized else 1), "Cancelled player admission preserves the already-consumed source draw budget")
+		manager.free()
+	for synthesized: bool in [false, true]:
+		for mode: String in ["current", "earlier", "routing"]:
+			var manager := _manager()
+			var wave: AudioStreamWAV = manager.samples.buffers.ui_click[0].panned[0]
+			var clip := _multi_clip(wave)
+			var voice := AudioVoice.new()
+			manager.add_child(voice)
+			var admitted: Array[Node] = []
+			voice.child_entered_tree.connect(func(player: Node):
+				admitted.append(player)
+				if mode == "current":
+					player.queue_free()
+				elif mode == "routing":
+					manager.buses.queue_free()
+				elif admitted.size() == 2:
+					admitted[0].queue_free())
+			var error: Error
+			if synthesized:
+				var stems: Array[Dictionary] = []
+				for _index in range(3):
+					stems.append({"stream": wave, "gain": 1.0, "route": "panned", "effects": []})
+				error = voice.start_synthesis(stems, manager.buses, 0)
+			else:
+				error = voice.start(clip, manager.buses, 1, 0)
+			_check(error == ERR_UNCONFIGURED and voice.disposed, "Retire partial native voice admission: " + mode)
+			_check(admitted.size() == (2 if mode == "earlier" else 1), "Stop allocating players after native admission cancellation: " + mode)
+			_check(voice.players.all(func(player): return not is_instance_valid(player) or not player.playing),
+				"Cancelled sample and synthesis stems never start")
+			manager.free()
+
+func _multi_clip(wave: AudioStreamWAV) -> NativeAudioClip:
+	var clip := NativeAudioClip.new()
+	clip.channel_count = 2
+	clip.panned.append_array([wave, wave])
+	clip.centered = wave
+	return clip
+
+func _player_losses() -> void:
+	for mode: String in ["queue", "detach", "free"]:
+		var manager := _manager()
+		var voice := AudioVoice.new()
+		manager.add_child(voice)
+		var clip := _multi_clip(manager.samples.buffers.ui_click[0].panned[0])
+		_check(voice.start(clip, manager.buses, 1, 0) == OK, "Admit complete native voice before leaf loss")
+		var players := voice.players.duplicate()
+		var leaf: AudioStreamPlayer = players[0]
+		match mode:
+			"queue": leaf.queue_free()
+			"detach": voice.remove_child(leaf)
+			"free": leaf.free()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(not is_instance_valid(voice), "Physical player loss retires its voice: " + mode)
+		_check(players.all(func(player): return not is_instance_valid(player) or not player.playing),
+			"Physical player loss stops every admitted stem: " + mode)
+		if is_instance_valid(leaf):
+			leaf.free()
+		manager.free()
+
+func _routing_admissions() -> void:
+	for synthesized: bool in [false, true]:
+		var manager := _manager()
+		var routing := QueuingRoutes.new()
+		add_child(routing)
+		_check(routing.configure() == OK, "Configure routing before native admission interruption")
+		prefixes.append("SVS_%d_" % routing.get_instance_id())
+		var voice := AudioVoice.new()
+		manager.add_child(voice)
+		var clip: NativeAudioClip = manager.samples.buffers.ui_click[0]
+		var error: Error
+		if synthesized:
+			var stems: Array[Dictionary] = [{"stream": clip.panned[0], "gain": 1.0, "route": "panned", "effects": []}]
+			error = voice.start_synthesis(stems, routing, 0)
+		else:
+			error = voice.start(clip, routing, 1, 0)
+		_check(error == ERR_UNCONFIGURED and voice.disposed and voice.players.is_empty(),
+			"Routing loss before the first player retires the failed voice immediately")
+		_check(not routing.retiring.is_connected(voice.dispose), "Rejected native routing cannot retain a stale retirement observer")
+		routing.free()
+		manager.free()
+
+func _stem_completion() -> void:
+	var manager := _manager()
+	var original: AudioStreamWAV = manager.samples.buffers.ui_click[0].panned[0]
+	var short := original.duplicate() as AudioStreamWAV
+	short.data = original.data.slice(0, 480)
+	var tail := original.duplicate() as AudioStreamWAV
+	var silence := PackedByteArray()
+	silence.resize(960000)
+	silence.fill(0)
+	tail.data = silence
+	var clip := NativeAudioClip.new()
+	clip.channel_count = 2
+	clip.panned.append_array([short, tail])
+	var voice := AudioVoice.new()
+	manager.add_child(voice)
+	_check(voice.start(clip, manager.buses, 1, 0) == OK, "Admit native stems with different completion times")
+	var deadline := Time.get_ticks_msec() + 3000
+	while is_instance_valid(voice) and voice.players[0].playing and Time.get_ticks_msec() < deadline:
+		await get_tree().create_timer(.01, true, false, true).timeout
+	_check(is_instance_valid(voice) and not voice.disposed and voice.pending == 1 and voice.players[1].playing,
+		"Natural short-stem completion preserves the remaining native stem and voice")
+	if is_instance_valid(voice):
+		voice.dispose()
+	manager.free()
+
 func _configuration() -> void:
 	var queued := Manager.new()
 	add_child(queued)
@@ -218,6 +348,10 @@ func _run() -> void:
 		_normal()
 		_queued()
 		_admissions()
+		_player_admissions()
+		_routing_admissions()
+		await _player_losses()
+		await _stem_completion()
 		_loading()
 		_configuration()
 	await get_tree().process_frame

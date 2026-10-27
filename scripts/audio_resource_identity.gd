@@ -47,7 +47,11 @@ static func digest(resource: Resource) -> String:
 				for value: float in values:
 					if not is_finite(value):
 						return ""
-				oscillators.append({"category": category, "node": node, "frames": values.size()})
+				var layout := {"category": category, "node": node, "frames": values.size()}
+				var cycles: int = resource.cycles(category, int(node))
+				if cycles != 1:
+					layout.cycles = cycles
+				oscillators.append(layout)
 				blocks.append(values.to_byte_array())
 		header = {"version": 1, "kind": "movement", "noise": noise_hash, "oscillators": oscillators}
 	else:

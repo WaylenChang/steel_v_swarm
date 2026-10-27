@@ -1,6 +1,10 @@
 class_name AudioMoveVoice
 extends Node
 
+const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
+const SampleFilter = preload("res://scripts/audio_move_filter.gd")
+const SourceDsp = preload("res://scripts/audio_move_source_dsp.gd")
+
 signal failed(operation: String, error: Error)
 
 var mixer := AudioMoveMixer.new()
@@ -13,7 +17,7 @@ var disposed := false
 var activated := false
 var context_origin := 0.0
 
-func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float) -> Error:
+func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float, wave_tables: Dictionary = {}) -> Error:
 	if configured or disposed or not is_inside_tree() or is_queued_for_deletion():
 		return ERR_UNCONFIGURED
 	if not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
@@ -32,6 +36,12 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 				return ERR_INVALID_DATA
 	if oscillator_count > 1:
 		return ERR_UNAVAILABLE
+	if not wave_tables.is_empty():
+		var dsp := SourceDsp.new()
+		var error := dsp.configure(metadata.moveGraphs[category], plan, initial, AudioServer.get_mix_rate(), wave_tables)
+		if error != OK:
+			return error
+		mixer.source_dsp = dsp
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	buses = routing
 	buses.retiring.connect(retire, CONNECT_ONE_SHOT)
@@ -43,7 +53,24 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		var effects: Array[AudioEffect] = []
 		var filters: Array[Dictionary] = []
 		var correction := 1.0
+		var raw_capture: AudioEffectCapture
+		var raw_input_gain := 1.0
+		if branch.filters.size() > 1 and branch.filters.any(func(entry: Dictionary): return entry.rate_scaled):
+			return ERR_UNAVAILABLE
 		for captured: Dictionary in branch.filters:
+			if captured.rate_scaled:
+				var processor := SampleFilter.new()
+				if processor.configure(captured.captured, rate) != OK:
+					return ERR_UNAVAILABLE
+				raw_capture = AudioEffectCapture.new()
+				raw_capture.buffer_length = .5
+				effects.append(raw_capture)
+				var native := AudioSourceFilter.create(captured.captured)
+				effects.append(native)
+				correction *= AudioSourceFilter.gain_correction(captured.captured)
+				raw_input_gain = 1.0 / correction
+				filters.append({"processor": processor, "node": captured.node, "rate_scaled": true})
+				continue
 			var effect := AudioSourceFilter.create(captured.captured) as AudioEffectFilter
 			if effect == null:
 				return ERR_UNAVAILABLE
@@ -60,13 +87,17 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		var player := AudioStreamPlayer.new()
 		player.bus = route
 		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
-		player.volume_linear = correction * (bank.noise_gain if branch.kind == "noise" else 1.0)
 		player.stream = bank.noise if branch.kind == "noise" else _generator(rate)
+		player.volume_linear = PcmGain.native_gain(player.stream, correction * (bank.noise_gain if branch.kind == "noise" else 1.0))
 		input_players.append(player)
 		add_child(player)
 		if not _admitting():
 			return ERR_UNCONFIGURED
-		var input := {"branch": branch, "capture": capture, "filters": filters}
+		var input := {"branch": branch, "capture": capture, "filters": filters,
+			"startup_discard": AudioGeneratorFeed.input_latency_frames(branch.kind == "oscillator")}
+		if raw_capture != null:
+			input.raw_capture = raw_capture
+			input.raw_input_gain = raw_input_gain
 		if branch.kind == "oscillator":
 			var feed := player.stream as AudioGeneratorFeed
 			input.playback = feed.playback
@@ -102,6 +133,9 @@ func activate() -> Error:
 	for input: Dictionary in mixer.inputs:
 		input.capture.clear_buffer()
 		input.discard_origin = input.capture.get_discarded_frames()
+		if input.has("raw_capture"):
+			input.raw_capture.clear_buffer()
+			input.raw_discard_origin = input.raw_capture.get_discarded_frames()
 	for player: AudioStreamPlayer in input_players:
 		player.play()
 	# All native buffers are already filled; no pause/fade cycle advances input phase.

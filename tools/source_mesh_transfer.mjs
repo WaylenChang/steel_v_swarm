@@ -17,7 +17,9 @@ export function sourceMeshTransfer(mesh,stringify) {
   const header=JSON.parse(stringify(mesh,(_key,value)=>{
     if(value&&typeof value==='object'&&(Object.hasOwn(value,'$sourceArray')||Object.hasOwn(value,'$sourceNumericArray')))
       throw new Error('Reserved source mesh storage property');
-    if(!Array.isArray(value)||value.length<=4096)return value;
+    const scalarBuffer=value instanceof Float64Array;
+    if(!Array.isArray(value)&&!scalarBuffer)return value;
+    if(value.length<=4096)return scalarBuffer?Array.from(value):value;
     const candidates=lengths.get(value.length)||[];
     for(const id of candidates)if(equal(arrays[id],value))return {$sourceArray:id};
     const id=arrays.length;arrays.push(value);candidates.push(id);lengths.set(value.length,candidates);

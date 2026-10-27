@@ -57,7 +57,7 @@ export class WorldSourceWriter {
   }
   async _part(index,offset,values) {
     const part=this.pending?.parts[index];
-    if(!part||!Array.isArray(values)||!values.length||offset!==part.rows||offset+values.length>part.length)
+    if(!part||(!Array.isArray(values)&&!(values instanceof Float64Array))||!values.length||offset!==part.rows||offset+values.length>part.length)
       throw new Error('Out-of-order source numeric part');
     const width=Array.isArray(values[0])?values[0].length:1;
     if(width<=0)throw new Error('Inconsistent source numeric dimensions');

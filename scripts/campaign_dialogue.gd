@@ -20,6 +20,9 @@ var radio_group: Sprite2D
 var motion_rules: Dictionary
 var clock_msec := Callable()
 
+func _current(token: int) -> bool:
+	return token == generation and is_inside_tree() and not is_queued_for_deletion()
+
 func _now_msec() -> float:
 	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
 
@@ -41,6 +44,8 @@ func _layout_radio() -> void:
 		radio_group.layout_radio(size)
 
 func track(stage: int = -1) -> void:
+	if not _current(generation):
+		return
 	track_label.visible = stage >= 0
 	if stage < 0:
 		return
@@ -53,77 +58,119 @@ func track(stage: int = -1) -> void:
 
 func clear() -> void:
 	generation += 1
-	for timer: Timer in timers:
-		timer.stop()
-		timer.queue_free()
+	var old_timers := timers.duplicate()
 	timers.clear()
-	if fade != null and fade.is_valid():
-		fade.kill()
-	if entrance != null and entrance.is_valid():
-		entrance.kill()
-	if is_instance_valid(radio_group):
-		radio_group.retire()
-		radio_group.queue_free()
+	var old_group := radio_group
 	radio_group = null
 	bar = null
+	speaker = null
+	line_label = null
+	var old_portraits := portraits.duplicate()
 	portraits.clear()
 	portrait_ids.clear()
 	lines.clear()
 	at = 0
 	total = 0
+	var old_fade := fade
+	var old_entrance := entrance
+	fade = null
+	entrance = null
+	for portrait: Variant in old_portraits:
+		if is_instance_valid(portrait) and portrait.get_parent() == null:
+			portrait.free()
+	for timer: Timer in old_timers:
+		timer.stop()
+		timer.queue_free()
+	if old_fade != null and old_fade.is_valid():
+		old_fade.kill()
+	if old_entrance != null and old_entrance.is_valid():
+		old_entrance.kill()
+	if is_instance_valid(old_group):
+		old_group.retire()
+		if is_instance_valid(old_group):
+			old_group.queue_free()
 
 func dispose() -> void:
+	var token := generation + 1
 	clear()
-	track(-1)
+	if token == generation and is_instance_valid(track_label):
+		track_label.hide()
+
+func _exit_tree() -> void:
+	dispose()
 
 func _after(seconds: float, callback: Callable) -> void:
 	_after_msec(seconds * 1000, callback)
 
 func _after_msec(delay: float, callback: Callable) -> void:
 	var token := generation
+	if not _current(token):
+		return
 	var deadline := _now_msec() + delay
+	if not _current(token):
+		return
 	var timer := Timer.new()
 	timer.one_shot = true
 	timer.ignore_time_scale = true
 	timer.process_mode = Node.PROCESS_MODE_ALWAYS
 	timer.wait_time = maxf(0.001, delay / 1000)
-	add_child(timer)
 	timers.append(timer)
 	timer.timeout.connect(func():
-		if token != generation or not timers.has(timer):
+		if not _current(token) or not timers.has(timer):
 			return
 		var remaining := deadline - _now_msec()
+		if not _current(token) or not timers.has(timer):
+			return
 		if remaining > 0:
 			timer.start(remaining / 1000)
 			return
 		timers.erase(timer)
 		timer.queue_free()
 		callback.call())
-	timer.start()
+	add_child(timer)
+	if _current(token) and timers.has(timer):
+		timer.start()
 
 func radio(scene: Dictionary) -> void:
-	if scene.get("lines", []).is_empty():
+	if not _current(generation) or scene.get("lines", []).is_empty():
 		return
+	var token := generation + 1
 	clear()
+	if not _current(token):
+		return
 	lines = scene.lines.duplicate(true)
 	total = lines.size()
 	radio_group = preload("res://scripts/dialogue_radio_layer.gd").new()
 	radio_group.name = "RadioPresentation"
 	add_child(radio_group)
+	if not _current(token):
+		return
 	_layout_radio()
+	if not _current(token):
+		return
 	bar = NativeUi.panel(Vector2(860, 152))
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	radio_group.content.add_child(bar)
+	if not _current(token):
+		return
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	bar.position = Vector2(-430, -260)
 	bar.size = Vector2(860, 152)
+	if not _current(token):
+		return
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(column)
+	if not _current(token):
+		return
 	column.add_child(NativeUi.label(scene.title + " · " + scene.note, 15))
+	if not _current(token):
+		return
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(row)
+	if not _current(token):
+		return
 	var leaders := CampaignRules.leaders(lines, side)
 	for index in range(2):
 		var portrait := TextureRect.new()
@@ -137,16 +184,26 @@ func radio(scene: Dictionary) -> void:
 		portrait.texture = Content.campaign_art(id, "avatar", art_mode)
 		portrait.visible = not id.is_empty()
 	row.add_child(portraits[0])
+	if not _current(token):
+		return
 	var text_column := VBoxContainer.new()
 	text_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(text_column)
+	if not _current(token):
+		return
 	speaker = NativeUi.label("", 18)
 	text_column.add_child(speaker)
+	if not _current(token):
+		return
 	line_label = NativeUi.prose("", 18)
 	line_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_column.add_child(line_label)
+	if not _current(token):
+		return
 	row.add_child(portraits[1])
+	if not _current(token):
+		return
 	entrance = _animate_radio("enter")
 	_step()
 
@@ -162,7 +219,8 @@ func _animate_radio(phase: String) -> Tween:
 	return animation
 
 func _step() -> void:
-	if not is_instance_valid(bar):
+	var token := generation
+	if not _current(token) or not is_instance_valid(bar):
 		return
 	if at >= lines.size():
 		var seconds: float = Content.campaign.presentation.radioFade
@@ -170,11 +228,13 @@ func _step() -> void:
 			entrance.kill()
 		fade = _animate_radio("exit")
 		_after(seconds, func():
-			if is_instance_valid(radio_group):
-				radio_group.retire()
-				radio_group.queue_free()
+			var old_group := radio_group
 			radio_group = null
-			bar = null)
+			bar = null
+			if is_instance_valid(old_group):
+				old_group.retire()
+				if is_instance_valid(old_group):
+					old_group.queue_free())
 		return
 	var line: Dictionary = lines[at]
 	at += 1
@@ -183,21 +243,36 @@ func _step() -> void:
 	var index := 1 if hero.side == foe else 0
 	if portrait_ids[index] != line.ch:
 		portraits[index].texture = Content.campaign_art(line.ch, "avatar", art_mode)
+		if not _current(token):
+			return
 		portrait_ids[index] = line.ch
 	for position in range(portraits.size()):
 		portraits[position].modulate.a = 1.0 if position == index else 0.5
 	speaker.text = Content.label("story_speaker") % [hero.code, hero.name]
+	if not _current(token):
+		return
 	speaker.add_theme_color_override("font_color", Color(Content.label("story_merc_color") if hero.side == "MERC" else Content.side_info(hero.side).color))
+	if not _current(token):
+		return
 	line_label.text = line.t
+	if not _current(token):
+		return
 	_after(CampaignRules.line_seconds(line.t), _step)
 
 func transcript(host: VBoxContainer, scene: Dictionary) -> void:
-	if scene.get("lines", []).is_empty():
+	if not _current(generation) or not is_instance_valid(host) or not host.is_inside_tree() or host.is_queued_for_deletion() or scene.get("lines", []).is_empty():
 		return
+	var token := generation
 	host.add_child(NativeUi.label(scene.title, 24))
+	if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+		return
 	host.add_child(NativeUi.prose(scene.note, 16))
+	if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+		return
 	var body = preload("res://scripts/dialogue_transcript_body.gd").new()
 	host.add_child(body)
+	if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+		return
 	var leaders := CampaignRules.leaders(scene.lines, side, true)
 	for index in range(leaders.size()):
 		body.add_portrait(Content.campaign_art(leaders[index], "portrait", art_mode), index > 0)
@@ -208,6 +283,8 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		var hero: Dictionary = Content.heroes[line.ch]
 		var row = preload("res://scripts/dialogue_transcript_row.gd").new()
 		body.rows.add_child(row)
+		if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+			return
 		var portrait := TextureRect.new()
 		portrait.texture = Content.campaign_art(line.ch, "avatar", art_mode)
 		portrait.custom_minimum_size = Vector2(52, 52)
@@ -219,7 +296,15 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		column.add_child(NativeUi.prose(line.t))
 		var foe := "SWARM" if side == "STEEL" else "STEEL"
 		row.content.add_child(column if hero.side == foe else portrait)
+		if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+			# The second child has not been admitted yet.
+			(portrait if hero.side == foe else column).free()
+			return
 		row.content.add_child(portrait if hero.side == foe else column)
+		if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+			return
 		_after_msec(delay + index * interval, func():
-			if is_instance_valid(row):
+			if is_instance_valid(host) and host.is_inside_tree() and not host.is_queued_for_deletion() and is_instance_valid(row) and row.is_inside_tree() and not row.is_queued_for_deletion():
 				row.reveal())
+		if not _current(token):
+			return

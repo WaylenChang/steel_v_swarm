@@ -589,6 +589,23 @@ The wrapper runs capture, source references and native packing sequentially.
   A rate matrix admitted by those model bounds does not certify full source
   waveform parity. Retain actual residuals and finish that representation before
   claiming complete rate/cutoff fidelity or publishing a matching-rate catalogue.
+  Use `node tools/capture_audio_move_oscillators.mjs 48000` to isolate the four
+  original oscillators from filtering/mixing. `data/audio_move_oscillators/`
+  retains complete raw oscillator output and an independent constant-source/Gain
+  observation with identical frequency targets in the same render quantum.
+  Preserve both parent profile hashes, original source and producer fingerprints.
+  `tests/audio_move_oscillators.test.mjs` authenticates the archive and recomputes
+  scalar-control, measured-control and rounded-phase-increment period errors.
+  The measured parameter curves reduce sine reconstruction errors substantially,
+  while square/sawtooth fixed-period errors remain large. Chromium's
+  [AudioParam implementation](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/audio_param_handler.cc)
+  uses Float32 grouped target updates; its
+  [oscillator](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/oscillator_handler.cc)
+  and [periodic wave](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/periodic_wave.cc)
+  retain frequency-dependent band-limited tables and interpolation. The diagnostic
+  rounded-increment model does not implement those table/SIMD paths. Qualify both
+  control precision and dynamic oscillator representation; never use this isolated
+  observation to enlarge native waveform bounds or enable the runtime catalogue.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)

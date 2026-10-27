@@ -15,14 +15,21 @@ func _ready() -> void:
 	var tables: Dictionary = captured.waveTables
 	var witnesses: Array = captured.oscillators.duplicate()
 	witnesses.append_array(tables.probes)
+	witnesses.append_array(tables.constantProbes)
 	for witness: Dictionary in witnesses:
 		var name: String = witness.get("category", "boundary:" + str(witness.type))
 		var oscillator := Oscillator.new()
 		_check(oscillator.configure(tables, witness.type) == OK, "Load original band-limited " + str(witness.type))
 		var frequencies := Marshalls.base64_to_raw(witness.frequencyValues).to_float32_array()
 		var expected := Marshalls.base64_to_raw(witness.values).to_float32_array()
+		var modes := PackedByteArray()
+		var constant: bool = witness in tables.constantProbes
+		if constant:
+			modes.resize(frequencies.size() / 128)
+			modes.fill(0)
+			modes[0] = 1
 		var started := Time.get_ticks_usec()
-		var actual := oscillator.render(frequencies)
+		var actual := oscillator.render(frequencies, modes)
 		var elapsed := Time.get_ticks_usec() - started
 		var maximum := 0.0
 		if actual.size() == expected.size():
@@ -33,8 +40,10 @@ func _ready() -> void:
 		var split := Oscillator.new()
 		split.configure(tables, witness.type)
 		var output := PackedFloat32Array()
-		for start in range(0, frequencies.size(), 508):
-			output.append_array(split.render(frequencies.slice(start, mini(start + 508, frequencies.size()))))
+		var chunk := 512 if constant else 508
+		for start in range(0, frequencies.size(), chunk):
+			var end := mini(start + chunk, frequencies.size())
+			output.append_array(split.render(frequencies.slice(start, end), modes.slice(start / 128, end / 128) if constant else PackedByteArray()))
 		_check(output.to_byte_array() == actual.to_byte_array() and split.phase == oscillator.phase and split.frame == oscillator.frame, "Source grouping and phase survive non-quantum caller boundaries")
 		var before: float = oscillator.phase
 		for invalid: PackedFloat32Array in [PackedFloat32Array([1]), PackedFloat32Array([1, 1, NAN, 1]), PackedFloat32Array([1, 0, 1, 1]), PackedFloat32Array([24000, 1, 1, 1])]:

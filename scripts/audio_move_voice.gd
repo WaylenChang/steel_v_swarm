@@ -3,6 +3,7 @@ extends Node
 
 const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
 const SampleFilter = preload("res://scripts/audio_move_filter.gd")
+const SourceDsp = preload("res://scripts/audio_move_source_dsp.gd")
 
 signal failed(operation: String, error: Error)
 
@@ -16,7 +17,7 @@ var disposed := false
 var activated := false
 var context_origin := 0.0
 
-func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float) -> Error:
+func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float, wave_tables: Dictionary = {}) -> Error:
 	if configured or disposed or not is_inside_tree() or is_queued_for_deletion():
 		return ERR_UNCONFIGURED
 	if not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
@@ -35,6 +36,12 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 				return ERR_INVALID_DATA
 	if oscillator_count > 1:
 		return ERR_UNAVAILABLE
+	if not wave_tables.is_empty():
+		var dsp := SourceDsp.new()
+		var error := dsp.configure(metadata.moveGraphs[category], plan, initial, AudioServer.get_mix_rate(), wave_tables)
+		if error != OK:
+			return error
+		mixer.source_dsp = dsp
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	buses = routing
 	buses.retiring.connect(retire, CONNECT_ONE_SHOT)
@@ -62,7 +69,7 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 				effects.append(native)
 				correction *= AudioSourceFilter.gain_correction(captured.captured)
 				raw_input_gain = 1.0 / correction
-				filters.append({"processor": processor, "rate_scaled": true})
+				filters.append({"processor": processor, "node": captured.node, "rate_scaled": true})
 				continue
 			var effect := AudioSourceFilter.create(captured.captured) as AudioEffectFilter
 			if effect == null:

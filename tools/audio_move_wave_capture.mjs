@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 
 // Offline Chromium wave-table extraction; runtime synthesis remains GDScript.
-export async function captureAudioMoveWaves(page,sampleRate,types) {
+export async function captureAudioMoveWaves(page,sampleRate,types,constants=[]) {
   assert.ok(Number.isSafeInteger(sampleRate)&&sampleRate>=8000&&sampleRate<=384000);
   assert.ok(Array.isArray(types)&&types.length&&new Set(types).size===types.length);
   assert.ok(types.every(type=>['sine','square','sawtooth'].includes(type)));
-  return await page.evaluate(async({sampleRate,types})=>{
+  for(const oscillator of constants)assert.ok(types.includes(oscillator.type)&&Number.isFinite(oscillator.frequency)&&oscillator.frequency>0&&oscillator.frequency<sampleRate/2);
+  return await page.evaluate(async({sampleRate,types,constants})=>{
     const f=Math.fround,size=sampleRate<=24000?2048:(sampleRate<=88200?4096:16384),half=size/2;
     const ranges=Math.floor(.5+3*Math.log2(size));
     const encode=values=>{
@@ -64,6 +65,15 @@ export async function captureAudioMoveWaves(page,sampleRate,types) {
       probes.push({type,frames:frequencies.length,frequencyValues:encode(frequencies),
         values:encode((await context.startRendering()).getChannelData(0))});
     }
-    return {sampleRate,frames:size,ranges,types:output,probes};
-  },{sampleRate,types});
+    const constantProbes=[];
+    for(const input of constants) {
+      const frames=Math.ceil(sampleRate/128)*128;
+      const context=new OfflineAudioContext(1,frames,sampleRate),oscillator=context.createOscillator();
+      oscillator.type=input.type;oscillator.frequency.value=input.frequency;
+      oscillator.connect(context.destination);oscillator.start();
+      constantProbes.push({...input,frames,frequencyValues:encode(new Float32Array(frames).fill(input.frequency)),
+        values:encode((await context.startRendering()).getChannelData(0))});
+    }
+    return {sampleRate,frames:size,ranges,types:output,probes,constantProbes};
+  },{sampleRate,types,constants});
 }

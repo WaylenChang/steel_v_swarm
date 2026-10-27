@@ -28,10 +28,23 @@ func process_sample(value: float, scale: float) -> float:
 	var result := process_buffer(PackedVector2Array([Vector2(value, value)]), PackedFloat64Array([scale]))
 	return result[0].x if result.size() == 1 else NAN
 
-func process_native_buffer(raw: PackedVector2Array, native: PackedVector2Array, scales: PackedFloat64Array, input_gain: float) -> PackedVector2Array:
+func process_native_buffer(raw: PackedVector2Array, native: PackedVector2Array, scales: PackedFloat64Array, input_gain: float, frequencies: PackedFloat32Array = PackedFloat32Array()) -> PackedVector2Array:
 	if raw.size() != native.size() or raw.size() != scales.size():
 		return PackedVector2Array()
-	if not dynamic and scales.count(1.0) == scales.size():
+	if not frequencies.is_empty() and frequencies.size() != scales.size():
+		return PackedVector2Array()
+	if not dynamic and not frequencies.is_empty() and frequencies[0] == base_frequency and frequencies.count(base_frequency) != frequencies.size():
+		var prefix := 0
+		while prefix < frequencies.size() and frequencies[prefix] == base_frequency:
+			prefix += 1
+		var output := process_native_buffer(raw.slice(0, prefix), native.slice(0, prefix), scales.slice(0, prefix), input_gain, frequencies.slice(0, prefix))
+		var tail := process_native_buffer(raw.slice(prefix), native.slice(prefix), scales.slice(prefix), input_gain, frequencies.slice(prefix))
+		if tail.size() != raw.size() - prefix:
+			return PackedVector2Array()
+		output.append_array(tail)
+		return output
+	var unchanged := scales.count(1.0) == scales.size() if frequencies.is_empty() else frequencies.count(base_frequency) == frequencies.size()
+	if not dynamic and unchanged:
 		if raw.size() > 1:
 			x2 = float(raw[-2].x) * input_gain
 			y2 = native[-2].x
@@ -43,10 +56,10 @@ func process_native_buffer(raw: PackedVector2Array, native: PackedVector2Array, 
 			y1 = native[-1].x
 		return native
 	dynamic = true
-	return process_buffer(raw, scales, input_gain)
+	return process_buffer(raw, scales, input_gain, frequencies)
 
-func process_buffer(values: PackedVector2Array, scales: PackedFloat64Array, input_gain: float = 1.0) -> PackedVector2Array:
-	if values.size() != scales.size():
+func process_buffer(values: PackedVector2Array, scales: PackedFloat64Array, input_gain: float = 1.0, frequencies: PackedFloat32Array = PackedFloat32Array()) -> PackedVector2Array:
+	if values.size() != scales.size() or not frequencies.is_empty() and frequencies.size() != values.size():
 		return PackedVector2Array()
 	var output := PackedVector2Array()
 	output.resize(values.size())
@@ -63,9 +76,10 @@ func process_buffer(values: PackedVector2Array, scales: PackedFloat64Array, inpu
 	var result1 := y1
 	var result2 := y2
 	for index in range(values.size()):
-		if scales[index] != last_scale:
-			last_scale = scales[index]
-			var next_frequency := Vector2(base * last_scale, 0).x
+		var next_scale: float = scales[index] if frequencies.is_empty() else frequencies[index]
+		if next_scale != last_scale:
+			last_scale = next_scale
+			var next_frequency := Vector2(base * last_scale, 0).x if frequencies.is_empty() else next_scale
 			if not is_finite(next_frequency) or next_frequency <= 0 or next_frequency >= native_rate * .5:
 				return PackedVector2Array()
 			if next_frequency != last_frequency:

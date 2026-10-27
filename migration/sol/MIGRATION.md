@@ -609,9 +609,12 @@ The wrapper runs capture, source references and native packing sequentially.
   frequency words. `tests/audio_move_oscillator.tscn` requires bit-exact output for
   the four original rate programs and three AudioParam-input boundary programs,
   including mixed interpolation groups, large frequency jumps and near-Nyquist
-  values. Four-frame source groups survive non-quantum caller boundaries;
-  incomplete/invalid groups reject before advancing phase. This component is not
-  yet bound to the mixer. `scripts/audio_param_curve.gd` generates source Float32
+  values, plus the four original constant-rate programs. Preserve the original
+  k-rate Float32 SIMD lane recurrence and its accurate quantum-end phase reset;
+  a-rate uses double phase accumulation. Initial value events and even no-op
+  future rate targets affect source path selection. Four-frame source groups
+  survive non-quantum caller boundaries; incomplete/invalid groups reject before
+  advancing phase. `scripts/audio_param_curve.gd` generates source Float32
   target curves in complete 128-frame render quanta. Preserve grouped updates,
   fractional starts, scalar tails, convergence and the empty previous-event span
   at an exact quantum boundary. `tests/audio_param_curve.tscn` requires bit-exact
@@ -621,9 +624,27 @@ The wrapper runs capture, source references and native packing sequentially.
   the existing Float64 numeric transfer codec; do not route fractional timestamps
   through the unresolved shared inline-number decoder. Late commands, incomplete
   quanta, underflowed Float32 constants and unimplemented coincident instant/
-  target event types reject explicitly. Qualify source k-rate/a-rate transitions,
-  resource admission and full mixed/native output before
-  replacing the current scalar-control/fixed-period path. Keep the archive's
+  target event types reject explicitly.
+  `scripts/audio_move_source_dsp.gd` binds those curves and oscillators through
+  the optional device-rate wave-table input on `AudioMove`/`AudioMoveVoice`.
+  Keep source filter-frequency words and independent dry/wet curves; never
+  reconstruct physical frequency through scalar divide/multiply round trips.
+  Preserve the exact native fixed-filter prefix until the first changed sample.
+  Source processing consumes complete 128-frame quanta within the existing
+  input-ahead and two-period output reserve. Relative source commands retain
+  their original timestamps; late gain/pan/wet commands still use the output
+  frontier, while rates share the generated-input frontier. Non-unity initial
+  rates and uncaptured detuning remain unavailable in this path.
+  Run `tests/audio_move_source_dsp.tscn`, then add `--source-curves` to all four
+  static/automation/live/rate modes of `tests/audio_move_waveforms.tscn`.
+  This removes fixed-period model errors from the existing strict native bounds.
+  Queue preplanned source commands before input priming, retaining no-op rate
+  events in the live output-control corpus. Also run
+  `tests/audio_move_render.tscn -- --stress --rate-stress --source-curves` for
+  concurrent playback, UI stalls, exact physical LFO phase and route retirement.
+  Finish serialized wave-bank identity/admission, matching-rate catalogue
+  publication, game-frame delivery and device suspension before selecting this
+  optional path in normal resource loading. Keep the archive's
   `rateOscillatorsQualified` false until that integration passes. Never enlarge
   native waveform bounds or enable a runtime catalogue from isolated observations.
   Discard each input's native startup history before advancing the common

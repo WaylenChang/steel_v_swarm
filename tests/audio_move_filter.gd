@@ -101,5 +101,19 @@ func _ready() -> void:
 	for index in range(expected.size()):
 		maximum = maxf(maximum, absf(expected[index].x - switched[index].x))
 	_check(transition.dynamic and maximum <= .000000954, "Native fixed-filter history bridges into the exact source rate program")
+	var direct := Filter.new()
+	direct.configure(selected, 48000)
+	var frequencies := PackedFloat32Array()
+	frequencies.resize(128)
+	frequencies.fill(direct.base_frequency)
+	for index in range(64, 128):
+		frequencies[index] = direct.base_frequency * .5
+	var result := direct.process_native_buffer(samples.slice(0, 128), native.slice(0, 128), unity.slice(0, 128), 1, frequencies)
+	_check(result.slice(0, 64).to_byte_array() == native.slice(0, 64).to_byte_array(), "An explicit frequency curve preserves the exact native prefix before its first change")
+	_check(direct.dynamic and direct.frequency == frequencies[-1], "Physical frequency words drive the filter independently of the legacy scalar-rate curve")
+	var invalid := Filter.new()
+	invalid.configure(selected, 48000)
+	frequencies[-1] = NAN
+	_check(invalid.process_native_buffer(samples.slice(0, 128), native.slice(0, 128), unity.slice(0, 128), 1, frequencies).is_empty(), "An invalid changing suffix cannot publish only its native prefix")
 	print("AUDIO_MOVE_FILTER assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)

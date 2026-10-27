@@ -53,7 +53,8 @@ try {
     assert.equal(browser.version(),parent.source.chromiumVersion);assert.equal(flags,parent.source.jsFlags);
   }
   const oscillators=await captureAudioMoveOscillators(await browser.newPage(),movement,program);
-  const waveTables=await captureAudioMoveWaves(await browser.newPage(),rate,[...new Set(oscillators.map(item=>item.type))]);
+  const waveTables=await captureAudioMoveWaves(await browser.newPage(),rate,[...new Set(oscillators.map(item=>item.type))],
+    oscillators.map(({category,node,type,frequency})=>({category,node,type,frequency})));
   const parameterPrograms=movementParameterPrograms(program,await readFile(join(source,'public/js/audio.js'),'utf8'));
   for(const [name,initial,actions]of [
     ['fractional-tails',.35,[[1.25,-.7,.0013],[7.25,.9,.0027],[127.75,0,.001],[131.25,.65,0],[257.5,-.35,.001]]],
@@ -64,11 +65,13 @@ try {
   ])parameterPrograms.push({name,initial,frames:2048,commands:actions.map(([frame,target,tau])=>({time:frame/rate,target,tau})),origins:[]});
   const parameterProbes=await captureAudioParamPrograms(await browser.newPage(),rate,parameterPrograms);
   const tableErrors={};
-  for(const witness of [...oscillators,...waveTables.probes]) {
-    const output=renderAudioMoveWave(waveTables,witness.type,witness.frequencyValues),bytes=Buffer.from(witness.values,'base64');
+  for(const witness of [...oscillators,...waveTables.probes,...waveTables.constantProbes]) {
+    const constant=waveTables.constantProbes.includes(witness);
+    const modes=constant?Array.from({length:witness.frames/128},(_,index)=>index===0?1:0):[];
+    const output=renderAudioMoveWave(waveTables,witness.type,witness.frequencyValues,modes),bytes=Buffer.from(witness.values,'base64');
     let maximum=0;
     for(let index=0;index<output.length;index++)maximum=Math.max(maximum,Math.abs(output[index]-bytes.readFloatLE(index*4)));
-    const name=witness.category?witness.category+':'+witness.node:'boundary:'+witness.type;
+    const name=(constant?'constant:':'')+(witness.category?witness.category+':'+witness.node:'boundary:'+witness.type);
     assert.equal(maximum,0,'Exact original isolated oscillator reconstruction: '+name);
     tableErrors[name]=maximum;
   }

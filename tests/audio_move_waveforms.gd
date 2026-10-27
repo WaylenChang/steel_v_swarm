@@ -12,6 +12,8 @@ var sink: StringName
 var automation := false
 var live := false
 var rates := false
+var source_curves := false
+var isolated: Dictionary = {}
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -27,6 +29,7 @@ func _source() -> bool:
 	rates = OS.get_cmdline_user_args().has("--rates")
 	automation = rates or OS.get_cmdline_user_args().has("--automation")
 	live = OS.get_cmdline_user_args().has("--live")
+	source_curves = OS.get_cmdline_user_args().has("--source-curves")
 	if not _check(not live or automation, "Live command delivery requires an original automation corpus"):
 		return false
 	if not _check(not rates or not live, "Rate/filter waveform qualification uses the prequeued source program"):
@@ -48,6 +51,17 @@ func _source() -> bool:
 		if not _check(provenance.inputs.get(path) == reference.source.sourceInputs[path], "Original waveform source matches imported provenance: " + path):
 			return false
 	movement = Content.read_json("res://" + str(reference.source.movementProfile.path))
+	if source_curves:
+		isolated = Content.read_json("res://data/audio_move_oscillators/%d.json" % rate)
+		if not _check(isolated.get("scope") == "original-movement-isolated-oscillators" and isolated.source.movementProfile == reference.source.movementProfile, "Source DSP uses the same original movement cohort"):
+			return false
+		for parent: Dictionary in [isolated.source.movementProfile, isolated.source.programProfile, isolated.source.contextProfile]:
+			if not _check(FileAccess.get_sha256("res://" + str(parent.path)) == parent.sha256, "Source-DSP parent bytes remain exact: " + str(parent.path)):
+				return false
+		for path: String in isolated.source.inputs:
+			var text := FileAccess.get_file_as_string("res://" + path).replace("\r\n", "\n").replace("\r", "\n")
+			if not _check(text.sha256_text() == isolated.source.inputs[path], "Original source-DSP producer remains current: " + path):
+				return false
 	var keys: Array[String] = []
 	for fixture: Dictionary in reference.waveforms:
 		keys.append("%s:%.2f" % [fixture.category, fixture.wet])
@@ -118,7 +132,7 @@ func _bound(fixture: Dictionary, bank: NativeAudioMoveBank) -> float:
 	var plan := AudioMovePlan.compile(movement.graphs[fixture.category])
 	var modulation_error := 0.0
 	for node: int in plan.lfos:
-		modulation_error = float(reference.periodErrors[fixture.category + ":" + str(node)])
+		modulation_error = 0 if source_curves else float(reference.periodErrors[fixture.category + ":" + str(node)])
 	var total := 0.0
 	var maximum_gain := float(fixture.gain)
 	for command: Dictionary in fixture.get("commands", []):
@@ -130,6 +144,8 @@ func _bound(fixture: Dictionary, bank: NativeAudioMoveBank) -> float:
 			l1 *= _filter_l1(filter.captured)
 		var input_peak := float(reference.noisePeak) if branch.kind == "noise" else 1.0
 		var error := bank.noise_gain / 65536.0 if branch.kind == "noise" else float(reference.periodErrors[fixture.category + ":" + str(branch.source)])
+		if source_curves and branch.kind == "oscillator":
+			error = 0
 		error *= l1
 		if not branch.modulation.is_empty():
 			var peak := absf(float(branch.modulation.offset)) + absf(float(branch.modulation.depth))
@@ -155,7 +171,7 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	var gen_route := buses.capture_bus([gen_trace])
 	var voice := AudioMoveVoice.new()
 	add_child(voice)
-	var configured := voice.configure(fixture.category, Content.balance.audio, bank, buses, fixture, 0)
+	var configured := voice.configure(fixture.category, Content.balance.audio, bank, buses, fixture, 0, isolated.waveTables if source_curves else {})
 	if not _check(configured == OK, "Configure original static movement graph"):
 		voice.free()
 		return
@@ -175,17 +191,22 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	wav_trace.clear_buffer()
 	gen_trace.clear_buffer()
 	AudioServer.unlock()
-	_check(voice.activate() == OK, "Activate aligned movement inputs")
+	if not source_curves:
+		_check(voice.activate() == OK, "Activate aligned movement inputs")
 	var pending: Array[Dictionary] = []
 	var deliveries: Array[Dictionary] = []
 	for command: Dictionary in fixture.get("commands", []):
 		if live:
 			if command.key == "rate":
 				_check(command.target == fixture.rate, "Live output-control corpus leaves the input rate unchanged")
+				if source_curves:
+					voice.mixer.queue(command.key, command.target, command.tau, float(command.time), true)
 			else:
 				pending.append(command)
 		else:
-			voice.mixer.queue(command.key, command.target, command.tau, voice.mixer.origin + float(command.time))
+			voice.mixer.queue(command.key, command.target, command.tau, float(command.time) if source_curves else voice.mixer.origin + float(command.time), source_curves)
+	if source_curves:
+		_check(voice.activate() == OK, "Activate aligned movement inputs")
 	worker.add(voice.mixer)
 	var deadline := Time.get_ticks_msec() + 1400
 	while Time.get_ticks_msec() < deadline:
@@ -199,7 +220,7 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 			if frame == 0 or (fixture.category == "engine" and wanted >= int(progress.get("input_frames", 0))):
 				break
 			deliveries.append({"key": command.key, "wanted": wanted, "outputFrame": frame, "inputFrame": progress.get("input_frames", 0)})
-			voice.mixer.queue(command.key, command.target, command.tau, voice.mixer.origin + float(command.time))
+			voice.mixer.queue(command.key, command.target, command.tau, float(command.time) if source_curves else voice.mixer.origin + float(command.time), source_curves)
 			pending.pop_front()
 		var feed := generator_marker.stream as AudioGeneratorFeed
 		var silence := PackedVector2Array()
@@ -277,9 +298,11 @@ func _run() -> void:
 	AudioServer.remove_bus(AudioServer.get_bus_index(sink))
 	DirAccess.make_dir_recursive_absolute("res://artifacts/sol")
 	var label := "audio-move-rates-native" if rates else ("audio-move-automation-live-native" if live else ("audio-move-automation-native" if automation else "audio-move-waveforms-native"))
+	if source_curves:
+		label += "-source-curves"
 	var file := FileAccess.open("res://artifacts/sol/" + label + ".json", FileAccess.WRITE)
 	file.store_string(JSON.stringify({"sampleRate": reference.sampleRate, "cases": results, "failures": failures,
-		"rateOscillatorsQualified": not rates, "periodModelErrors": reference.periodErrors}, "\t"))
+		"rateOscillatorsQualified": not rates, "sourceCurves": source_curves, "periodModelErrors": reference.periodErrors}, "\t"))
 	file.close()
 	print("AUDIO_MOVE_RATES" if rates else ("AUDIO_MOVE_AUTOMATION_LIVE" if live else ("AUDIO_MOVE_AUTOMATION" if automation else "AUDIO_MOVE_WAVEFORMS")), " cases=", results.size(), " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)

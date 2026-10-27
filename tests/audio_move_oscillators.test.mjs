@@ -103,7 +103,12 @@ test('captured band-limited tables reconstruct every raw source and boundary sam
     const values=renderAudioMoveWave(captured.waveTables,witness.type,witness.frequencyValues);
     assert.equal(encode(values),witness.values,'Bit-exact original '+(witness.category??witness.type));
   }
-  assert.equal(Object.keys(captured.tableErrors).length,7);
+  assert.equal(captured.waveTables.constantProbes.length,4);
+  for(const witness of captured.waveTables.constantProbes) {
+    const modes=Array.from({length:witness.frames/128},(_,index)=>index===0?1:0);
+    assert.equal(encode(renderAudioMoveWave(captured.waveTables,witness.type,witness.frequencyValues,modes)),witness.values);
+  }
+  assert.equal(Object.keys(captured.tableErrors).length,11);
   assert.ok(Object.values(captured.tableErrors).every(value=>value===0));
 });
 

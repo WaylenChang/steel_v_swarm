@@ -11,6 +11,7 @@ var time_constant := 0.0
 var event_time := 0.0
 var active := false
 var events: Array[Dictionary] = []
+var rate_modes := PackedByteArray()
 
 func configure(initial: float, rate: float) -> Error:
 	if not is_finite(initial) or not is_finite(Vector2(initial, 0).x) or not is_finite(rate) or rate < 8000 or rate > 384000 or rate != floor(rate):
@@ -23,6 +24,7 @@ func configure(initial: float, rate: float) -> Error:
 	event_time = 0
 	active = false
 	events.clear()
+	rate_modes.clear()
 	return OK
 
 func queue(next_target: float, time: float, tau: float) -> Error:
@@ -30,7 +32,7 @@ func queue(next_target: float, time: float, tau: float) -> Error:
 		return ERR_UNCONFIGURED
 	if not is_finite(next_target) or not is_finite(Vector2(next_target, 0).x) or not is_finite(time) or time < 0 or not is_finite(tau) or tau < 0 or not is_finite(Vector2(tau, 0).x):
 		return ERR_INVALID_DATA
-	if time * sample_rate < frame:
+	if ceili(time * sample_rate) < frame:
 		return ERR_BUSY
 	if tau > 0 and Vector2(tau, 0).x == 0:
 		return ERR_UNAVAILABLE
@@ -55,7 +57,12 @@ func render(count: int) -> PackedFloat32Array:
 	output.resize(count)
 	var finish := frame + count
 	var written := 0
+	rate_modes.clear()
 	while frame < finish:
+		if frame % QUANTUM == 0:
+			# The initial .value assignment is a source SetValue event at frame zero.
+			var automated := not events.is_empty() or (active and (time_constant > 0 or event_time >= float(frame) / sample_rate)) or frame == 0
+			rate_modes.append(1 if automated else 0)
 		var fresh := false
 		# A target ending exactly at the next quantum is visited once with an empty
 		# span before its successor; that visit advances its previous last sample.

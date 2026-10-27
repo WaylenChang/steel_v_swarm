@@ -56,11 +56,19 @@ func configure(captured: Dictionary, shape: String) -> Error:
 	frame = 0
 	return OK
 
-func render(frequencies: PackedFloat32Array) -> PackedFloat32Array:
+func render(frequencies: PackedFloat32Array, rate_modes: PackedByteArray = PackedByteArray()) -> PackedFloat32Array:
 	# Chromium selects its interpolation path for four source samples together.
 	# Reject incomplete groups rather than making their path depend on caller buffers.
 	if tables.is_empty() or frequencies.size() % 4 != 0:
 		return PackedFloat32Array()
+	if not rate_modes.is_empty():
+		if frame % 128 != 0 or frequencies.size() % 128 != 0 or rate_modes.size() != frequencies.size() / 128:
+			return PackedFloat32Array()
+		for quantum in range(rate_modes.size()):
+			if rate_modes[quantum] > 1:
+				return PackedFloat32Array()
+			if rate_modes[quantum] == 0 and frequencies.slice(quantum * 128, quantum * 128 + 128).count(frequencies[quantum * 128]) != 128:
+				return PackedFloat32Array()
 	for frequency: float in frequencies:
 		if not is_finite(frequency) or frequency <= 0 or frequency >= sample_rate * .5:
 			return PackedFloat32Array()
@@ -71,36 +79,45 @@ func render(frequencies: PackedFloat32Array) -> PackedFloat32Array:
 	var lowest := float(sample_rate) / table_size
 	var position := phase
 	var mask := table_size - 1
+	var lanes := Vector4.ZERO
+	var quantum_origin := position
 	for group in range(0, frequencies.size(), 4):
 		var increments := Vector4(frequencies[group] * rate_scale, frequencies[group + 1] * rate_scale, frequencies[group + 2] * rate_scale, frequencies[group + 3] * rate_scale)
+		var constant := not rate_modes.is_empty() and rate_modes[group / 128] == 0
+		if constant and group % 128 == 0:
+			quantum_origin = position
+			lanes = Vector4(position, position + increments.x, position + Vector2(2 * increments.x, 0).x, position + Vector2(3 * increments.x, 0).x)
+			for point in range(4):
+				lanes[point] = fposmod(lanes[point], table_size)
 		var linear := increments.x >= TWO_POINT and increments.y >= TWO_POINT and increments.z >= TWO_POINT and increments.w >= TWO_POINT
 		for offset in range(4):
 			var increment: float = increments[offset]
-			var fundamental := Vector2(inverse_scale * increment, 0).x
+			var read_position: float = lanes[offset] if constant and increment >= TWO_POINT else position
+			var fundamental := Vector2(inverse_scale * increment, 0).x if not constant else frequencies[group + offset]
 			var ratio := Vector2(fundamental / lowest, 0).x
 			var cents := Vector2(Vector2(log(ratio) / LOG_TWO, 0).x * 1200, 0).x
 			var pitch := clampf(Vector2(1.0 + Vector2(cents / 400.0, 0).x, 0).x, 0, tables.size() - 1)
 			var higher := int(pitch)
 			var lower := mini(higher + 1, tables.size() - 1)
 			var blend := Vector2(pitch - higher, 0).x
-			var index := int(position)
+			var index := int(read_position)
 			var high := tables[higher]
 			var low := tables[lower]
 			var high_value := 0.0
 			var low_value := 0.0
 			if linear:
-				var fraction := Vector2(position, 0).x - index
+				var fraction := Vector2(read_position, 0).x - index
 				var differences := Vector2(high[(index + 1) & mask] - high[index], low[(index + 1) & mask] - low[index])
 				var products := Vector2(fraction * differences.x, fraction * differences.y)
 				var interpolated := Vector2(high[index] + products.x, low[index] + products.y)
 				var delta := Vector2(interpolated.y - interpolated.x, 0).x
 				output[group + offset] = interpolated.x + Vector2(blend * delta, 0).x
 			else:
-				var t := position - index
+				var t := read_position - index
 				var t2 := t * t
 				var weights := PackedFloat64Array()
 				if increment >= TWO_POINT:
-					var fraction := Vector2(position, 0).x - index
+					var fraction := Vector2(read_position, 0).x - index
 					high_value = (1.0 - fraction) * high[index] + fraction * high[(index + 1) & mask]
 					low_value = (1.0 - fraction) * low[index] + fraction * low[(index + 1) & mask]
 				elif increment >= THREE_POINT:
@@ -113,6 +130,12 @@ func render(frequencies: PackedFloat32Array) -> PackedFloat32Array:
 					low_value += weights[point] * low[sample_index]
 				output[group + offset] = Vector2(1.0 - blend, 0).x * high_value + blend * low_value
 			position = fposmod(position + increment, table_size)
+		if constant and increments.x >= TWO_POINT:
+			lanes += Vector4.ONE * Vector2(4 * increments.x, 0).x
+			for point in range(4):
+				lanes[point] = fposmod(lanes[point], table_size)
+			if (group + 4) % 128 == 0:
+				position = fposmod(quantum_origin + Vector2(128 * increments.x, 0).x, table_size)
 	phase = position
 	frame += frequencies.size()
 	return output

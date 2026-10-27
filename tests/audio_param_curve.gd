@@ -64,5 +64,15 @@ func _ready() -> void:
 				maximum = maxf(maximum, absf(actual[index] - expected[index]))
 		print("PARAM_CURVE_WITNESS ", probe.name, " maximum=", maximum, " first=", first)
 		_check(actual.to_byte_array() == expected.to_byte_array(), "Original Float32 parameter curve: " + str(probe.name))
+		if probe.name == "fractional-tails":
+			var live := ParamCurve.new()
+			live.configure(probe.initial, captured.sampleRate)
+			for index in range(0, 6, 3):
+				live.queue(commands[index], commands[index + 1], commands[index + 2])
+			var output: PackedFloat32Array = live.render(128)
+			for index in range(6, commands.size(), 3):
+				_check(live.queue(commands[index], commands[index + 1], commands[index + 2]) == OK, "A fractional event may still reach the next editable sample")
+			output.append_array(live.render(int(probe.frames) - 128))
+			_check(output.to_byte_array() == expected.to_byte_array(), "Live fractional delivery retains the original curve without rounding its start time")
 	print("AUDIO_PARAM_CURVE_PASS " if failures == 0 else "AUDIO_PARAM_CURVE_FAIL ", assertions, " assertions, ", failures, " failures")
 	get_tree().quit(0 if failures == 0 else 1)

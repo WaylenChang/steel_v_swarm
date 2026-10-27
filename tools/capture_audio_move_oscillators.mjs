@@ -6,6 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {captureAudioMoveOscillators} from './audio_move_oscillator_capture.mjs';
 import {captureAudioMoveWaves} from './audio_move_wave_capture.mjs';
 import {renderAudioMoveWave} from './audio_move_wave_model.mjs';
+import {captureAudioParamPrograms,movementParameterPrograms} from './audio_param_capture.mjs';
 import {writeFixtureJson} from './fixture_json.mjs';
 
 const [argument,...extra]=process.argv.slice(2),rate=Number(argument);
@@ -29,7 +30,8 @@ for(const [name,digest]of Object.entries(program.source.inputs)) {
   inputs[name]=digest;
 }
 for(const name of ['tools/capture_audio_move_oscillators.mjs','tools/audio_move_oscillator_capture.mjs',
-  'tools/audio_move_wave_capture.mjs','tools/audio_move_wave_model.mjs','tools/fixture_json.mjs']) {
+  'tools/audio_move_wave_capture.mjs','tools/audio_move_wave_model.mjs','tools/audio_param_capture.mjs',
+  'tools/source_numeric_transfer.mjs','tools/fixture_json.mjs']) {
   const digest=hash(await normalized(name));
   if(name in inputs)assert.equal(inputs[name],digest,'Consistent current producer: '+name);
   inputs[name]=digest;
@@ -52,6 +54,15 @@ try {
   }
   const oscillators=await captureAudioMoveOscillators(await browser.newPage(),movement,program);
   const waveTables=await captureAudioMoveWaves(await browser.newPage(),rate,[...new Set(oscillators.map(item=>item.type))]);
+  const parameterPrograms=movementParameterPrograms(program,await readFile(join(source,'public/js/audio.js'),'utf8'));
+  for(const [name,initial,actions]of [
+    ['fractional-tails',.35,[[1.25,-.7,.0013],[7.25,.9,.0027],[127.75,0,.001],[131.25,.65,0],[257.5,-.35,.001]]],
+    ['zero-convergence',1,[[0,0,.001],[768,.5,.001]]],
+    ['constant-target',1,[[0,1,.14]]],
+    ['same-time-replacement',1,[[0,.7,.001],[0,-.5,.001],[128,.65,.001],[128,-.65,.001]]],
+    ['zero-tau',1,[[.5,.6,0],[128.5,0,0],[255.5,-.6,0]]],
+  ])parameterPrograms.push({name,initial,frames:2048,commands:actions.map(([frame,target,tau])=>({time:frame/rate,target,tau})),origins:[]});
+  const parameterProbes=await captureAudioParamPrograms(await browser.newPage(),rate,parameterPrograms);
   const tableErrors={};
   for(const witness of [...oscillators,...waveTables.probes]) {
     const output=renderAudioMoveWave(waveTables,witness.type,witness.frequencyValues),bytes=Buffer.from(witness.values,'base64');
@@ -66,12 +77,12 @@ try {
   await writeFixtureJson(join(directory,rate+'.json'),{
     formatVersion:1,scope:'original-movement-isolated-oscillators',sampleRate:rate,frames:rate,
     parameterObservation:'constant-source-through-gain-with-identical-frequency-events',
-    rateOscillatorsQualified:false,oscillators,waveTables,tableErrors,
+    rateOscillatorsQualified:false,oscillators,waveTables,tableErrors,parameterProbes,
     source:{audioSha256:movement.source.audioSha256,sourceInputs:movement.source.sourceInputs,inputs,
       movementProfile:{path:parents.movement.path,sha256:parents.movement.sha256},
       programProfile:{path:parents.program.path,sha256:parents.program.sha256},contextProfile:movement.source.contextProfile,
       chromiumVersion:browser.version(),jsFlags:flags},
   });
-  console.log('SOURCE_MOVE_OSCILLATORS_PASS '+JSON.stringify({sampleRate:rate,tableErrors,
+  console.log('SOURCE_MOVE_OSCILLATORS_PASS '+JSON.stringify({sampleRate:rate,tableErrors,parameterPrograms:parameterProbes.length,
     errors:oscillators.map(item=>({category:item.category,node:item.node,...item.modelErrors}))}));
 } finally {await browser.close();}

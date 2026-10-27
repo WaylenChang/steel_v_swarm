@@ -611,8 +611,18 @@ The wrapper runs capture, source references and native packing sequentially.
   including mixed interpolation groups, large frequency jumps and near-Nyquist
   values. Four-frame source groups survive non-quantum caller boundaries;
   incomplete/invalid groups reject before advancing phase. This component is not
-  yet bound to the mixer: qualify source Float32 control generation, source
-  k-rate/a-rate transitions, resource admission and full mixed/native output before
+  yet bound to the mixer. `scripts/audio_param_curve.gd` generates source Float32
+  target curves in complete 128-frame render quanta. Preserve grouped updates,
+  fractional starts, scalar tails, convergence and the empty previous-event span
+  at an exact quantum boundary. `tests/audio_param_curve.tscn` requires bit-exact
+  frequency words and command-to-oscillator output, plus all 21 captured movement
+  and numerical-boundary parameter programs. Gain, pan, both dry/wet targets and
+  every rate-bound frequency retain independent source curves. Command words use
+  the existing Float64 numeric transfer codec; do not route fractional timestamps
+  through the unresolved shared inline-number decoder. Late commands, incomplete
+  quanta, underflowed Float32 constants and unimplemented coincident instant/
+  target event types reject explicitly. Qualify source k-rate/a-rate transitions,
+  resource admission and full mixed/native output before
   replacing the current scalar-control/fixed-period path. Keep the archive's
   `rateOscillatorsQualified` false until that integration passes. Never enlarge
   native waveform bounds or enable a runtime catalogue from isolated observations.

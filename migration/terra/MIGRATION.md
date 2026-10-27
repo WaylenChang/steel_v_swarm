@@ -67,6 +67,17 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   imported profiles, headings, native-representable positions and the flight
   threshold. These probes do not qualify upstream positions or headings, camera
   orientation matrices, populated actor rendering or delivery.
+  Free spectator movement retains scalar position across frames, applies the
+  original diagonal/boost operation order and clamps floor before ceiling. Mode
+  changes carry the unrounded follow anchor into free movement, and nearest-player
+  acquisition compares that retained position, including exact distance ties.
+  `node tools/spectator_free_capture.mjs`,
+  `node --test tests/spectator_free.test.mjs` and real-driver
+  `tests/spectator_free.tscn` compare 312 original frames, scalar and native
+  position bits, selection, resets and controlled terrain/ceiling transitions.
+  World surface queries still receive native Vector3 coordinates; these controlled
+  surfaces do not qualify populated terrain queries, the shared angle transfer,
+  camera orientation or recipient delivery.
   Lock-glow hit decay retains millisecond subtraction before division by 200;
   ring rotation derives its quaternion from the double phase before native
   storage. `node tools/lock_glow_capture.mjs` executes the original constructor

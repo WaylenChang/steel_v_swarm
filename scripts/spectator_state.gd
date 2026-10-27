@@ -6,7 +6,18 @@ signal notice(message: String)
 var rules: Dictionary = {}
 var mode := ""
 var pid := ""
-var position := Vector3.ZERO
+var _position_vector := Vector3.ZERO
+var _position_x := 0.0
+var _position_y := 0.0
+var _position_z := 0.0
+var position: Vector3:
+	get:
+		return _position_vector
+	set(value):
+		_position_vector = value
+		_position_x = float(value.x)
+		_position_y = float(value.y)
+		_position_z = float(value.z)
 var camera_position := Vector3.ZERO
 var yaw := 0.0
 var pitch := 0.0
@@ -32,8 +43,10 @@ func configure(metadata: Dictionary, center: Vector3, ceiling: float, initial_fo
 	rules = metadata
 	mode = str(rules.camera.VIEWS[0])
 	pid = ""
-	position = center + Vector3.UP * float(rules.startHeight)
-	position.y = minf(position.y, ceiling)
+	_position_x = float(center.x)
+	_position_y = minf(float(center.y) + float(rules.startHeight), ceiling)
+	_position_z = float(center.z)
+	_position_vector = Vector3(_position_x, _position_y, _position_z)
 	camera_position = Vector3.ZERO
 	yaw = 0.0
 	pitch = rules.startPitch
@@ -59,10 +72,10 @@ static func roster(actors: Array) -> Array:
 
 func _nearest(list: Array) -> Dictionary:
 	var nearest: Dictionary = list[0]
-	var nearest_distance := _distance_squared(position, nearest.position)
+	var nearest_distance := _distance_squared_xyz(_position_x, _position_y, _position_z, nearest.position)
 	for index in range(1, list.size()):
 		var actor: Dictionary = list[index]
-		var distance := _distance_squared(position, actor.position)
+		var distance := _distance_squared_xyz(_position_x, _position_y, _position_z, actor.position)
 		if not (nearest_distance <= distance):
 			nearest = actor
 			nearest_distance = distance
@@ -225,7 +238,10 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 			_anchor_z += (float(point.z) - _anchor_z) * weight
 			_anchor_position = Vector3(_anchor_x, _anchor_y, _anchor_z)
 		follow_yaw = CameraPose.angle_step(follow_yaw, actor.get("ry", follow_yaw), c.FPV_YAW_K if view == "fpv" else c.YAW_K, delta)
-		position = anchor
+		_position_x = _anchor_x
+		_position_y = _anchor_y
+		_position_z = _anchor_z
+		_position_vector = Vector3(_position_x, _position_y, _position_z)
 		if view == "fpv":
 			var eye: Dictionary = profile.air if float(actor.get("heroY", 0)) > float(c.FLY_M) else profile.ground
 			yaw = follow_yaw
@@ -246,18 +262,23 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 			if camera_position.y < floor_height:
 				camera_position.y = floor_height
 	else:
+		var forward_x := -sin(yaw)
+		var forward_z := -cos(yaw)
 		var speed: float = float(c.MOVE_MPS) * (float(c.BOOST_F) if axis.boost else 1.0)
-		var step: float = speed * delta / maxf(1.0, axis.mag)
-		position += Vector3(-sin(yaw) * float(axis.f) + cos(yaw) * float(axis.r), 0, -cos(yaw) * float(axis.f) - sin(yaw) * float(axis.r)) * step
+		var normalization := 1.0 / float(axis.mag) if float(axis.mag) > 1.0 else 1.0
+		var step := normalization * speed * delta
+		_position_x += (forward_x * float(axis.f) - forward_z * float(axis.r)) * step
+		_position_z += (forward_z * float(axis.f) + forward_x * float(axis.r)) * step
 		if rising:
-			position.y += speed * delta
+			_position_y += speed * delta
 		if descending:
-			position.y -= speed * delta
-		var floor_height: float = float(surface.call(position)) + float(c.FLOOR_M)
-		if position.y < floor_height:
-			position.y = floor_height
-		if position.y > ceiling:
-			position.y = maxf(floor_height, ceiling)
+			_position_y -= speed * delta
+		var floor_height: float = float(surface.call(Vector3(_position_x, _position_y, _position_z))) + float(c.FLOOR_M)
+		if _position_y < floor_height:
+			_position_y = floor_height
+		if _position_y > ceiling:
+			_position_y = maxf(floor_height, ceiling)
+		_position_vector = Vector3(_position_x, _position_y, _position_z)
 		camera_position = position
 	if absf(camera_fov - fov) > float(rules.fovThreshold):
 		camera_fov = fov

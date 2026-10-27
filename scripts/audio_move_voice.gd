@@ -2,6 +2,7 @@ class_name AudioMoveVoice
 extends Node
 
 const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
+const SampleFilter = preload("res://scripts/audio_move_filter.gd")
 
 signal failed(operation: String, error: Error)
 
@@ -45,7 +46,24 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 		var effects: Array[AudioEffect] = []
 		var filters: Array[Dictionary] = []
 		var correction := 1.0
+		var raw_capture: AudioEffectCapture
+		var raw_input_gain := 1.0
+		if branch.filters.size() > 1 and branch.filters.any(func(entry: Dictionary): return entry.rate_scaled):
+			return ERR_UNAVAILABLE
 		for captured: Dictionary in branch.filters:
+			if captured.rate_scaled:
+				var processor := SampleFilter.new()
+				if processor.configure(captured.captured, rate) != OK:
+					return ERR_UNAVAILABLE
+				raw_capture = AudioEffectCapture.new()
+				raw_capture.buffer_length = .5
+				effects.append(raw_capture)
+				var native := AudioSourceFilter.create(captured.captured)
+				effects.append(native)
+				correction *= AudioSourceFilter.gain_correction(captured.captured)
+				raw_input_gain = 1.0 / correction
+				filters.append({"processor": processor, "rate_scaled": true})
+				continue
 			var effect := AudioSourceFilter.create(captured.captured) as AudioEffectFilter
 			if effect == null:
 				return ERR_UNAVAILABLE
@@ -70,6 +88,9 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 			return ERR_UNCONFIGURED
 		var input := {"branch": branch, "capture": capture, "filters": filters,
 			"startup_discard": AudioGeneratorFeed.input_latency_frames(branch.kind == "oscillator")}
+		if raw_capture != null:
+			input.raw_capture = raw_capture
+			input.raw_input_gain = raw_input_gain
 		if branch.kind == "oscillator":
 			var feed := player.stream as AudioGeneratorFeed
 			input.playback = feed.playback
@@ -105,6 +126,9 @@ func activate() -> Error:
 	for input: Dictionary in mixer.inputs:
 		input.capture.clear_buffer()
 		input.discard_origin = input.capture.get_discarded_frames()
+		if input.has("raw_capture"):
+			input.raw_capture.clear_buffer()
+			input.raw_discard_origin = input.raw_capture.get_discarded_frames()
 	for player: AudioStreamPlayer in input_players:
 		player.play()
 	# All native buffers are already filled; no pause/fade cycle advances input phase.

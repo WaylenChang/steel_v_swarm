@@ -34,9 +34,14 @@ func run() -> void:
 			return
 		# Players start in admission order, so their earlier buffers expire first.
 		var index := 0
+		var mixed := false
 		while index < active.size():
+			var before := active[index].controls.frame
 			if active[index].pump():
+				mixed = mixed or active[index].controls.frame > before
 				index += 1
 			else:
 				active.remove_at(index)
-		OS.delay_usec(1000)
+		# Drain available native captures before entering the idle polling wait.
+		if not mixed:
+			OS.delay_usec(1000)

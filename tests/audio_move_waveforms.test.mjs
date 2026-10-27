@@ -28,6 +28,13 @@ test('automation capture explicitly selects the original movement program mode',
   await assert.rejects(captureAudioMoveWaveforms(page,movement,original,{automation:'true'}));
 });
 
+test('rate capture explicitly includes the original variable-frequency program',async()=>{
+  const page={async evaluate(_callback,args){return args;}};
+  const result=await captureAudioMoveWaveforms(page,movement,original,{automation:true,rates:true});
+  assert.equal(result.automation,true);assert.equal(result.rates,true);
+  await assert.rejects(captureAudioMoveWaveforms(page,movement,original,{rates:true}));
+});
+
 test('source waveform capture rejects another source or noise before browser execution',async()=>{
   for(const change of [value=>value.source.audioSha256='f'.repeat(64),value=>value.noiseSha256='0'.repeat(64),
     value=>value.noise.frames--,value=>value.scope='invalid']) {
@@ -37,7 +44,7 @@ test('source waveform capture rejects another source or noise before browser exe
 });
 
 test('waveform CLI rejects ambiguous rates before source and browser access',async()=>{
-  for(const args of [[],['0'],['7999'],['384001'],['48000.5'],['048000'],['48000','extra'],['48000','--automation','extra']])
+  for(const args of [[],['0'],['7999'],['384001'],['48000.5'],['048000'],['48000','extra'],['48000','--automation','extra'],['48000','--rates','--automation']])
     await assert.rejects(promisify(execFile)(process.execPath,[join(root,'tools/capture_audio_move_waveforms.mjs'),...args],
       {cwd:root,env:{...process.env,SVS_SOURCE:'missing-source'},timeout:10000}),error=>{
       assert.match(error.stderr,/Select one original movement waveform rate/);

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-export async function captureAudioMoveWaveforms(page,movement,original,{automation=false}={}) {
+export async function captureAudioMoveWaveforms(page,movement,original,{automation=false,rates=false}={}) {
   assert.equal(typeof automation,'boolean');
+  assert.equal(typeof rates,'boolean');
+  assert.ok(!rates||automation,'Rate programs require automation');
   const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
   assert.equal(movement.scope,'original-movement-shared-sfx-rate');
   assert.equal(hash(original.replace(/\r\n?/g,'\n')),movement.source.audioSha256);
@@ -14,7 +16,7 @@ export async function captureAudioMoveWaveforms(page,movement,original,{automati
   assert.equal(hash(raw),movement.noiseSha256);
   const cases=Object.keys(movement.graphs).flatMap(category=>(category==='stomp'?[0,.65,1]:[0])
     .map(wet=>({category,gain:.2,pan:.35,rate:1,wet})));
-  return await page.evaluate(async({movement,original,cases,automation})=>{
+  return await page.evaluate(async({movement,original,cases,automation,rates})=>{
     const rate=movement.sampleRate,frames=rate;
     const GameAudio=new Function(original.replace(/^import .*$/gm,'').replace(/^export /gm,'')+';return GameAudio;')();
     const encode=values=>{
@@ -42,19 +44,24 @@ export async function captureAudioMoveWaveforms(page,movement,original,{automati
       if(voice.dry){voice.dry.gain.value=1-fixture.wet;voice.wet.gain.value=fixture.wet;}
       const commands=[];
       if(automation) {
-        const record=(parameter,key,scale=1)=>{
+        let requestedRate=1;
+        const record=(parameter,key,scale=1,binding=null)=>{
           const schedule=parameter.setTargetAtTime.bind(parameter);
           parameter.setTargetAtTime=(target,time,tau)=>{
-            commands.push({key,target:target/scale,time,tau});
+            if(key==='rate'&&target!==scale*requestedRate)throw new Error('Unsupported source rate target expression');
+            commands.push({key,target:key==='rate'?requestedRate:target,time,tau,
+              ...(key==='rate'?{base:scale,parameterTarget:target,binding}:{} )});
             return schedule(target,time,tau);
           };
         };
         record(voice.g.gain,'gain');record(voice.sp.pan,'pan');
-        for(const binding of voice.rate)record(binding.p,'rate',binding.base);
+        if(voice.rate.length!==movement.graphs[fixture.category].rate.length)throw new Error('Original rate binding count changed');
+        voice.rate.forEach((binding,index)=>record(binding.p,'rate',binding.base,movement.graphs[fixture.category].rate[index].parameter));
         if(voice.wet){record(voice.wet.gain,'wet');record(voice.dry.gain,'dry');}
-        for(const action of [{time:.125,gain:.8,pan:-.7,wet:.9},{time:.375,gain:.4,pan:.9,wet:.1},{time:.625,gain:.9,pan:0,wet:.65}]) {
+        for(const action of [{time:.125,gain:.8,pan:-.7,wet:.9,rate:.5},{time:.375,gain:.4,pan:.9,wet:.1,rate:1.8},{time:.625,gain:.9,pan:0,wet:.65,rate:.8}]) {
           now=action.time;
-          audio.setMove(fixture.category,action.gain,action.pan,1,action.wet);
+          requestedRate=rates?action.rate:1;
+          audio.setMove(fixture.category,action.gain,action.pan,requestedRate,action.wet);
         }
         now=.875;audio._stopMove();
         const dry=commands.filter(command=>command.key==='dry'),wet=commands.filter(command=>command.key==='wet');
@@ -67,17 +74,29 @@ export async function captureAudioMoveWaveforms(page,movement,original,{automati
     for(const captured of movement.oscillators) {
       const context=new OfflineAudioContext(1,frames,rate),oscillator=context.createOscillator();
       oscillator.type=captured.type;oscillator.frequency.value=captured.frequency;
+      const events=[];
+      if(rates&&movement.graphs[captured.category].rate.some(binding=>binding.parameter.node===captured.node&&binding.parameter.parameter==='frequency')) {
+        for(const command of waveforms.find(fixture=>fixture.category===captured.category).commands.filter(command=>command.key==='rate'&&command.binding.node===captured.node&&command.binding.parameter==='frequency')) {
+          if(events.some(event=>event.time===command.time))continue;
+          events.push(command);
+          oscillator.frequency.setTargetAtTime(command.parameterTarget,command.time,command.tau);
+        }
+      }
       oscillator.connect(context.destination);oscillator.start();
       const actual=(await context.startRendering()).getChannelData(0),period=decode(captured.values);
-      let phase=0,maximum=0;
+      let phase=0,maximum=0,value=1,target=1,decay=1,cursor=0;
       for(let index=0;index<frames;index++) {
+        while(cursor<events.length&&Math.ceil(events[cursor].time*rate)<=index) {
+          const event=events[cursor++];target=event.target;decay=Math.exp(-1/(rate*event.tau));
+        }
         const position=phase*period.length,begin=Math.floor(position);
-        const value=period[begin]+(period[(begin+1)%period.length]-period[begin])*(position-begin);
-        maximum=Math.max(maximum,Math.abs(value-actual[index]));
-        phase=(phase+captured.frequency/(rate*(captured.cycles||1)))%1;
+        const reconstructed=period[begin]+(period[(begin+1)%period.length]-period[begin])*(position-begin);
+        maximum=Math.max(maximum,Math.abs(reconstructed-actual[index]));
+        phase=(phase+captured.frequency*value/(rate*(captured.cycles||1)))%1;
+        value=target+(value-target)*decay;
       }
       periodErrors[captured.category+':'+captured.node]=maximum;
     }
     return {sampleRate:rate,frames,waveforms,periodErrors,noisePeak:noise.reduce((peak,value)=>Math.max(peak,Math.abs(value)),0)};
-  },{movement,original,cases,automation});
+  },{movement,original,cases,automation,rates});
 }

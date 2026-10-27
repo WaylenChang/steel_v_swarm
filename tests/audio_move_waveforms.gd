@@ -11,6 +11,7 @@ var buses: AudioBuses
 var sink: StringName
 var automation := false
 var live := false
+var rates := false
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -23,12 +24,15 @@ func _check(value: bool, message: String) -> bool:
 
 func _source() -> bool:
 	var rate := int(AudioServer.get_mix_rate())
-	automation = OS.get_cmdline_user_args().has("--automation")
+	rates = OS.get_cmdline_user_args().has("--rates")
+	automation = rates or OS.get_cmdline_user_args().has("--automation")
 	live = OS.get_cmdline_user_args().has("--live")
 	if not _check(not live or automation, "Live command delivery requires an original automation corpus"):
 		return false
-	var directory := "audio_move_automation" if automation else "audio_move_waveforms"
-	var scope := "original-movement-automation-waveforms" if automation else "original-movement-static-waveforms"
+	if not _check(not rates or not live, "Rate/filter waveform qualification uses the prequeued source program"):
+		return false
+	var directory := "audio_move_rate_waveforms" if rates else ("audio_move_automation" if automation else "audio_move_waveforms")
+	var scope := "original-movement-rate-waveforms" if rates else ("original-movement-automation-waveforms" if automation else "original-movement-static-waveforms")
 	reference = Content.read_json("res://data/%s/%d.json" % [directory, rate])
 	if not _check(reference.get("scope") == scope and reference.get("sampleRate") == rate, "Original movement waveform archive matches the active device"):
 		return false
@@ -52,7 +56,7 @@ func _source() -> bool:
 		if automation:
 			var counts := {"gain": 0, "pan": 0, "wet": 0, "rate": 0}
 			for command: Dictionary in fixture.commands:
-				if not _check(counts.has(command.key) and (command.key != "rate" or command.target == 1), "Original movement commands stay within the accepted automation scope"):
+				if not _check(counts.has(command.key) and (command.key != "rate" or command.target in ([.5, 1.8, .8] if rates else [1.0])), "Original movement commands stay within the selected automation scope"):
 					return false
 				counts[command.key] += 1
 			if not _check(counts.gain == 4 and counts.pan == 3 and counts.wet == (3 if fixture.category == "stomp" else 0) and counts.rate > 0, "Complete original gain/pan/wet/stop command corpus"):
@@ -272,9 +276,10 @@ func _run() -> void:
 		_check(not str(AudioServer.get_bus_name(index)).begins_with(prefix), "Movement routes drain after native waveform capture")
 	AudioServer.remove_bus(AudioServer.get_bus_index(sink))
 	DirAccess.make_dir_recursive_absolute("res://artifacts/sol")
-	var label := "audio-move-automation-live-native" if live else ("audio-move-automation-native" if automation else "audio-move-waveforms-native")
+	var label := "audio-move-rates-native" if rates else ("audio-move-automation-live-native" if live else ("audio-move-automation-native" if automation else "audio-move-waveforms-native"))
 	var file := FileAccess.open("res://artifacts/sol/" + label + ".json", FileAccess.WRITE)
-	file.store_string(JSON.stringify({"sampleRate": reference.sampleRate, "cases": results, "failures": failures}, "\t"))
+	file.store_string(JSON.stringify({"sampleRate": reference.sampleRate, "cases": results, "failures": failures,
+		"rateOscillatorsQualified": not rates, "periodModelErrors": reference.periodErrors}, "\t"))
 	file.close()
-	print("AUDIO_MOVE_AUTOMATION_LIVE" if live else ("AUDIO_MOVE_AUTOMATION" if automation else "AUDIO_MOVE_WAVEFORMS"), " cases=", results.size(), " failures=", failures.size())
+	print("AUDIO_MOVE_RATES" if rates else ("AUDIO_MOVE_AUTOMATION_LIVE" if live else ("AUDIO_MOVE_AUTOMATION" if automation else "AUDIO_MOVE_WAVEFORMS")), " cases=", results.size(), " failures=", failures.size())
 	get_tree().quit(0 if failures.is_empty() else 1)

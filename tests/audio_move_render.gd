@@ -64,6 +64,9 @@ func _ready() -> void:
 	var stress: Array[Dictionary] = []
 	if OS.get_cmdline_user_args().has("--stress"):
 		for trial in range(32):
+			if OS.get_cmdline_user_args().has("--rate-stress"):
+				for category: String in Content.balance.audio.scene.categories:
+					movement.set_move(category, .8, 0, [.5, 1.8, .8][trial % 3], 0)
 			var start := _snapshots()
 			OS.delay_msec(150)
 			var finish := _snapshots()
@@ -74,11 +77,16 @@ func _ready() -> void:
 			stress.append(finish)
 			capture.clear_buffer()
 			await get_tree().create_timer(.04, true, false, true).timeout
+	if OS.get_cmdline_user_args().has("--rate-stress"):
+		for category: String in Content.balance.audio.scene.categories:
+			movement.set_move(category, .8, 0, 1, 0)
+		# Restore constant-rate conditions for the existing phase/lifetime checks.
+		await get_tree().create_timer(float(Content.balance.audio.moveTiming.timeConstant) * 20, true, false, true).timeout
 	movement.set_move("stomp", .8, .4, 1, 1)
 	await get_tree().create_timer(.5, true, false, true).timeout
 	var wet: Dictionary = movement.voices.stomp.mixer.snapshot()
 	if float(wet.get("wet", 0)) < .9:
-		_abort("AUDIO_MOVE_WET_TARGET")
+		_abort("AUDIO_MOVE_WET_TARGET " + JSON.stringify({"voice": wet, "failures": failures}))
 		return
 	movement.set_low_power(true)
 	await get_tree().create_timer(.4, true, false, true).timeout

@@ -567,6 +567,28 @@ The wrapper runs capture, source references and native packing sequentially.
   Keep the live native delivery cursors in its artifact. These scoped programs
   do not certify game-frame event delivery, changing playback rates/filter
   cutoffs, device suspension or complete audible delivery.
+  Capture and inspect `--rates` separately to replay source rates 0.5, 1.8 and
+  0.8 through the original graph. Preserve the API rate and each bound
+  AudioParam's original multiplication target; dividing that target back by its
+  base is not a bit-preserving inverse. Rate-scaled band-passes use
+  `scripts/audio_move_filter.gd` because block-level native property updates
+  cannot reproduce their sample-accurate source automation. Fixed filters stay
+  native, including the initial unity-rate segment of a variable branch. Keep
+  synchronized raw/native captures and transfer both input and output history
+  before its first rate change; do not reset the filter or crossfade another bed.
+  `tests/audio_move_filter.tscn` checks original Chromium impulses,
+  Float64 control previews and exact state across arbitrary buffer boundaries.
+  Batch processing must preserve all four control channels, final state and the
+  existing service budget. Drain ready captures before the one-millisecond idle
+  poll. Extend `tests/audio_move_render.tscn -- --stress` with `--rate-stress` to
+  exercise concurrent changing rates, then restore constant-rate conditions for
+  the original phase and lifetime checks. Keep peak pump time, service gaps and
+  native/custom filter modes alongside the existing failure cursors.
+  Rate-dependent oscillator reconstruction remains unqualified: the current
+  fixed waveform tables have large source-measured errors under changing rates.
+  A rate matrix admitted by those model bounds does not certify full source
+  waveform parity. Retain actual residuals and finish that representation before
+  claiming complete rate/cutoff fidelity or publishing a matching-rate catalogue.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)

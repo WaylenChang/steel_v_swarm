@@ -53,7 +53,7 @@ transported bodies. Imported source/glTF must remain read-only.
   rigs, current next non-FX emitter, world-space camera-ray convergence and source
   eye/forward fallback. Preserve the final scoped shot's FPV ray with restored
   TPS port and one resource spend. Authority timing/heading/wiring is an Opus
-  integration request; local view/input state remains Sol-owned.
+  integration request; local view state is Terra-owned and input state is Sol-owned.
 
 ## Gameplay NPCs and combat structures
 

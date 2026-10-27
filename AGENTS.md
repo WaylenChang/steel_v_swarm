@@ -34,9 +34,10 @@
 | Workstream | Instructions | Default model |
 | --- | --- | --- |
 | Bounded UI and settings | [Flash](migration/flash/AGENTS.md) | Gemini Flash |
-| Native presentation and resource pipelines | [Sol](migration/sol/AGENTS.md) | ChatGPT Sol |
+| World/resources, audio, input and combat presentation | [Sol](migration/sol/AGENTS.md) | ChatGPT Sol 6.1 |
+| View/scope, minimap, PiP and campaign presentation | [Terra](migration/terra/AGENTS.md) | ChatGPT Terra 6.1 |
 | Authority, integration and difficult source semantics | [Opus](migration/opus/AGENTS.md) | Claude Opus |
-| Mechs, gameplay NPCs and combat-building models | [Models](migration/models/AGENTS.md) | Task-dependent; outside the three difficulty tiers |
+| Mechs, gameplay NPCs and combat-building models | [Models](migration/models/AGENTS.md) | Task-dependent; outside the difficulty tiers |
 
 ## Independent edits and stable prefixes
 

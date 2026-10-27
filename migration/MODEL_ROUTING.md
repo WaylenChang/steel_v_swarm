@@ -8,20 +8,52 @@ prompts. It explains the current routing decision; it is not a status ledger.
 | Workstream | Reasoning demand | Default | Escalation boundary |
 | --- | --- | --- | --- |
 | Flash | Small edit surface, explicit source/UI contract, deterministic acceptance | Gemini Flash | Missing producer semantics, new protocol, shared numeric/shader algorithm |
-| Sol | Bounded multi-file native integration, retained state/resources, source fixtures | ChatGPT Sol | Cross-owner authority/lifecycle change or unresolved high-risk source semantics |
+| Sol | World/resource pipelines, audio, input and combat presentation integration | ChatGPT Sol 6.1 | Cross-owner authority/lifecycle change or unresolved high-risk source semantics |
+| Terra | Fixture-backed view/scope, minimap, PiP and campaign consumer changes | ChatGPT Terra 6.1 | Unresolved source/shader semantics or producer API change; use a stronger model in the same lane |
 | Opus | Coupled authority state, privacy/race/order analysis, exact shader/audio semantics | Claude Opus | Resolve from original source and independent evidence; unavailable if semantics remain absent |
 | Models | Geometry, actor rigs, transforms, materials and model lifecycle | Choose per task | Use stronger reasoning for pose composition/aliasing; use a source/render workflow for visual fidelity |
 
 This is a project-specific routing inference, not measured intelligence or a
 claim that one model always wins. Model families are preserved as requested;
-versions mentioned by commenters are evidence labels, not silently pinned task
-settings. A stronger model can execute a difficult Sol/Models task under that
+the Sol/Terra defaults explicitly name 6.1. Other versions mentioned by commenters
+are evidence labels. A stronger model can execute a difficult Sol/Terra/Models task under that
 workstream's instructions without changing ownership.
 
-OpenAI describes Sol as an everyday model for coding and work requiring judgment
-and recommends comparing actual tasks/settings. That supports the middle lane;
-it does not establish a cross-vendor ranking.
-[Official model selection](https://developers.openai.com/api/docs/guides/model-selection).
+## Sol/Terra 6.1 evidence and routing decision
+
+Checked on 2026-10-27 (Asia/Taipei). OpenAI's current guidance assigns complex
+technical projects to Sol 6.1 and scoped code fixes, visual reasoning and screen
+workflows to Terra 6.1. It recommends explicit inputs and verification for Terra
+and comparing actual tasks at the same reasoning effort. The GPT-6 guide suggests
+starting Terra at medium and measuring whether extra effort is worthwhile.
+[Official model selection](https://developers.openai.com/api/docs/guides/model-selection),
+[official GPT-6 guide](https://developers.openai.com/api/docs/guides/latest-model).
+
+Early firsthand community reports are mixed, not controlled Godot benchmarks:
+
+- A robotics developer reports using Sol at low/medium successfully, then finding
+  Terra high/max less satisfactory and more allowance-intensive on a visual
+  construction application. Different efforts and subjective outputs prevent a
+  general cost or capability conclusion.
+  [Developer comparison](https://www.reddit.com/r/codex/comments/1xgcjjb/gpt_61_terra_on_gpt_plus/).
+- A release-thread commenter argues that Terra fits constrained orchestrated
+  tasks; this is an opinion rather than a reproduced project result. The thread
+  also contains reports of incomplete execution. Its automated thread summary
+  is excluded as primary evidence.
+  [Firsthand community discussion](https://www.reddit.com/r/codex/comments/1xg4eqq/comment/19rp85thizc03/).
+
+Project inference: retain coupled world/resource, audio, input and combat-effect
+integration with Sol. Assign Terra existing view, minimap, PiP and campaign
+consumers with explicit source/raster/lifecycle fixtures. Each change stays
+bounded; complex camera/cancellation/compositing work can use Sol inside Terra's
+ownership lane. Visual scope does not imply easy semantics or a weaker test bar.
+Do not infer subscription savings from API token prices or assume high/max Terra
+is equivalent to low/medium Sol. Compare completed, accepted work and retries.
+
+Root first-match file ownership, dedicated output ownership and frozen producer
+contracts make the two lanes independently editable. Shared registries and
+fixed-output publication remain serialized. This is repository routing, not an
+OpenAI-endorsed Godot classification or evidence of full game parity.
 
 ## Developer commentary considered
 

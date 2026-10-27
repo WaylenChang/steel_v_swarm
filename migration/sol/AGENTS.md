@@ -1,11 +1,14 @@
-# Sol — native presentation and resource pipelines
+# Sol — native integration and resource pipelines
 
 ## Scope
 
 Apply the root ownership rules. This workstream owns the remaining native
-presentation scripts and world/audio workflows, excluding model construction,
-authority semantics, shared shaders and the unresolved music envelope adapter.
-Default to ChatGPT Sol for bounded multi-file integration with source fixtures.
+presentation scripts and world/audio workflows after the Terra allowlist,
+excluding model construction, authority semantics, shared shaders and the
+unresolved music envelope adapter.
+Default to ChatGPT Sol 6.1 for multi-file integration with source fixtures.
+Terra owns S12-S14/S20 and their dedicated visual consumers; read its code only
+as needed. Keep producer APIs stable or record a precise local handoff.
 
 Read this file, then [MIGRATION.md](MIGRATION.md), then the selected module and
 its original reference generator. Sibling backlogs and research are opt-in.

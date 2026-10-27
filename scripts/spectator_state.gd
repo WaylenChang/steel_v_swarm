@@ -232,7 +232,9 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 			if not actor.get("dead", false):
 				visibility.append({"actor": actor, "visible": false})
 			hidden = actor
-			camera_position = anchor + Vector3(-sin(yaw) * height * float(eye.f), height * float(eye.e), -cos(yaw) * height * float(eye.f))
+			var head_forward := height * float(eye.f)
+			camera_position = Vector3(_anchor_x - sin(yaw) * head_forward,
+				_anchor_y + height * float(eye.e), _anchor_z - cos(yaw) * head_forward)
 		else:
 			if view == "tps":
 				yaw = follow_yaw

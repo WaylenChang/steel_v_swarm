@@ -59,6 +59,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   accumulated smoothing. They check double anchor, distance and coefficient bits
   as well as the exposed Float32 position. These controlled Float32 inputs do not
   recover upstream precision or qualify complete camera poses and delivery.
+  FPV spectator eye coordinates preserve the source multiplication and addition
+  order in scalar doubles before entering native Vector3 storage.
+  `node tools/spectator_fpv_pose_capture.mjs`,
+  `node --test tests/spectator_fpv_pose.test.mjs` and real-driver
+  `tests/spectator_fpv_pose.tscn` compare 588 browser cases across controlled
+  imported profiles, headings, native-representable positions and the flight
+  threshold. These probes do not qualify upstream positions or headings, camera
+  orientation matrices, populated actor rendering or delivery.
   Lock-glow hit decay retains millisecond subtraction before division by 200;
   ring rotation derives its quaternion from the double phase before native
   storage. `node tools/lock_glow_capture.mjs` executes the original constructor

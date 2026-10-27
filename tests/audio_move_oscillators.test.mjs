@@ -7,6 +7,8 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash} from 'node:crypto';
 import {captureAudioMoveOscillators,oscillatorWitnessErrors} from '../tools/audio_move_oscillator_capture.mjs';
+import {captureAudioMoveWaves} from '../tools/audio_move_wave_capture.mjs';
+import {renderAudioMoveWave} from '../tools/audio_move_wave_model.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
 const movement=JSON.parse(await readFile(join(root,'data/audio_move_rates/48000.json'),'utf8'));
@@ -91,4 +93,22 @@ test('archived raw witnesses retain current provenance and independently reprodu
     assert.deepEqual(oscillatorWitnessErrors(witness,period,captured.sampleRate),witness.modelErrors);
     assert.equal(witness.modelErrors.scalarPeriod,program.periodErrors[witness.category+':'+witness.node]);
   }
+});
+
+test('captured band-limited tables reconstruct every raw source and boundary sample exactly',async()=>{
+  const captured=JSON.parse(await readFile(join(root,'data/audio_move_oscillators/48000.json'),'utf8'));
+  assert.equal(captured.waveTables.types.length,3);assert.equal(captured.waveTables.ranges,36);
+  assert.equal(captured.waveTables.probes.length,3);
+  for(const witness of [...captured.oscillators,...captured.waveTables.probes]) {
+    const values=renderAudioMoveWave(captured.waveTables,witness.type,witness.frequencyValues);
+    assert.equal(encode(values),witness.values,'Bit-exact original '+(witness.category??witness.type));
+  }
+  assert.equal(Object.keys(captured.tableErrors).length,7);
+  assert.ok(Object.values(captured.tableErrors).every(value=>value===0));
+});
+
+test('wave capture rejects unavailable context rates and uncaptured shapes before browser access',async()=>{
+  const page={async evaluate(){assert.fail('Invalid wave capture entered browser');}};
+  for(const rate of [NaN,7999,384001,48000.5])await assert.rejects(captureAudioMoveWaves(page,rate,['sine']));
+  for(const types of [[],['triangle'],['sine','sine']])await assert.rejects(captureAudioMoveWaves(page,48000,types));
 });

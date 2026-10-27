@@ -4,6 +4,8 @@ import {createHash} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {captureAudioMoveOscillators} from './audio_move_oscillator_capture.mjs';
+import {captureAudioMoveWaves} from './audio_move_wave_capture.mjs';
+import {renderAudioMoveWave} from './audio_move_wave_model.mjs';
 import {writeFixtureJson} from './fixture_json.mjs';
 
 const [argument,...extra]=process.argv.slice(2),rate=Number(argument);
@@ -26,7 +28,8 @@ for(const [name,digest]of Object.entries(program.source.inputs)) {
   if(name in inputs)assert.equal(inputs[name],digest,'Consistent parent producer: '+name);
   inputs[name]=digest;
 }
-for(const name of ['tools/capture_audio_move_oscillators.mjs','tools/audio_move_oscillator_capture.mjs','tools/fixture_json.mjs']) {
+for(const name of ['tools/capture_audio_move_oscillators.mjs','tools/audio_move_oscillator_capture.mjs',
+  'tools/audio_move_wave_capture.mjs','tools/audio_move_wave_model.mjs','tools/fixture_json.mjs']) {
   const digest=hash(await normalized(name));
   if(name in inputs)assert.equal(inputs[name],digest,'Consistent current producer: '+name);
   inputs[name]=digest;
@@ -48,17 +51,27 @@ try {
     assert.equal(browser.version(),parent.source.chromiumVersion);assert.equal(flags,parent.source.jsFlags);
   }
   const oscillators=await captureAudioMoveOscillators(await browser.newPage(),movement,program);
+  const waveTables=await captureAudioMoveWaves(await browser.newPage(),rate,[...new Set(oscillators.map(item=>item.type))]);
+  const tableErrors={};
+  for(const witness of [...oscillators,...waveTables.probes]) {
+    const output=renderAudioMoveWave(waveTables,witness.type,witness.frequencyValues),bytes=Buffer.from(witness.values,'base64');
+    let maximum=0;
+    for(let index=0;index<output.length;index++)maximum=Math.max(maximum,Math.abs(output[index]-bytes.readFloatLE(index*4)));
+    const name=witness.category?witness.category+':'+witness.node:'boundary:'+witness.type;
+    assert.equal(maximum,0,'Exact original isolated oscillator reconstruction: '+name);
+    tableErrors[name]=maximum;
+  }
   await verify();
   const directory=join(root,'data/audio_move_oscillators');await mkdir(directory,{recursive:true});
   await writeFixtureJson(join(directory,rate+'.json'),{
     formatVersion:1,scope:'original-movement-isolated-oscillators',sampleRate:rate,frames:rate,
     parameterObservation:'constant-source-through-gain-with-identical-frequency-events',
-    rateOscillatorsQualified:false,oscillators,
+    rateOscillatorsQualified:false,oscillators,waveTables,tableErrors,
     source:{audioSha256:movement.source.audioSha256,sourceInputs:movement.source.sourceInputs,inputs,
       movementProfile:{path:parents.movement.path,sha256:parents.movement.sha256},
       programProfile:{path:parents.program.path,sha256:parents.program.sha256},contextProfile:movement.source.contextProfile,
       chromiumVersion:browser.version(),jsFlags:flags},
   });
-  console.log('SOURCE_MOVE_OSCILLATORS_PASS '+JSON.stringify({sampleRate:rate,
+  console.log('SOURCE_MOVE_OSCILLATORS_PASS '+JSON.stringify({sampleRate:rate,tableErrors,
     errors:oscillators.map(item=>({category:item.category,node:item.node,...item.modelErrors}))}));
 } finally {await browser.close();}

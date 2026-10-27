@@ -596,16 +596,26 @@ The wrapper runs capture, source references and native packing sequentially.
   Preserve both parent profile hashes, original source and producer fingerprints.
   `tests/audio_move_oscillators.test.mjs` authenticates the archive and recomputes
   scalar-control, measured-control and rounded-phase-increment period errors.
-  The measured parameter curves reduce sine reconstruction errors substantially,
-  while square/sawtooth fixed-period errors remain large. Chromium's
+  The archive also contains all 36 band-limited tables for the three original
+  shapes. Extraction checks custom Fourier coefficients and shared normalization
+  against each built-in waveform before capturing the culled tables. Chromium's
   [AudioParam implementation](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/audio_param_handler.cc)
   uses Float32 grouped target updates; its
   [oscillator](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/oscillator_handler.cc)
   and [periodic wave](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/periodic_wave.cc)
-  retain frequency-dependent band-limited tables and interpolation. The diagnostic
-  rounded-increment model does not implement those table/SIMD paths. Qualify both
-  control precision and dynamic oscillator representation; never use this isolated
-  observation to enlarge native waveform bounds or enable the runtime catalogue.
+  retain frequency-dependent band-limited tables and interpolation.
+  `scripts/audio_move_oscillator.gd` reproduces the a-rate table selection,
+  Float32 phase increments and two/three/five-point interpolation from observed
+  frequency words. `tests/audio_move_oscillator.tscn` requires bit-exact output for
+  the four original rate programs and three AudioParam-input boundary programs,
+  including mixed interpolation groups, large frequency jumps and near-Nyquist
+  values. Four-frame source groups survive non-quantum caller boundaries;
+  incomplete/invalid groups reject before advancing phase. This component is not
+  yet bound to the mixer: qualify source Float32 control generation, source
+  k-rate/a-rate transitions, resource admission and full mixed/native output before
+  replacing the current scalar-control/fixed-period path. Keep the archive's
+  `rateOscillatorsQualified` false until that integration passes. Never enlarge
+  native waveform bounds or enable a runtime catalogue from isolated observations.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)

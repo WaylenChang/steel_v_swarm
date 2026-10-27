@@ -48,10 +48,21 @@ static func roster(actors: Array) -> Array:
 
 func _nearest(list: Array) -> Dictionary:
 	var nearest: Dictionary = list[0]
-	for actor: Dictionary in list:
-		if position.distance_squared_to(actor.position) < position.distance_squared_to(nearest.position):
+	var nearest_distance := _distance_squared(position, nearest.position)
+	for index in range(1, list.size()):
+		var actor: Dictionary = list[index]
+		var distance := _distance_squared(position, actor.position)
+		if not (nearest_distance <= distance):
 			nearest = actor
+			nearest_distance = distance
 	return nearest
+
+static func _distance_squared(first: Vector3, second: Vector3) -> float:
+	# Three.js compares scalar doubles without rounding the squared distance to Vector3 precision.
+	var dx := float(first.x) - float(second.x)
+	var dy := float(first.y) - float(second.y)
+	var dz := float(first.z) - float(second.z)
+	return dx * dx + dy * dy + dz * dz
 
 func target(actors: Array) -> Dictionary:
 	for actor: Dictionary in roster(actors):
@@ -190,7 +201,7 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 		var profile: Dictionary = rules.profiles.get(str(actor.get("ch", "")), rules.fallbacks.get(str(actor.side), rules.fallbacks[""]))
 		var height: float = profile.height
 		var point: Vector3 = actor.position
-		if view in c.LOCK_VIEWS or not anchor_ok or anchor.distance_to(point) > float(c.SNAP_M):
+		if view in c.LOCK_VIEWS or not anchor_ok or sqrt(_distance_squared(anchor, point)) > float(c.SNAP_M):
 			anchor = point
 			anchor_ok = true
 		else:

@@ -32,6 +32,23 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Unknown remote magazines and movement resources remain null. These checks do
   not qualify populated ray queries, actor pixels, recipient publication or the
   shared main-to-camera angle transfer contract below.
+  Nearest-player selection compares squared distances in scalar doubles, in the
+  source operation and stable reduction order; Vector3 squared-distance rounding
+  can otherwise turn distinct candidates into a tie.
+  `node tools/spectator_nearest_capture.mjs`,
+  `node --test tests/spectator_nearest.test.mjs` and real-driver
+  `tests/spectator_nearest.tscn` retain original selection/notice programs for
+  Float32-representable positions, exact ties and non-finite comparisons. These
+  controlled inputs do not recover position precision lost upstream or qualify
+  populated observer delivery.
+  Orbit anchor snapping compares the source double-precision distance against the
+  strict threshold before interpolation; a Vector3 distance rounded to the
+  threshold can otherwise smooth a target the original snaps to immediately.
+  `node tools/spectator_snap_capture.mjs`,
+  `node --test tests/spectator_snap.test.mjs` and real-driver
+  `tests/spectator_snap.tscn` retain the original anchor branch for boundary,
+  locked-view, first-anchor and moving-frame cases. These controlled positions do
+  not establish upstream precision or populated observer delivery.
   Lock-glow hit decay retains millisecond subtraction before division by 200;
   ring rotation derives its quaternion from the double phase before native
   storage. `node tools/lock_glow_capture.mjs` executes the original constructor
@@ -57,6 +74,23 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   four bytes; probe-only success does not discharge the full-image gate.
   Diagnostics are retained under `build/minimap_fog/`. Controlled canvas inputs
   do not qualify the actual baked terrain base or populated recipient/query state.
+  A due draw freezes the window, mode, viewer, actor and bunker records, missiles
+  and pulse for all layers; interpolated positions are captured after the caller
+  refreshes them and before fog construction. Later mode/snapshot changes cannot
+  mix a new crop or markers with the previously scheduled fog and lane paths.
+  `node tools/minimap_frame_capture.mjs`, `node --test tests/minimap_frame.test.mjs`
+  and real-driver `tests/minimap_frame.tscn` retain original draw/toggle programs,
+  delayed native draws, observer and faction frames, missiles, remembered bunkers,
+  legend colors, source window/crop/marker geometry and room retirement. The
+  controlled sources do not qualify complete fog pixels, actual baked terrain,
+  populated delivery or platform performance.
+  `node tools/minimap_marker_raster_capture.mjs`,
+  `node --test tests/minimap_marker_raster.test.mjs` and real-driver
+  `tests/minimap_marker_raster.tscn` retain the original browser marker callback
+  and isolated opaque rasters for fractional rectangles, circles, rings, bunker
+  outlines, inherited widths, rotated arrows, clipping and overlaps. Keep the
+  strict four-byte raster failures until the shared marker-coverage contract
+  below is accepted; these probes do not qualify the full populated map.
 - [ ] **S14 — PiP:** certify original companion/decoy selection, stable order,
   ownership/death/lost-link gates, low-power limits, layout and camera offsets.
   Shared-world views must hide only their source body/cockpit while rendering,
@@ -67,8 +101,37 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   restore temporary layers. Reattachment requires fresh selection before drawing.
   `node tools/pip_capture.mjs` and real-driver `tests/pip_native.tscn` retain
   original selection/render decisions, layout and native lifecycle/pixel-isolation
-  checks. Primary-color probes isolate camera masking; they do not substitute
-  source model pixels, full-scene composition or populated transport acceptance.
+  checks. A source detached or queued with an ancestor after selection must stop
+  its own viewport before drawing; a queued PiP owner releases every viewport and
+  temporary layer at that boundary. Losing the last source restores the cockpit
+  mask. A fresh selection is required after source reattachment.
+  `node tools/pip_composition_capture.mjs`, `node --test tests/pip_composition.test.mjs`
+  and real-driver `tests/pip_composition.tscn` compare the original Three.js/WebGL
+  PiP render and complete opaque browser rasters at 320x568, 1440x900 and
+  3840x2160, with one or two views. They retain same-frame scene color changes,
+  faction borders, a declared foreground HUD layer, initially hidden cockpit and
+  source models, low-power and resolution changes, hidden/reopened views, pilot
+  death and lost-link cleanup. Source and native rasters currently agree byte for
+  byte; do not loosen the shared raster tolerance. These controlled colors and
+  empty scenes do not qualify actual source model pixels, authored HUD composition,
+  DPI behavior, full-scene performance or populated transport. The separate
+  `tests/pip_native.tscn` retains the full source-provenance gate below.
+  Decoy and hero eye offsets are added as scalar doubles to the native model
+  position before the camera vector enters Float32 storage. `tests/pip_pose.tscn`
+  compares 26 original browser poses with Float32-representable model positions,
+  including both signs and rounding boundaries, against the consumer plan and the
+  actual camera. This does not qualify precision lost before the model position,
+  camera rotation pixels, actor interpolation or populated source-model rendering.
+  PiP yaw now consumes the existing `SourceQuaternion` axis-angle binding before
+  native quaternion storage, so distinct source headings are not collapsed by
+  an earlier Float32 angle conversion. `tests/pip_pose.tscn` retains that
+  distinction; it does not establish exact source matrix composition.
+  `tests/pip_orientation.tscn` retains the stricter original browser camera
+  matrix and inverse-matrix gates, including inverse translation, across normal,
+  boundary and unbounded reported yaw. The shared double-quaternion,
+  browser-trigonometry and camera-transform contracts below remain open. A
+  matching native quaternion alone cannot certify the final matrix bits or the
+  Godot camera's render transform.
 
 ## Campaign presentation
 
@@ -263,6 +326,48 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
 
 ## Integration and handoffs
 
+- **Models — source camera quaternion composition:** provide a double-preserving
+  yaw-to-basis contract in `scripts/source_quaternion.gd` for consumers including
+  `PipView`. Original Three.js composes its camera matrix from double quaternion
+  components before Float32 matrix storage; `SourceQuaternion.axis_angle` and
+  `SourceQuaternion.basis` currently store the quaternion in Float32 first.
+  Chromium quaternion and final matrix bits at normal, ±π/2 and large reported
+  yaw are retained in `tests/fixtures/pip_composition.json::poseCases`, with
+  before/after native basis and scalar witnesses in
+  `artifacts/terra/pip-orientation-report.json`. At yaw 1000000.02, maximum
+  basis error falls from 0.0188037753105164 to 0.000000059604644775390625,
+  but the strict matrix gate still fails.
+  Acceptance: direct results match every captured Float32 camera basis, with
+  unbounded yaw, source operation order and no tolerance widening; preserve
+  existing model and spectator APIs. The required browser sine/cosine and native
+  camera-transform contracts remain Opus-owned below. After those are accepted,
+  `tests/pip_orientation.tscn` must also pass through the actual PiP camera.
+  Terra binds the accepted API separately.
+- **Opus — PiP camera-transform boundary:** investigate a native camera binding
+  in `scripts/source_camera_transform.gd` if an adapter is needed, preserving
+  the original Three.js camera world and inverse transform in the existing
+  `Camera3D`/`SubViewport` path. At yaw 1000000.02 the captured Float32 basis is
+  retained by `Camera3D.transform.basis`, but both `global_basis` and
+  `get_camera_transform()` differ by one Float32 ULP; the latter's
+  `affine_inverse()` differs from the captured Three.js inverse as well.
+  Godot 4.7.2's [`Camera3D`](https://github.com/godotengine/godot/blob/4.7.2-stable/scene/3d/camera_3d.cpp)
+  orthonormalizes its camera transform, and its
+  [`RendererSceneCull`](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/rendering/renderer_scene_cull.cpp)
+  also orthonormalizes transforms sent through `RenderingServer`; simply toggling
+  `set_disable_scale` or writing the same matrix directly cannot establish the
+  captured view matrix. The project uses GL Compatibility, whose
+  [GLES3 renderer](https://github.com/godotengine/godot/blob/4.7.2-stable/drivers/gles3/rasterizer_scene_gles3.cpp)
+  takes an affine inverse after the server boundary. The native fixture mirrors
+  that extra normalization and inverse in its CPU comparison. Twelve captured
+  inverse translations differ, by up to 0.0001220703125 on the controlled
+  Float32-representable model positions. The source matrix and inverse and both
+  native values are recorded in
+  `tests/fixtures/pip_composition.json::poseCases` and
+  `artifacts/terra/pip-orientation-report.json`. This CPU comparison does not
+  certify GPU uniforms or scene pixels. Acceptance: the original world and
+  view-matrix rotation and translation cases pass `tests/pip_orientation.tscn`
+  through the actual PiP camera after the Models quaternion and browser trig contracts,
+  with no wider tolerance, plus real-driver PiP source-pixel comparisons.
 - **Opus — browser pulse sine:** provide an accepted shared binding in
   `scripts/source_trigonometry.gd` for original browser `Math.sin` before Terra
   certifies bit-identical lock-glow scalar states. `tests/fixtures/lock_glow.json`
@@ -276,7 +381,11 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   bits and additional argument-reduction boundaries agree with the original
   Chromium execution, without baked input tables, angle wrapping or tolerance
   changes. Node and Chromium sine bits also differ in part of this corpus;
-  Node-only capture is insufficient to choose the shared browser binding.
+  Node-only capture is insufficient to choose the shared browser binding. The
+  same shared API must expose browser `Math.sin` and `Math.cos` for PiP yaw
+  half-angles in `tests/fixtures/pip_composition.json::poseCases`; native scalar
+  bits differ from Chromium for several captured inputs. Acceptance includes
+  both functions and the PiP orientation cases without input-specific tables.
 
 - **Opus — spectator angle transfer:** `scripts/main.gd::_advance_spectator`
   packs double `yaw`/`pitch` into `Vector2` before calling
@@ -288,19 +397,56 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   input increments at a large fractional yaw retain original free/orbit camera
   motion and orientation, plus existing FPV/TPS follow, zoom, reset and lifecycle
   behavior. Authority heading and gameplay settlement remain unchanged.
-### Shared-owner contracts required for campaign art
+- **Opus — player look and view-lock angle transfer:** agree a double-preserving
+  contract across `scripts/main.gd::_look`/`_advance_view`,
+  `scripts/input_rules.gd::look` and Terra's `ViewLockState.advance`. The current
+  `Vector2` arguments and results quantize base angles and lock increments;
+  even the frozen branch rewrites angles. The original `_applyLook` retains
+  1024.251199999997 after forty 0.00003-radian steps from 1024.25, while native
+  remains at 1024.25. A frozen angle of 1024.25003 remains unchanged in the
+  original and becomes 1024.25 natively; one captured tracking step ends at
+  1024.236406260541 versus 1024.2364501953125. Read-only source and native
+  programs are retained in `artifacts/terra/view-lock-precision-source.mjs` and
+  `artifacts/terra/view-lock-precision.tscn`; the existing shared `rng.js`
+  provenance mismatch still gates published captures. Acceptance: original
+  free-look and lock sequences retain unbounded yaw, sub-Float32 increments,
+  strict frozen no-op, pitch limits, inversion, recoil and previous-rendered
+  projection across FPV/TPS; do not alter authority settlement. Terra updates
+  its consumer separately after the producer contract is accepted.
+- **Opus — view-lock scalar distance:** publish an accepted browser
+  `Math.hypot(x, z)` binding in `scripts/source_numeric.gd`, checking the existing
+  `CarrierRules.hypot2` implementation and its narrower carrier fixture first.
+  `ViewLockState.advance` currently rounds target-minus-eye through `Vector3`
+  and horizontal length through `Vector2` before tracking. With the same native
+  Float32 inputs, the original Node program in
+  `artifacts/terra/view-lock-precision-source.mjs` produces Float32 steps
+  `[0.014999998733401299, 0.015000004321336746]`; the native diagnostic produces
+  `[0.014999999664723873, 0.015000000596046448]`. These are controlled inputs,
+  not a populated targeting or browser-bit qualification. Acceptance: the
+  shared adapter matches original Chromium two-argument results across source
+  coordinates, zero, subnormal and non-finite inputs without tables or wider
+  tolerances. Terra then keeps subtraction in scalar doubles and validates both
+  axes before native storage with the original view-lock program.
+### Shared-owner contracts required for presentation
 
-- **Opus — automatic dialogue/transcript provenance:** reconcile the original
+- **Opus — spectator, minimap, PiP and dialogue provenance:** reconcile the original
   `public/js/rng.js` dependency through `tools/import_source.mjs` and
-  `data/provenance.json` before full dialogue qualification. Both
-  `tests/fixtures/dialogue_native.json` and `tests/fixtures/dialogue_transcript.json`
-  declare `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`,
+  `data/provenance.json` before full spectator, minimap, dialogue and PiP qualification.
+  The captures `tests/fixtures/spectator_native.json`, `tests/fixtures/minimap_native.json`,
+  `tests/fixtures/dialogue_native.json`, `tests/fixtures/dialogue_transcript.json`
+  and `tests/fixtures/pip.json` declare
+  `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`,
   while shared provenance declares
   `c46913b415a75aa5f0d2366dd7bfcb4f8f26c1db913ecea2a74b40695dd78aaa`.
   Preserve the full captures and their source guards. Acceptance: original
-  automatic radio and transcript programs pass with the agreed complete source
-  inputs and unchanged timing/asset comparisons; the narrower cancellation
-  oracle cannot substitute for these checks or certify populated delivery.
+  spectator, minimap, automatic radio, transcript and PiP programs pass with the agreed
+  complete source inputs and unchanged timing/asset comparisons;
+  `tools/spectator_native_capture.mjs`, `tests/spectator_native.tscn`,
+  `tools/minimap_native_capture.mjs`, `tests/minimap_native.tscn`,
+  `tools/pip_capture.mjs` and `tests/pip_native.tscn` must also accept the shared
+  identity. The narrower
+  cancellation oracle cannot substitute for these checks or certify populated
+  delivery.
 - **Flash — settlement transcript host:** `scripts/campaign_ui.gd::show_result`
   owns the outer expandable transcript ScrollContainer and the result
   title/statistics/buttons. Bind the source settlement host width, outer overflow
@@ -367,6 +513,24 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
 
 ### Shared renderer contracts
 
+- **Opus — minimap marker coverage:** agree native bindings under
+  `shaders/minimap_marker*.gdshader` before Terra replaces the marker drawing in
+  `scripts/minimap.gd`. The original Canvas2D callback and Chromium PNGs in
+  `tests/fixtures/minimap_marker_raster.json` disagree with the native draw calls
+  in all twelve controlled cases at the existing four-byte gate: 1,032 pixels
+  exceed four bytes in total, with maximum channel difference 117. Integer base,
+  fractional tower, enemy hero and rotated-arrow cases differ in 156, 39, 82 and
+  31 pixels respectively. Exact byte and native image evidence is in
+  `artifacts/terra/minimap-markers/msaa0-ss1/`. Godot's
+  [Compatibility renderer does not support 2D MSAA](https://docs.godotengine.org/en/4.7/tutorials/2d/2d_antialiasing.html);
+  configured 2x/4x/8x tests produced the same result. A separate CPU Lanczos
+  downsampling experiment and disabling rectangle antialiasing did not pass the
+  strict cases. Preserve source geometry, inherited line widths, subpixel
+  placement, alpha composition, faction colors and draw order. Acceptance:
+  `tests/minimap_marker_raster.tscn` passes every captured original raster and
+  further rotated/overlap cases without wider tolerances or baked per-case images,
+  followed by the complete minimap composition and populated lifecycle tests.
+  Terra binds the accepted shared renderer in a separate change.
 - **Opus — cinematic hold stroke coverage:** agree an accepted material in
   `shaders/cinematic_hold.gdshader` before Terra replaces the native SVG binding in
   `scripts/campaign_hold.gd`. Godot's native SVG raster retains the original

@@ -24,5 +24,6 @@ static func frame(size: Vector2, index: int, position: Vector3, yaw: float, deco
 	var width := floori(minf(float(rules.MAX_W), size.x * float(rules.W_FRAC)) + 0.5)
 	var height := floori(width * float(rules.ASPECT) + 0.5)
 	var offset := Vector2(float(rules.PAD), float(rules.TOP) + index * (height + float(rules.GAP)))
-	var eye := position + Vector3.UP * float(rules.DECOY_EYE if decoy else rules.HERO_EYE)
+	# The source adds the eye offset before the camera position enters Float32 storage.
+	var eye := Vector3(position.x, float(position.y) + float(rules.DECOY_EYE if decoy else rules.HERO_EYE), position.z)
 	return {"rect": Rect2(offset, Vector2(width, height)), "position": eye, "yaw": yaw, "fov": float(rules.FOV)}

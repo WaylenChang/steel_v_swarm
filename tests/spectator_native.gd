@@ -10,7 +10,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/spectator_native.json")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("spectatorPrograms") is Array,
 		"Capture original spectator methods and actual camera quaternions")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_spectator()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -20,7 +20,7 @@ func _run() -> void:
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Spectator oracle matches imported source: " + path)
 	_check(Content.balance.get("spectator") == capture.get("metadata"), "Native spectator profiles and localized templates match original source")
-	if failures.is_empty():
+	if failures == 0:
 		preload("res://tests/spectator_suite.gd").run(self, capture)
 		_camera_pose(capture.spectatorPrograms)
 		_exit_lifecycle()
@@ -75,5 +75,5 @@ func _exit_lifecycle() -> void:
 	camera.free()
 
 func _finish_spectator() -> void:
-	print("SPECTATOR_NATIVE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("SPECTATOR_NATIVE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

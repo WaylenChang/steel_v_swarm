@@ -34,17 +34,15 @@ func update_view(battle: BattleSimulation, pilot: BattleUnit, side: String, rend
 			"lost": bool(actor.special.get("lost", false)), "index": 0, "unit": actor})
 	var selected := PipViewState.sources(rows, pilot.peer_id, pilot.kind == "drone", not pilot.alive(), side, Controls.low_power(), render_scale, rules)
 	pending_tags.clear()
-	if not selected.is_empty() and is_instance_valid(pilot.cockpit):
+	if not selected.is_empty() and _renderable_root(pilot.cockpit):
 		pending_tags.append({"root": pilot.cockpit, "mask": COCKPIT_MASK})
 	for index in selected.size():
 		if index >= views.size():
 			_add_view()
 		var view: Dictionary = views[index]
 		var actor: BattleUnit = selected[index].unit
-		if not is_instance_valid(actor.model):
-			view.border.hide()
-			view.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-			view.viewport.world_3d = null
+		if not _renderable_root(actor.model):
+			_disable_view(view)
 			continue
 		pending_tags.append({"root": actor.model, "mask": SOURCE_MASKS[index]})
 		var plan := PipViewState.frame(get_viewport_rect().size, index, actor.model.global_position, actor.facing_yaw(), actor.kind == "decoy", rules)
@@ -61,22 +59,51 @@ func update_view(battle: BattleSimulation, pilot: BattleUnit, side: String, rend
 		view.camera.near = float(rules.NEAR)
 		view.camera.far = maxf(float(battle.world.bounds.maxX) - float(battle.world.bounds.minX), float(battle.world.bounds.maxZ) - float(battle.world.bounds.minZ)) * float(rules.FAR_FACTOR)
 		view.camera.fov = plan.fov
-		view.camera.global_transform = Transform3D(Basis(Vector3.UP, plan.yaw), plan.position)
+		var orientation := SourceQuaternion.axis_angle(Vector3.UP, float(plan.yaw))
+		view.camera.global_transform = Transform3D(SourceQuaternion.basis(orientation), plan.position)
 		view.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		view.border.show()
 	for index in range(selected.size(), views.size()):
-		views[index].border.hide()
-		views[index].viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		views[index].viewport.world_3d = null
+		_disable_view(views[index])
 	_restore_unused({})
 
 func _begin_frame() -> void:
+	if is_queued_for_deletion() or not is_visible_in_tree():
+		clear()
+		return
 	var retained := {}
-	if is_visible_in_tree():
-		for tag: Dictionary in pending_tags:
-			if is_instance_valid(tag.root) and not tag.root.is_queued_for_deletion():
-				_tag(tag.root, tag.mask, retained)
+	var valid_tags: Array[Dictionary] = []
+	var source_available := false
+	for tag: Dictionary in pending_tags:
+		if _renderable_root(tag.root):
+			_tag(tag.root, tag.mask, retained)
+			valid_tags.append(tag)
+			source_available = source_available or SOURCE_MASKS.has(tag.mask)
+		else:
+			var index := SOURCE_MASKS.find(tag.mask)
+			if index >= 0 and index < views.size():
+				_disable_view(views[index])
+	if not source_available:
+		valid_tags.clear()
+		retained.clear()
+	pending_tags = valid_tags
 	_restore_unused(retained)
+
+func _renderable_root(root: Variant) -> bool:
+	# Cached tags can outlive their node, or an ancestor can be queued first.
+	if not is_instance_valid(root) or not root is Node or not root.is_inside_tree():
+		return false
+	var current: Node = root
+	while current != null:
+		if current.is_queued_for_deletion():
+			return false
+		current = current.get_parent()
+	return true
+
+func _disable_view(view: Dictionary) -> void:
+	view.border.hide()
+	view.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	view.viewport.world_3d = null
 
 func _end_frame() -> void:
 	# Gameplay copies (retired bodies, effects) must never inherit temporary masks.
@@ -125,9 +152,7 @@ func _restore_unused(retained: Dictionary) -> void:
 func clear() -> void:
 	pending_tags.clear()
 	for view: Dictionary in views:
-		view.border.hide()
-		view.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		view.viewport.world_3d = null
+		_disable_view(view)
 	_restore_unused({})
 
 func _exit_tree() -> void:

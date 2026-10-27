@@ -5,7 +5,7 @@ func _run() -> void:
 	_check(DisplayServer.get_name() != "headless", "Native minimap mask qualification requires a real renderer")
 	_check(capture.get("formatVersion") == 1 and capture.get("source") is Dictionary and capture.get("minimapFog") is Dictionary,
 		"Capture original minimap decision and canvas programs")
-	if not failures.is_empty():
+	if failures > 0:
 		_finish_minimap()
 		return
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
@@ -15,12 +15,12 @@ func _run() -> void:
 	for path: String in capture.source.sourceInputs:
 		_check(provenance.get("inputs", {}).get(path) == capture.source.sourceInputs[path], "Minimap oracle matches imported source: " + path)
 	_check(Content.balance.get("minimap") == capture.get("metadata"), "Native minimap rules and canvas defaults match original source")
-	if failures.is_empty():
+	if failures == 0:
 		preload("res://tests/minimap_suite.gd").run(self, capture)
 		preload("res://tests/minimap_vision_suite.gd").run(self, capture)
 		preload("res://tests/minimap_mask_suite.gd").run(self, capture)
 	_finish_minimap()
 
 func _finish_minimap() -> void:
-	print("MINIMAP_NATIVE assertions=", assertions, " failures=", failures.size())
-	get_tree().quit(0 if failures.is_empty() else 1)
+	print("MINIMAP_NATIVE assertions=", assertions, " failures=", failures)
+	get_tree().quit(0 if failures == 0 else 1)

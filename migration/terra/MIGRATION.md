@@ -49,6 +49,16 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/spectator_snap.tscn` retain the original anchor branch for boundary,
   locked-view, first-anchor and moving-frame cases. These controlled positions do
   not establish upstream precision or populated observer delivery.
+  Orbit anchor interpolation retains scalar doubles across frames and compares
+  the unrounded anchor to the snap threshold; native Vector3 conversion occurs
+  only when exposing the anchor. Resetting or assigning the anchor replaces all
+  retained coordinates. `node tools/spectator_anchor_capture.mjs`,
+  `node --test tests/spectator_anchor.test.mjs` and real-driver
+  `tests/spectator_anchor.tscn` compare 454 original frames, including small
+  motion, negative coordinates, view resets, nonpositive deltas and a snap after
+  accumulated smoothing. They check double anchor, distance and coefficient bits
+  as well as the exposed Float32 position. These controlled Float32 inputs do not
+  recover upstream precision or qualify complete camera poses and delivery.
   Lock-glow hit decay retains millisecond subtraction before division by 200;
   ring rotation derives its quaternion from the double phase before native
   storage. `node tools/lock_glow_capture.mjs` executes the original constructor

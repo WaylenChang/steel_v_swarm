@@ -12,7 +12,18 @@ var yaw := 0.0
 var pitch := 0.0
 var fov := 0.0
 var camera_fov := 0.0
-var anchor := Vector3.ZERO
+var _anchor_position := Vector3.ZERO
+var _anchor_x := 0.0
+var _anchor_y := 0.0
+var _anchor_z := 0.0
+var anchor: Vector3:
+	get:
+		return _anchor_position
+	set(value):
+		_anchor_position = value
+		_anchor_x = float(value.x)
+		_anchor_y = float(value.y)
+		_anchor_z = float(value.z)
 var anchor_ok := false
 var follow_yaw := 0.0
 var hidden: Dictionary = {}
@@ -59,9 +70,12 @@ func _nearest(list: Array) -> Dictionary:
 
 static func _distance_squared(first: Vector3, second: Vector3) -> float:
 	# Three.js compares scalar doubles without rounding the squared distance to Vector3 precision.
-	var dx := float(first.x) - float(second.x)
-	var dy := float(first.y) - float(second.y)
-	var dz := float(first.z) - float(second.z)
+	return _distance_squared_xyz(float(first.x), float(first.y), float(first.z), second)
+
+static func _distance_squared_xyz(x: float, y: float, z: float, second: Vector3) -> float:
+	var dx := x - float(second.x)
+	var dy := y - float(second.y)
+	var dz := z - float(second.z)
 	return dx * dx + dy * dy + dz * dz
 
 func target(actors: Array) -> Dictionary:
@@ -201,11 +215,15 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 		var profile: Dictionary = rules.profiles.get(str(actor.get("ch", "")), rules.fallbacks.get(str(actor.side), rules.fallbacks[""]))
 		var height: float = profile.height
 		var point: Vector3 = actor.position
-		if view in c.LOCK_VIEWS or not anchor_ok or sqrt(_distance_squared(anchor, point)) > float(c.SNAP_M):
+		if view in c.LOCK_VIEWS or not anchor_ok or sqrt(_distance_squared_xyz(_anchor_x, _anchor_y, _anchor_z, point)) > float(c.SNAP_M):
 			anchor = point
 			anchor_ok = true
 		else:
-			anchor = anchor.lerp(point, 1.0 - exp(-float(c.POS_K) * delta))
+			var weight := 1.0 - exp(-maxf(0.0, float(c.POS_K)) * maxf(0.0, delta))
+			_anchor_x += (float(point.x) - _anchor_x) * weight
+			_anchor_y += (float(point.y) - _anchor_y) * weight
+			_anchor_z += (float(point.z) - _anchor_z) * weight
+			_anchor_position = Vector3(_anchor_x, _anchor_y, _anchor_z)
 		follow_yaw = CameraPose.angle_step(follow_yaw, actor.get("ry", follow_yaw), c.FPV_YAW_K if view == "fpv" else c.YAW_K, delta)
 		position = anchor
 		if view == "fpv":

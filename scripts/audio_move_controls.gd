@@ -41,3 +41,124 @@ func end_frame() -> void:
 	for index in range(4):
 		values[index] = targets[index] + (values[index] - targets[index]) * decay[index]
 	frame += 1
+
+func consume_frames(count: int) -> Array[PackedFloat64Array]:
+	var output: Array[PackedFloat64Array] = []
+	for channel in range(4):
+		var samples := PackedFloat64Array()
+		samples.resize(maxi(0, count))
+		output.append(samples)
+	if count <= 0:
+		return output
+	# Keep the scalar recurrence order while avoiding per-sample property calls.
+	var gain_value := values[0]
+	var pan_value := values[1]
+	var rate_value := values[2]
+	var wet_value := values[3]
+	var gain_target := targets[0]
+	var pan_target := targets[1]
+	var rate_target := targets[2]
+	var wet_target := targets[3]
+	var gain_decay := decay[0]
+	var pan_decay := decay[1]
+	var rate_decay := decay[2]
+	var wet_decay := decay[3]
+	var next := cursor
+	var gains := output[0]
+	var pans := output[1]
+	var rates := output[2]
+	var wets := output[3]
+	for index in range(count):
+		while next < events.size() and int(events[next].frame) <= frame + index:
+			var event: Dictionary = events[next]
+			match int(event.index):
+				0:
+					gain_target = float(event.target)
+					gain_decay = float(event.decay)
+				1:
+					pan_target = float(event.target)
+					pan_decay = float(event.decay)
+				2:
+					rate_target = float(event.target)
+					rate_decay = float(event.decay)
+				3:
+					wet_target = float(event.target)
+					wet_decay = float(event.decay)
+			next += 1
+		gains[index] = gain_value
+		pans[index] = pan_value
+		rates[index] = rate_value
+		wets[index] = wet_value
+		gain_value = gain_target + (gain_value - gain_target) * gain_decay
+		pan_value = pan_target + (pan_value - pan_target) * pan_decay
+		rate_value = rate_target + (rate_value - rate_target) * rate_decay
+		wet_value = wet_target + (wet_value - wet_target) * wet_decay
+	values = PackedFloat64Array([gain_value, pan_value, rate_value, wet_value])
+	targets = PackedFloat64Array([gain_target, pan_target, rate_target, wet_target])
+	decay = PackedFloat64Array([gain_decay, pan_decay, rate_decay, wet_decay])
+	frame += count
+	cursor = next
+	if cursor > 64 and cursor * 2 > events.size():
+		events = events.slice(cursor)
+		cursor = 0
+	output[0] = gains
+	output[1] = pans
+	output[2] = rates
+	output[3] = wets
+	return output
+
+func preview_rate(count: int) -> PackedFloat64Array:
+	return _rate_frames(count, false)
+
+func consume_rate(count: int) -> PackedFloat64Array:
+	return _rate_frames(count, true)
+
+func _rate_frames(count: int, advance: bool) -> PackedFloat64Array:
+	if count <= 0:
+		return PackedFloat64Array()
+	var result := PackedFloat64Array()
+	result.resize(count)
+	var value := values[2]
+	var target := targets[2]
+	var multiplier := decay[2]
+	var constant := value == target
+	for index in range(cursor, events.size()):
+		var event: Dictionary = events[index]
+		if int(event.frame) >= frame + count:
+			break
+		if event.index == 2 and event.target != value:
+			constant = false
+	if constant:
+		result.fill(value)
+	var next := cursor
+	if constant:
+		while next < events.size() and int(events[next].frame) < frame + count:
+			var event: Dictionary = events[next]
+			if advance and event.index != 2:
+				return PackedFloat64Array()
+			if event.index == 2:
+				target = float(event.target)
+				multiplier = float(event.decay)
+			next += 1
+	else:
+		for index in range(count):
+			while next < events.size() and int(events[next].frame) <= frame + index:
+				var event: Dictionary = events[next]
+				if advance and event.index != 2:
+					return PackedFloat64Array()
+				if event.index == 2:
+					target = float(event.target)
+					multiplier = float(event.decay)
+				next += 1
+			result[index] = value
+			value = target + (value - target) * multiplier
+	if advance:
+		values[2] = value
+		targets[2] = target
+		decay[2] = multiplier
+		cursor = next
+		frame += count
+		if cursor > 64 and cursor * 2 > events.size():
+			events = events.slice(cursor)
+			cursor = 0
+	return result

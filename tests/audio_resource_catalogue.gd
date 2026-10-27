@@ -61,7 +61,7 @@ func _music(mood: String, revision: int) -> NativeAudioClip:
 	resource.channel_count = 0
 	resource.centered = _wave(revision)
 	resource.centered.loop_begin = 1
-	resource.source = {"layer": "procedural_music", "id": "music_" + mood, "sha256": source_hash}
+	resource.source = {"layer": "procedural_music", "id": "music_" + mood, "sha256": source_hash, "noiseSha256": str(revision).repeat(64)}
 	return resource
 
 func _movement(revision: int) -> NativeAudioMoveBank:
@@ -94,6 +94,43 @@ func _reader(path: String) -> Reader:
 	var reader := Reader.new()
 	reader.path = path
 	return reader
+
+func _reject_mixed_cohorts(importer: Importer, catalogue: NativeAudioCatalogue, manifest: String, id: String) -> void:
+	var published_hash := FileAccess.get_sha256(manifest)
+	for key: String in ["synthesis_" + id, "music_menu", "movement"]:
+		for field: String in ["noise", "rate", "missing"]:
+			var candidate := catalogue.duplicate(true) as NativeAudioCatalogue
+			var resource := ResourceLoader.load(candidate.resource_paths[key], "", ResourceLoader.CACHE_MODE_IGNORE_DEEP).duplicate(true)
+			if field == "noise":
+				resource.source.noiseSha256 = "f".repeat(64)
+			elif field == "missing":
+				resource.source.erase("noiseSha256")
+			elif resource is NativeAudioSynthesis:
+				resource.sample_rate = 44100
+			elif resource is NativeAudioMoveBank:
+				resource.noise.mix_rate = 44100
+				resource.noise.loop_end = 44100
+			else:
+				resource.centered.mix_rate = 44100
+			candidate.resource_paths.erase(key)
+			candidate.resource_hashes.erase(key)
+			var path := "res://assets/audio/native/%s_%s.res" % [key, Identity.digest(resource)]
+			owned_paths.append(path)
+			_check(await importer._publish_resource(candidate, key, resource), "Stage a individually valid dependency with a different cohort: " + key + "/" + field)
+			_check(candidate.valid(), "A complete fingerprint index alone cannot prove a shared source context")
+			await importer._publish_catalogue(candidate, 0)
+			_check(importer.rejections.size() == 1 and FileAccess.get_sha256(manifest) == published_hash,
+				"Reject a mixed cohort before switching the published index: " + key + "/" + field)
+			importer.rejections.clear()
+			_check(await Publisher.publish(candidate, manifest, get_tree()) == OK, "Inject an inconsistent legacy index into the test-owned manifest")
+			var partial := NativeAudioCatalogue.new()
+			partial.source = catalogue.source.duplicate(true)
+			_check(not importer._retain_resources(partial) and not partial.complete_resources and partial.resource_paths.is_empty(),
+				"Samples-only import cannot retain a mixed source context: " + key + "/" + field)
+			_check(importer.rejections.size() == 1, "Partial import reports the source-cohort rejection")
+			importer.rejections.clear()
+			_check(await Publisher.publish(catalogue, manifest, get_tree()) == OK, "Restore the accepted test-owned catalogue")
+			published_hash = FileAccess.get_sha256(manifest)
 
 func _run() -> void:
 	var id := "publication_probe_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -138,6 +175,9 @@ func _run() -> void:
 		"Samples-only publication rejects a different source rather than mixing native generations")
 	_check(importer.rejections.size() == 1, "A mismatched partial publication reports its failure")
 	importer.rejections.clear()
+	_check(importer._resource_cohort(ResourceLoader.load(Snapshot.CATALOGUE_PATH, "", ResourceLoader.CACHE_MODE_IGNORE)),
+		"The currently shipped original synthesis, movement and music retain one noise/context cohort")
+	await _reject_mixed_cohorts(importer, replacement, manifest, id)
 	var changed := _synthesis(id, 1)
 	changed.stems[0].envelope[0].constant = 1.0000000000000002
 	_check(Identity.digest(changed) != first.resource_hashes["synthesis_" + id], "Synthesis identity retains full-precision envelope coefficients")
@@ -174,7 +214,7 @@ func _run() -> void:
 	var retained_corruption := NativeAudioCatalogue.new()
 	retained_corruption.source = replacement.source.duplicate()
 	_check(not importer._retain_resources(retained_corruption) and not retained_corruption.complete_resources
-		and importer.rejections.size() == 2 and importer.rejections[1].begins_with("Missing or invalid retained native audio resource:"),
+		and importer.rejections.size() == 2 and importer.rejections[1].begins_with("Missing or invalid native audio cohort resource:"),
 		"Samples-only import verifies every retained dependency before reusing a complete index")
 	var manager := BattleAudio.new()
 	add_child(manager)

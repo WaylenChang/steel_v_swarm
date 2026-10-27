@@ -1,8 +1,11 @@
 import { readFile, mkdir, readdir } from 'node:fs/promises';
-import {writeFixtureJson} from './fixture_json.mjs';
+import {publishWorldCapture} from './world_capture_publication.mjs';
 import {WorldSourceWriter} from './world_source_writer.mjs';
 import {stringifySourceJson,prepareSourceJson} from './source_json.mjs';
 import {sourceMeshTransfer} from './source_mesh_transfer.mjs';
+import {captureWorldAttribute} from './world_attribute_capture.mjs';
+import {createWorldMeshTransport} from './world_mesh_transport.mjs';
+import {worldElevationFrames,captureWorldElevation} from './world_elevation_capture.mjs';
 import {encodeSourceNumericPart,decodeSourceNumericPart} from './source_numeric_transfer.mjs';
 import {selectWorldBundles} from './world_selection.mjs';
 import { readFileSync } from 'node:fs';
@@ -54,9 +57,15 @@ for (const name of ['public/index.html', 'server/sim.js', 'tools/elevation_fixtu
 for (const name of (await readdir(join(source,'out/forest_review'))).filter(name=>name.endsWith('.js')).sort())
   sourceInputs['out/forest_review/'+name] = sha256(await readFile(join(source,'out/forest_review',name)));
 const generatorSha256 = sha256((await readFile(fileURLToPath(import.meta.url), 'utf8')) + '\n' + captureClimbBundle.toString() + '\n' + captureSupportBundle.toString() + '\n' + prepareSceneryCapture.toString() + '\n' + captureTextureImage.toString() + '\n' + describeSourceTexture.toString() + '\n' + captureTextureUV.toString() + '\n' + captureTrainBundle.toString() + '\n' + readTrainRules.toString() + '\n' + instrumentSceneryMotion.toString() + '\n' + captureSceneryMotion.toString() + '\n' + instrumentWildlifeCapture.toString() + '\n' + captureWildlifeBundle.toString() + '\n' + instrumentPetalCapture.toString() + '\n' + capturePetalBundle.toString() + '\n' + sourceSlabUpload.toString() + '\n' + acceptedSourceSlabs.toString() + '\n' + instrumentAquaticCapture.toString() + '\n' + captureAquaticBundle.toString() + '\n' + instrumentMarineCapture.toString() + '\n' + captureMarineBundle.toString() + '\n' + captureMarineMaterial.toString() + '\n' + captureMarineShader.toString() + '\n' + captureOutlineUniforms.toString() + '\n' + createCelCapture.toString() + '\n' + instrumentWorldTextCapture.toString() + '\n' + captureWorldTextMesh.toString());
-const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+encodeSourceNumericPart.toString()+'\n'+decodeSourceNumericPart.toString()+'\n'+WorldSourceWriter.toString());
+const serializationSha256 = sha256(stringifySourceJson.toString()+'\n'+prepareSourceJson.toString()+'\n'+sourceMeshTransfer.toString()+'\n'+encodeSourceNumericPart.toString()+'\n'+decodeSourceNumericPart.toString()+'\n'+WorldSourceWriter.toString()+'\n'+captureWorldAttribute.toString()+'\n'+createWorldMeshTransport.toString());
+const elevationCaptureSha256 = sha256(worldElevationFrames.toString()+'\n'+captureWorldElevation.toString());
+const publicationSha256 = sha256(JSON.stringify(await Promise.all(
+  ['world_capture_publication.mjs','world_provenance.mjs','world_source.mjs','world_source_writer.mjs',
+    'fixture_json.mjs','source_json.mjs','source_mesh_transfer.mjs','source_numeric_transfer.mjs'].map(async name=>
+    [name,sha256(await readFile(new URL(name,import.meta.url)))]))));
 const load = file => import(pathToFileURL(join(source, file)).href);
 const d = await load('public/js/data.js');
+const {mapSourceCenter} = await load('public/js/mapLayerSources.js');
 const campaignMaps = JSON.parse(await readFile(join(root, 'data/campaign.json'), 'utf8')).maps;
 const worldCatalog = [...JSON.parse(await readFile(join(root, 'data/maps.json'), 'utf8')), ...campaignMaps];
 const bundleSelection = selectWorldBundles(worldCatalog, Object.keys(d.ENV.seasons), process.argv.slice(2));
@@ -152,12 +161,14 @@ export function bakeNativeHeightGrid(terrain) {
 }
 `;
 const fixtures = [];
+const selectedSourceIds = new Set(maps.map(map => map.source_id || map.id));
 for (const folder of [join(source, 'test/fixtures/osm'), join(source, 'test/fixtures/venue_roads'), join(root, 'data/source_campaign')]) {
 	let files;
 	try { files = await readdir(folder); }
 	catch(error) { if(error.code==='ENOENT'&&folder.startsWith(root))continue;throw error; }
   for (const name of files.filter(name => /\.json(?:\.gz)?$/.test(name))) {
     const capture = readOsmCapture(join(folder, name));
+    if (!selectedSourceIds.has(capture.data.venue?.id)) continue;
     const elevation = loadElevationFixture(capture.data.name, join(folder, 'elevation'), { validate: false });
     if (!elevation || !Array.isArray(capture.data.responses?.roads?.elements)) continue;
     const valid = validateElevationFixture(elevation, { dir: join(folder, 'elevation') });
@@ -175,12 +186,21 @@ const chromium = await chromiumOrNull();
 if (!chromium) throw new Error('Source migration requires an available development Playwright runtime');
 const sourceOrigin = 'http://godot-worlds.invalid';
 console.log('SOURCE_WORLD_CAPTURE browser-starting');
-const browser = await chromium.launch({ headless: true, executablePath: chromePath(), args:['--js-flags=--max-old-space-size=8192'] });
+const jsFlags = '--max-old-space-size=8192 --expose-gc';
+const browser = await chromium.launch({ headless: true, executablePath: chromePath(), args:['--js-flags='+jsFlags] });
+const captureRuntime = {browser:browser.version(),jsFlags,node:process.versions.node,v8:process.versions.v8,
+  zlib:process.versions.zlib,platform:process.platform,arch:process.arch};
 console.log('SOURCE_WORLD_CAPTURE browser-started');
 const reuse=process.argv.includes('--reuse');
 await mkdir(join(root, 'data/worlds'), { recursive: true });
 let worldMeshWriter=null;
 try {
+  const browserEvents = await browser.newBrowserCDPSession();
+  browserEvents.on('Target.targetCrashed', event => {
+    console.error('SOURCE_WORLD_CAPTURE target-crashed '+JSON.stringify(event));
+    void browser.close().catch(error=>console.error('SOURCE_WORLD_CAPTURE browser-close-failed',error.message));
+  });
+  await browserEvents.send('Target.setDiscoverTargets',{discover:true});
   const page = await browser.newPage();
   await page.addInitScript({content:'globalThis.__sourceWorldTextCapture = ('+captureWorldTextMesh.toString()+');'});
   await page.addInitScript({content:'globalThis.__sourceJsonStringify = ('+stringifySourceJson.toString()+');'});
@@ -200,7 +220,9 @@ try {
       await worldMeshWriter.partEncoded(index,offset,JSON.parse(json));
     } else if(operation==='end') {
       if(offset!==0)throw new Error('Invalid original world mesh boundary');
+      if(index<16)console.log('SOURCE_WORLD_CAPTURE mesh-store-starting '+index);
       await worldMeshWriter.end(index);
+      if(index<16)console.log('SOURCE_WORLD_CAPTURE mesh-stored '+index);
     } else throw new Error('Unknown original world mesh transfer operation');
   });
   await page.exposeFunction('__sourceWorldSection', async (key, offset, json) => {
@@ -209,7 +231,11 @@ try {
     const values=JSON.parse(json);
     if(key==='meshes') {
       if(!Array.isArray(values)||offset!==worldMeshWriter.count)throw new Error('Out-of-order original world mesh batch');
-      for(const mesh of values)await worldMeshWriter.append(mesh);
+      for(const mesh of values) {
+        const index=worldMeshWriter.count;
+        await worldMeshWriter.append(mesh);
+        if(index<16)console.log('SOURCE_WORLD_CAPTURE mesh-stored '+index);
+      }
       return;
     }
     const rows=worldSections[key]??=[];
@@ -283,16 +309,14 @@ try {
   };
   await loadModules();
   let capturedVariants=0;
-  for (const map of maps) {
-    console.log('SOURCE_WORLD_CAPTURE map-starting '+map.id);
+  for (const map of maps) for (const frame of worldElevationFrames(map,bundleSelection,{battleRect:d.battleRect,mapSourceCenter})) {
+    console.log('SOURCE_WORLD_CAPTURE map-starting '+map.id+'/'+frame.size);
     const candidates = fixtures.filter(fixture => fixture.capture.data.venue?.id === (map.source_id || map.id));
-    const sizes = Object.keys(map.variants).map(Number).sort((a,b)=>a-b);
-    const cfg = map.variants[String(sizes.at(-1))].config;
-    const rect = d.battleRect(cfg);
+    const {size,config:cfg,rect,center} = frame;
     const covered = fixture => {
       const { bounds, mosaic } = fixture;
       for (const x of [rect.minX, rect.maxX]) for (const z of [rect.minZ, rect.maxZ]) {
-        const [lat, lng] = d.xzToLL(x, z, cfg.center);
+        const [lat, lng] = d.xzToLL(x, z, center);
         const px = ((lng + 180) / 360 * 2 ** bounds.z - bounds.tx0) * 256;
         const py = ((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * 2 ** bounds.z - bounds.ty0) * 256;
         if (px < 0 || py < 0 || px >= mosaic.w - 1 || py >= mosaic.h - 1) return false;
@@ -303,12 +327,13 @@ try {
     if (!fixture) {
       if(!candidates.length) throw new Error(`${map.id}: original road capture missing`);
       const outputDir=join(root,'data/source_elevation');
-      let elevation=loadElevationFixture(map.id,outputDir);
+      const elevationName=map.id+'_'+size;
+      let elevation=loadElevationFixture(elevationName,outputDir);
       if(!elevation) {
         console.log(`${map.id}: capturing complete current-frame Terrarium tiles`);
-        await captureElevationFixture({name:map.id,venue:{id:map.id,name:map.name},team:5,
-          bbox:d.battleBBox(cfg),center:cfg.center,bounds:rect,outputDir,timeoutMs:15000});
-        elevation=loadElevationFixture(map.id,outputDir);
+        await captureElevationFixture({name:elevationName,venue:{id:map.id,name:map.name},team:size,
+          bbox:d.battleBBox(cfg,center),center,bounds:rect,outputDir,timeoutMs:15000});
+        elevation=loadElevationFixture(elevationName,outputDir);
       }
       if(!elevation) throw new Error(`${map.id}: new elevation capture failed validation`);
       const tiles=elevation.source.tiles.map(tile=>({...tile,image:decode(readFileSync(join(outputDir,tile.path)))}));
@@ -318,19 +343,15 @@ try {
       fixture={...candidates[0],elevation,bounds,mosaic:mosaicOf(tiles,bounds)};
       if(!covered(fixture)) throw new Error(`${map.id}: new verified tiles still do not cover the current frame`);
     }
-    const raw = new Float32Array(d.TERRAIN.GRID_N ** 2);
+    const raw = captureWorldElevation(frame,d.TERRAIN.GRID_N,d.xzToLL,
+      (lat,lng)=>sampler(fixture.mosaic,fixture.bounds,lat,lng));
     console.log('SOURCE_WORLD_CAPTURE elevation-ready '+map.id);
-    for (let i = 0; i < d.TERRAIN.GRID_N; i++) for (let j = 0; j < d.TERRAIN.GRID_N; j++) {
-      const x = rect.minX + (rect.maxX - rect.minX) * j / (d.TERRAIN.GRID_N - 1);
-      const z = rect.minZ + (rect.maxZ - rect.minZ) * i / (d.TERRAIN.GRID_N - 1);
-      raw[i * d.TERRAIN.GRID_N + j] = sampler(fixture.mosaic, fixture.bounds, ...d.xzToLL(x, z, cfg.center));
-    }
     const roads = osmRoadsFromElements(fixture.capture.data.responses.roads.elements);
     const features = fixture.capture.data.responses.features?.elements;
     const osm = features ? parseOsmFeatureElements(features) : null;
-    const seasons = map.chapter ? [map.variants[String(sizes[0])].config.env?.season || 'summer'] : Object.keys(d.ENV.seasons);
+    const seasons = map.chapter ? [cfg.env?.season || 'summer'] : Object.keys(d.ENV.seasons);
     if (seasons.some(season=>!Object.hasOwn(d.ENV.seasons,season))) throw new Error('Unsupported original map season: '+map.id);
-    for (const size of sizes) for (const season of seasons) {
+    for (const season of seasons) {
       if (!bundleSelection.has(`${map.id}_${size}_${season}`)) continue;
       console.log(`SOURCE_WORLD_CAPTURE variant-starting ${map.id}/${size}/${season}`);
       const worldConfig = structuredClone(map.variants[String(size)].config);
@@ -338,11 +359,12 @@ try {
       const target = join(root,'data/worlds',`${map.id}_${size}_${season}.json`);
       const provenance = {
         identity:{map:map.id,teamSize:size,season},
+        captureRuntime,
         capture: basename(fixture.capture.data.name), captureSha256: fixture.capture.sha256,
         tiles: fixture.elevation.source.tiles.map(({url,sha256}) => ({url,sha256})),
         terrainSha256: sha256(terrainSource), roadsSha256: sha256(biomesSource),
         configSha256: sha256(JSON.stringify(worldConfig)),
-        generatorSha256, serializationSha256, selectorSha256: sha256(selectWorldBundles.toString()), minimapCanvasSourceSha, inputs: sourceInputs,
+        generatorSha256, serializationSha256, elevationCaptureSha256, publicationSha256, selectorSha256: sha256(selectWorldBundles.toString()), minimapCanvasSourceSha, inputs: sourceInputs,
       };
       provenance.inputFingerprint = sha256(JSON.stringify(provenance));
       if(reuse) {
@@ -357,7 +379,7 @@ try {
           const b=previous.bounds;
           previous.laneHeights=map.variants[String(size)].lanes.map(lane=>lane.map(([x,z])=>
             tunnelAt(x,z)?.floor ?? Math.max(fieldSample(heights,x,z,previous.grid,b.minX,b.maxX,b.minZ,b.maxZ),deckAt(x,z)??-Infinity)));
-          await writeFixtureJson(target,prepareSourceJson(previous));
+          await publishWorldCapture(target,previous,source);
           console.log(`${map.id}/${size}/${season}: source geometry reused`);
           continue;
         }
@@ -365,10 +387,11 @@ try {
       worldSections=Object.create(null);
       if(capturedVariants++)await loadModules();
       worldMeshWriter=new WorldSourceWriter(join(root,'data/worlds'));
-      const transfer = JSON.parse(await page.evaluate(async ({ cfg, raw, roads, osm, minimapMethod, minimapSize, climbCaptureSource, supportCaptureSource, sceneryPrepareSource, textureImageSource, textureDescriptionSource, textureUVSource, trainCaptureSource, motionCaptureSource, wildlifeCaptureSource, petalCaptureSource, aquaticCaptureSource, marineCaptureSource, marineMaterialSource, marineShaderSource, outlineCaptureSource, celCaptureSource }) => {
+      const transfer = JSON.parse(await page.evaluate(async ({ cfg, raw, roads, osm, minimapMethod, minimapSize, climbCaptureSource, supportCaptureSource, sceneryPrepareSource, textureImageSource, textureDescriptionSource, textureUVSource, trainCaptureSource, motionCaptureSource, wildlifeCaptureSource, petalCaptureSource, aquaticCaptureSource, marineCaptureSource, marineMaterialSource, marineShaderSource, outlineCaptureSource, celCaptureSource, attributeCaptureSource, meshTransportSource }) => {
+        if(typeof globalThis.gc!=='function')throw new Error('World capture requires explicit collection of retired mesh copies');
         const { terrain: terrainModule, data, cache, biomes, climb, buildings, THREE, layers, toon } = window.sourceModules;
         const sourceKey = layers.mapSourceKey(cfg);
-        const key = cache.geoKey('elev', 1, data.battleBBox(cfg), 'n' + data.TERRAIN.GRID_N + (sourceKey ? '|' + sourceKey : ''));
+        const key = cache.geoKey('elev', 1, data.battleBBox(cfg,layers.mapSourceCenter(cfg,'elevation')), 'n' + data.TERRAIN.GRID_N + (sourceKey ? '|' + sourceKey : ''));
         console.log('SOURCE_WORLD_CAPTURE cache-starting');
         if (!await cache.geoPut(key, new Float32Array(raw))) throw new Error('Elevation cache injection failed');
         console.log('SOURCE_WORLD_CAPTURE terrain-starting');
@@ -399,19 +422,17 @@ try {
         };
         const meshes = [], textureImages = [], textureIds = new Map();
         let meshCount=0;
+        const transport=new Function('return ('+meshTransportSource+');')()({
+          split:globalThis.__sourceMeshTransfer,stringify:globalThis.__sourceJsonStringify,encode:globalThis.__sourceNumericPart,
+          sendMesh:(...args)=>window.__sourceWorldMesh(...args),
+          sendRows:(offset,text)=>window.__sourceWorldSection('meshes',offset,text),collect:()=>globalThis.gc(),
+        });
         const flushMeshes=async()=>{
           if(!meshes.length)return;
           for(const mesh of meshes){
             if(meshCount<16||mesh.positions.length>1000000)console.log('SOURCE_WORLD_CAPTURE mesh-transfer '+JSON.stringify({index:meshCount,name:mesh.name,positions:mesh.positions.length,instances:mesh.instances?.length||0}));
-            const {header,arrays}=globalThis.__sourceMeshTransfer(mesh,globalThis.__sourceJsonStringify);
-            await window.__sourceWorldMesh('begin',meshCount,0,globalThis.__sourceJsonStringify({header,lengths:arrays.map(values=>values.length)}));
-            for(let id=0;id<arrays.length;id++){
-              const values=arrays[id],size=typeof values[0]==='number'?65536:64;
-              for(let offset=0;offset<values.length;offset+=size)
-                await window.__sourceWorldMesh('array-f64',id,offset,JSON.stringify(globalThis.__sourceNumericPart(values.slice(offset,offset+size))));
-            }
-            await window.__sourceWorldMesh('end',meshCount,0,'');
-            meshCount++;
+            await transport.append(mesh);
+            meshCount=transport.count;
           }
           meshes.length=0;
         };
@@ -475,15 +496,7 @@ try {
             ...(material.map ? {texture:textureDescription(material.map)} : {}),
             emission:material.emissive?.toArray() || [0,0,0],emissionHex:material.emissive?.getHex() || 0,emissionIntensity:material.emissiveIntensity ?? 1};
         };
-        const attributeValues = (geometry, name) => {
-          const attribute = geometry.getAttribute(name);
-          if (!attribute) return [];
-          if (attribute.itemSize > 4) throw new Error('Unsupported original world attribute: ' + name);
-          const getters = ['getX','getY','getZ','getW'].slice(0,attribute.itemSize);
-          const values = Array.from({length:attribute.count},(_,i)=>getters.map(getter=>attribute[getter](i))).flat();
-          if (!values.every(Number.isFinite)) throw new Error('Non-finite original world attribute: ' + name);
-          return values;
-        };
+        const attributeValues = new Function('return ('+attributeCaptureSource+');')();
         const captureMesh = (object, label, terrainMesh = false, flags = {}) => {
           if (!object.isMesh || !object.geometry?.attributes?.position) return;
 		  const worldText=globalThis.__sourceWorldTextCapture(object);
@@ -566,22 +579,25 @@ try {
         terrain.mesh.updateWorldMatrix(true, false);
         captureMesh(terrain.mesh, 'Terrain', true);
         await flushMeshes();
+        transport.collect();
         const waterObjects=[];
         terrain.group.traverse(object => {
           if(object.geometry?.attributes?.seaFade)waterObjects.push(object);
         });
-        for(const object of waterObjects){captureMesh(object,'Water');if(meshes.length>=16)await flushMeshes();}
+        for(const object of waterObjects){captureMesh(object,'Water');if(meshes.length){await flushMeshes();transport.collect();}}
         roadWorld.group.updateMatrixWorld(true);
         const sceneryObjects=[];
         roadWorld.group.traverse(object => {
           for (let parent = object; parent; parent = parent.parent) if (parent.name === 'climbRoutes') return;
           sceneryObjects.push(object);
         });
-        for(const object of sceneryObjects){captureMesh(object,'Scenery');if(meshes.length>=16)await flushMeshes();}
+        for(const object of sceneryObjects){captureMesh(object,'Scenery');if(meshes.length){await flushMeshes();transport.collect();}}
         const climbObjects=[];
         const climbBundle = new Function('return (' + climbCaptureSource + ');')()(roadWorld.group, (...args)=>climbObjects.push(args), climb.CLIMB_ARROW);
-        for(const args of climbObjects){captureMesh(...args);if(meshes.length>=16)await flushMeshes();}
+        for(const args of climbObjects){captureMesh(...args);if(meshes.length){await flushMeshes();transport.collect();}}
         await flushMeshes();
+        meshCount=await transport.finish();
+        transport.collect();
         const {supportBlockers, ...supportBundle} = new Function('return (' + supportCaptureSource + ');')()(roadWorld.group, THREE);
         const columns = supportBundle.supportsCaptured ? supportBlockers : roadWorld.roadRes.cols;
         const ground = terrain.mesh.geometry;
@@ -639,7 +655,7 @@ try {
           result[key]=null;
         }
         return globalThis.__sourceJsonStringify({header,counts});
-      }, { minimapMethod: minimapBakeMethod, minimapSize, cfg: worldConfig, raw: Array.from(raw), roads, osm, climbCaptureSource: captureClimbBundle.toString(), supportCaptureSource: captureSupportBundle.toString(), sceneryPrepareSource: prepareSceneryCapture.toString(), textureImageSource: captureTextureImage.toString(), textureDescriptionSource: describeSourceTexture.toString(), textureUVSource: captureTextureUV.toString(), trainCaptureSource: captureTrainBundle.toString(), motionCaptureSource:captureSceneryMotion.toString(), wildlifeCaptureSource:captureWildlifeBundle.toString(), petalCaptureSource:capturePetalBundle.toString(), aquaticCaptureSource:captureAquaticBundle.toString(), marineCaptureSource:captureMarineBundle.toString(), marineMaterialSource:captureMarineMaterial.toString(), marineShaderSource:captureMarineShader.toString(), outlineCaptureSource:captureOutlineUniforms.toString(), celCaptureSource:createCelCapture.toString() }));
+      }, { minimapMethod: minimapBakeMethod, minimapSize, cfg: worldConfig, raw: Array.from(raw), roads, osm, climbCaptureSource: captureClimbBundle.toString(), supportCaptureSource: captureSupportBundle.toString(), sceneryPrepareSource: prepareSceneryCapture.toString(), textureImageSource: captureTextureImage.toString(), textureDescriptionSource: describeSourceTexture.toString(), textureUVSource: captureTextureUV.toString(), trainCaptureSource: captureTrainBundle.toString(), motionCaptureSource:captureSceneryMotion.toString(), wildlifeCaptureSource:captureWildlifeBundle.toString(), petalCaptureSource:capturePetalBundle.toString(), aquaticCaptureSource:captureAquaticBundle.toString(), marineCaptureSource:captureMarineBundle.toString(), marineMaterialSource:captureMarineMaterial.toString(), marineShaderSource:captureMarineShader.toString(), outlineCaptureSource:captureOutlineUniforms.toString(), celCaptureSource:createCelCapture.toString(), attributeCaptureSource:captureWorldAttribute.toString(), meshTransportSource:createWorldMeshTransport.toString() }));
       const bundle=transfer.header;
       const storage=await worldMeshWriter.finish();
       await worldMeshWriter.dispose();
@@ -671,7 +687,7 @@ try {
       provenance.assets = Object.fromEntries(Array.from(sourceAssets).sort(([a],[b])=>a.localeCompare(b)));
       provenance.fingerprint = sha256(JSON.stringify(provenance));
       bundle.source = provenance;
-      await writeFixtureJson(target,prepareSourceJson(bundle));
+      await publishWorldCapture(target,bundle,source);
       console.log(`${map.id}/${size}/${season}: ${bundle.meshCount} meshes, ${bundle.decks.length} decks, ${bundle.tunnels.length} tunnels`);
     }
   }

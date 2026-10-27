@@ -23,15 +23,40 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   cancellation and atomic publication. Bound peak memory through traversal and
   ResourceSaver publication; finish resource reload, complete rendered appearance
   and populated lifecycle checks on the full set, including actual tunnel cases.
-  Use all four seasons of both `taroko_1_*` and `taroko_swap_1_*` as original
-  populated tunnel inputs: retain each world's 198 captured tunnel records, their geometry and source
-  metadata through native packing/reload before rendered and traversal integration
-  acceptance. Their source
+  Use all four seasons of `taroko_1_*`, `taroko_swap_1_*`, `taroko_2_*` and
+  `taroko_swap_2_*` as original populated tunnel inputs: retain each freshly
+  sampled world's 200 tunnel records and six decks, their geometry and source
+  metadata through native packing/reload before rendered and traversal
+  integration acceptance. Their source
   storage/provenance gates do not qualify native numbers, material fidelity,
   layered-deck references, tunnel pixels or full seasonal-world availability.
-  Also qualify all four seasons of `taroko_3_*` and `taroko_swap_3_*`, each with
-  248 captured tunnels and 46 decks; smaller team-size recipes cannot stand in
-  for their full geometry and feature tables.
+  Also qualify all four seasons of both base assignments for team sizes 3/4,
+  each with 248 captured tunnels and 46 decks, and team size 5, with 239 tunnels
+  and 50 decks. Preserve the distinct source geometry, cel programs and climb
+  records; another team-size recipe cannot stand in for a required configuration.
+  Qualify all four seasons of `berlin_1_*` and `berlin_swap_1_*` through native
+  packing/reload with their own original elevation frame, deck tables and complete
+  scenery. Preserve the source grid and lane-height words; old largest-variant
+  elevation samples cannot stand in for these smaller configurations. Source
+  storage/provenance and frame checks do not discharge native materials,
+  rendered appearance, populated retention or transport acceptance.
+  Berlin small-team capture provenance declares `public/js/charPreview.js` hash
+  `20051639891092dd6ad2303a9c95c3484b7d778e567175e4548b2fed897686ea`.
+  The original working tree changed that input after capture, so the current
+  provenance gate rejects these archives. Obtain the matching original input or
+  regenerate against stable source inputs before reuse/reference/native
+  publication; do not replace declared hashes to make stale captures pass.
+  Both capture and reuse revalidate complete original provenance immediately
+  before atomic manifest publication. Retain the previous manifest and published
+  sidecars when inputs, existing assets or declared missing assets change during
+  capture. Keep `tests/world_capture_publication.test.mjs` with provenance and
+  storage regression coverage. Publication-helper fingerprints participate in
+  source identity; archived captures need regeneration before current-tool reuse.
+  Capture/reuse publication also authenticates every referenced mesh chunk and
+  numeric sidecar before replacing the manifest, then rechecks original provenance
+  after that storage pass. Missing/corrupt dependencies or inconsistent chunk
+  counts leave the previous manifest and cache files untouched. Keep raw and GZIP
+  publication-boundary cases in `tests/world_capture_publication.test.mjs`.
   Keep compressed-candidate and existing-sidecar hashing streamed; never buffer
   a complete numeric sidecar just to determine its size or verify its digest.
   Run `tools/verify_world_source.mjs <bundle>` between capture/reuse and reference
@@ -64,6 +89,14 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   member validation. Reject second members, garbage tails and expanded output
   beyond the declared extent without changing the source files. Keep valid
   high-ratio/multi-window and numeric/chunk tail cases in `tests/world_storage.tscn`.
+  The offline gate likewise requires the writer's single, unflagged GZIP member:
+  stream raw DEFLATE, require exact compressed-input consumption, and validate
+  native CRC32 plus ISIZE without retaining complete numeric buffers. Reject
+  empty additional members, zero padding, unsupported header flags and truncated
+  input as well as checksum/extent failures. Keep these numeric/chunk cases and
+  high-ratio/multi-window probes in `tests/world_source.test.mjs`; offline Node
+  must provide native CRC32 support. This storage contract does not qualify
+  native source-number decoding, materials or complete seasonal worlds.
   Browser transfer, inline mesh chunks and final metadata publication must retain
   signed zero. `tools/source_json.mjs` uses native `JSON.rawJSON` and a copy-on-write
   adapter for the shared streaming publisher; reject unavailable native support
@@ -100,6 +133,22 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   and retained-reader isolation, not marine shader pixels or complete worlds.
   Existing Berlin and Taroko seasonal source captures are partial inputs, not
   world-set certification. Refresh stale generator fingerprints before source reuse.
+  Decode elevation mosaics only for selected source venue IDs; base-swapped and
+  campaign aliases retain their original `source_id` mapping and candidate order.
+  Capture provenance includes Chromium version and JavaScript execution flags;
+  reuse requires that same runtime identity as well as current source/generator
+  fingerprints. Flat world-attribute capture retains normalized/interleaved
+  getters, source scalar order and signed zero without temporary per-vertex
+  arrays. Float64 capture buffers keep large copies outside the ordinary object
+  heap; plain and typed scalar buffers retain identical inline JSON, f64-le
+  frames, alias/rank decisions and raw/GZIP publication bytes. Transfer large
+  meshes individually; batch inline records within 16 rows/4 MiB, sending an
+  oversized row whole. Collect retired copies after their producer frame returns
+  using a 64 MiB wire budget, retaining original mesh/chunk order and publication
+  bytes. Keep both transport/attribute helpers in serialization fingerprints and
+  `tests/world_mesh_transport.test.mjs`/`tests/world_attribute_capture.test.mjs` alongside binary
+  transfer/storage cases. These bounds do not waive complete storage/provenance,
+  resource reload or source/native appearance acceptance.
   Stop browser producers before disposing an interrupted mesh writer. Close its
   live numeric handles and remove only its successfully opened raw/GZIP temporary
   paths; retain published content-addressed sidecars and rejected existing files.
@@ -118,6 +167,36 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   divider-band classification order, image-colour/border-band classifiers,
   slab/roof/portal metadata and pad anchors. Reject uncaptured classifiers.
   World geometry production stays here; authority LOS/support/traversal is Opus.
+  Regenerate remaining seasonal captures with per-variant elevation frames,
+  including swapped layouts; older captures reused the largest variant's raw
+  grid for smaller team sizes. Source provenance/storage cannot establish the sampled
+  frame. Preserve each selected configuration's original `battleRect`, elevation
+  layer center, Float32 writes and resampling order, including the matching source
+  cache key; acquire coverage only for selected sizes. Keep
+  `tests/world_elevation_capture.test.mjs` and the elevation-helper fingerprint:
+  every source query and complete Float32 grid must match the original terrain
+  sampling loop. This does not qualify complete terrain or populated worlds.
+  Capture the original low-resolution imagery input with
+  `node tools/capture_world_imagery.mjs <bundle>` and qualify it separately with
+  `node tools/verify_world_imagery.mjs <bundle>`. Retain the original image entities,
+  raw pre-style RGBA, separately styled display RGBA, projection constants and
+  pixel-boundary probes. Source functions are extracted without executing unrelated
+  module initialization; this isolated gate does not waive full-world RNG gates.
+  Preserve transparent RGB, `validOnly`, null/undefined outcomes, source rounding,
+  complete tile coverage and single-member GZIP extents. Keep
+  `tests/world_imagery_*.test.mjs` with corruption, retirement and source-seam cases.
+  These archives do not qualify high-resolution road observations, codecs on other
+  platforms, native geography/classification, populated scenery or complete worlds.
+  **Opus handoff:** implement the original double geographic projection in
+  `scripts/source_world_geography.gd`, returning original latitude/longitude and
+  rounded pixel coordinates from scalar client-frame `(x,z)` and captured metadata.
+  Preserve operation order, radians, `Math.round`, bounds and nonfinite semantics;
+  do not pass inputs through Float32 vectors or sample the styled image. Acceptance:
+  exact `constantsLE`, `pointLE` and `projectionLE` words plus the raw-RGB/null/
+  undefined probes in `data/world_imagery/*.json`, including pixel edges and alpha
+  validity. Sol binds the accepted helper and raw pixel reader through
+  `scripts/world.gd`/`tools/import_worlds.gd` in a separate change; retain the current
+  imagery rejection until that complete contract is accepted.
 - [ ] **S4 — Animated scenery:** certify trains, articulated pivots, boundary
   facilities and waterfalls against source frame order, endpoints, parent frames,
   wind and capped/zero deltas. Finish wildlife, petals/leaves and aquatic
@@ -333,6 +412,13 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   Destination loss probes queue deletion at destination entry or detach during
   source exit. Removing an ancestor while its child is entering violates native
   tree notifications; use deferred deletion at that boundary.
+  Staging viewport/world loss must cancel pending transfers and invalidate both
+  building and ready state. Reject queued staging before allocation/build and
+  revalidate factory callbacks before admitting their output. Notify replacement
+  listeners after native tree-exit notifications finish; repeated transfer
+  rollbacks must rebind loss observers to the restored generation. Run real-driver
+  `tests/prebuild_stage_lifetime.tscn` with the retirement and transfer fixtures;
+  held worlds isolate lifecycle behavior without qualifying seasonal content.
   Held build signals exercise retirement without qualifying seasonal geometry.
 
 World workflow, from the repository root:
@@ -359,6 +445,54 @@ The wrapper runs capture, source references and native packing sequentially.
   frames, normalization, mono/stereo routing, PCM/synthesis resources, retained
   BGM position/fallback, first gesture and independent sample RNG. Verify original
   sample rate/resampling, source codec failure and complete native audible output.
+  `node tools/capture_audio_sfx_rate.mjs <rate>` captures the original SFX
+  synthesis at an explicit context rate without executing procedural music,
+  movement construction or sample decoding. Keep its complete sound/gain corpus,
+  shared original noise, post-envelope filters, source/producer fingerprints and
+  Chromium identity in `data/audio_sfx_rates/`. The 48,000 Hz profile supplies
+  source waveforms and stems for native mixer integration; it does not switch
+  the resource catalogue. Bind matching-rate native resources before rate
+  selection is available. `tests/audio_sfx_mix_render.tscn` compares every source
+  sound/gain waveform through the actual device mixer, using a separate PCM
+  timing tracer and the existing quantization/envelope/filter error budgets.
+  Run it with WASAPI at the captured device rate; its private muted routes do not
+  establish complete audible delivery. `tests/audio_synthesis_import.tscn` checks
+  the shared import factory against existing resource identities and rejects
+  malformed captures. Keep WAV decoder compensation at the playback boundary
+  (`scripts/audio_pcm_gain.gd`); preserve captured PCM, logical gains and generator
+  gains. Requalify this decoder contract when changing the Godot version.
+  Preserve the original context's shared noise across synthesis, movement and
+  music; do not silently combine an isolated rate profile with another capture's
+  noise generation when publishing a complete native catalogue.
+  `node tools/capture_audio_move_rate.mjs <rate>` extends an existing SFX rate
+  archive with original movement graphs, oscillator periods and filter impulses.
+  Reuse its exact archived noise buffer without another `_buildNoise` call;
+  bind the parent archive bytes, source/producer fingerprints and Chromium
+  version/flags before publication. `tools/audio_move_import.gd` is the shared
+  native bank factory for the existing importer and explicit rate captures.
+  `tests/audio_move_rate_import.tscn` checks matching-rate native reload and
+  unchanged legacy resource identity. Keep `tests/audio_move_rate.test.mjs`
+  alongside the SFX capture tests. Tonal oscillators use complete integer cycles
+  at the native rate when one original period has a fractional frame count;
+  retain the cycle count in the bank, playback phase and resource fingerprint.
+  Preserve legacy one-period resource identities. A compatible shared-noise
+  music cohort remains required before switching the runtime catalogue.
+  Full publication and samples-only retention must load and verify every
+  synthesis/movement/music dependency and reject missing or differing shared
+  noise fingerprints/context rates before changing the catalogue. Oscillator
+  period representation rates are independent of the shared noise context.
+  Keep this gate in `tools/import_audio.gd` and the mismatched-cohort publication
+  cases in `tests/audio_resource_catalogue.tscn`. A consistent declaration alone
+  does not establish source waveform parity or qualify cross-rate reconstruction.
+  Verify raw shared-noise Float32 bytes against their SHA-256 before movement
+  PCM conversion or rate-profile qualification. Reuse `tools/audio_noise_import.gd`
+  for exact one-second dimensions, canonical encoding and finite-word checks;
+  `tests/audio_noise_import.tscn` compares the actual original capture generations
+  and retains the existing movement resource identity after verified import.
+  Preserve the existing 47,360 Hz music representation and its integral onsets;
+  do not relabel or rescale captured SFX rates. Run `tests/audio_sfx_rate.test.mjs`
+  alongside full-source capture checks. Other device rates, codecs, resampling
+  and delivery remain separate acceptance requirements.
   Keep SFX clips content-addressed by PCM, full-precision normalization gains,
   stream format/rate/loop layout and original take/source identity. Publish the
   catalogue last through the atomic native resource publisher; never overwrite
@@ -399,11 +533,131 @@ The wrapper runs capture, source references and native packing sequentially.
   with isolated original gate/count/sample programs from
   `data/audio_manager/fixtures.json`. Keep its exact numeric tapes and producer
   fingerprints; this dedicated capture does not discharge shared fixture gates.
+  Validate every previously admitted SFX player after native admission callbacks;
+  cancellation of the current/earlier player or routing stops later allocations
+  and rejects the voice before playback or budget reservation. Once routing is
+  bound, failed admission retires the owner and disconnects the old route observer.
+  Preserve already-consumed private sample draws. Physical player loss closes the
+  voice and stops all stems, while ordinary stem completion still waits for the
+  remaining stems. Keep these sample/synthesis cases and route-drain checks in
+  `tests/audio_manager_retirement.tscn` alongside native mixer captures.
 - [ ] **S9 — Movement/location audio:** certify lazy permanent location beds,
   source channel allocation, noise/oscillator reconstruction, synchronized frame
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.
   Verify fade-out retention, driver suspension, buffer latency, thread shutdown,
   scheduling/performance and threaded Web export with actual mixer output.
+  `node tools/capture_audio_move_waveforms.mjs <rate>` captures the original
+  static movement graphs with the exact archived shared noise, including dry,
+  blended and wet stomp. `tests/audio_move_waveforms.tscn` compares every frame
+  through private muted native routes. Use independent WAV/generator timing
+  traces, source-measured oscillator-table errors, original filter impulses and
+  PCM conversion bounds; never align by searching the audio being tested.
+  Add `--automation` to that capture command and `-- --automation` to the native
+  scene to exercise the original `setMove`/`_stopMove` gain, pan, complementary
+  dry/wet and stop curves. Keep source-recorded targets/times/time constants in
+  `data/audio_move_automation/`; native cases submit those future commands through
+  the real mixer queue and require zero late control frames. Bound dynamic
+  numerical error with the source target gain maximum and the same independent
+  oscillator/filter/PCM limits. With `--max-fps 240` and native user arguments
+  `-- --automation --live`, deliver output controls during playback after the
+  engine's input samples have already been generated. Preserve source timing
+  while the output frame is still editable; only rate commands share the input
+  generation frontier. `tests/audio_move_command_frontier.tscn` covers these
+  source targets, genuinely late output commands and pending-command retirement.
+  Keep the live native delivery cursors in its artifact. These scoped programs
+  do not certify game-frame event delivery, changing playback rates/filter
+  cutoffs, device suspension or complete audible delivery.
+  Capture and inspect `--rates` separately to replay source rates 0.5, 1.8 and
+  0.8 through the original graph. Preserve the API rate and each bound
+  AudioParam's original multiplication target; dividing that target back by its
+  base is not a bit-preserving inverse. Rate-scaled band-passes use
+  `scripts/audio_move_filter.gd` because block-level native property updates
+  cannot reproduce their sample-accurate source automation. Fixed filters stay
+  native, including the initial unity-rate segment of a variable branch. Keep
+  synchronized raw/native captures and transfer both input and output history
+  before its first rate change; do not reset the filter or crossfade another bed.
+  `tests/audio_move_filter.tscn` checks original Chromium impulses,
+  Float64 control previews and exact state across arbitrary buffer boundaries.
+  Batch processing must preserve all four control channels, final state and the
+  existing service budget. Drain ready captures before the one-millisecond idle
+  poll. Extend `tests/audio_move_render.tscn -- --stress` with `--rate-stress` to
+  exercise concurrent changing rates, then restore constant-rate conditions for
+  the original phase and lifetime checks. Keep peak pump time, service gaps and
+  native/custom filter modes alongside the existing failure cursors.
+  Rate-dependent oscillator reconstruction remains unqualified: the current
+  fixed waveform tables have large source-measured errors under changing rates.
+  A rate matrix admitted by those model bounds does not certify full source
+  waveform parity. Retain actual residuals and finish that representation before
+  claiming complete rate/cutoff fidelity or publishing a matching-rate catalogue.
+  Use `node tools/capture_audio_move_oscillators.mjs 48000` to isolate the four
+  original oscillators from filtering/mixing. `data/audio_move_oscillators/`
+  retains complete raw oscillator output and an independent constant-source/Gain
+  observation with identical frequency targets in the same render quantum.
+  Preserve both parent profile hashes, original source and producer fingerprints.
+  `tests/audio_move_oscillators.test.mjs` authenticates the archive and recomputes
+  scalar-control, measured-control and rounded-phase-increment period errors.
+  The archive also contains all 36 band-limited tables for the three original
+  shapes. Extraction checks custom Fourier coefficients and shared normalization
+  against each built-in waveform before capturing the culled tables. Chromium's
+  [AudioParam implementation](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/audio_param_handler.cc)
+  uses Float32 grouped target updates; its
+  [oscillator](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/oscillator_handler.cc)
+  and [periodic wave](https://github.com/chromium/chromium/blob/151.0.7922.34/third_party/blink/renderer/modules/webaudio/periodic_wave.cc)
+  retain frequency-dependent band-limited tables and interpolation.
+  `scripts/audio_move_oscillator.gd` reproduces the a-rate table selection,
+  Float32 phase increments and two/three/five-point interpolation from observed
+  frequency words. `tests/audio_move_oscillator.tscn` requires bit-exact output for
+  the four original rate programs and three AudioParam-input boundary programs,
+  including mixed interpolation groups, large frequency jumps and near-Nyquist
+  values, plus the four original constant-rate programs. Preserve the original
+  k-rate Float32 SIMD lane recurrence and its accurate quantum-end phase reset;
+  a-rate uses double phase accumulation. Initial value events and even no-op
+  future rate targets affect source path selection. Four-frame source groups
+  survive non-quantum caller boundaries; incomplete/invalid groups reject before
+  advancing phase. `scripts/audio_param_curve.gd` generates source Float32
+  target curves in complete 128-frame render quanta. Preserve grouped updates,
+  fractional starts, scalar tails, convergence and the empty previous-event span
+  at an exact quantum boundary. `tests/audio_param_curve.tscn` requires bit-exact
+  frequency words and command-to-oscillator output, plus all 21 captured movement
+  and numerical-boundary parameter programs. Gain, pan, both dry/wet targets and
+  every rate-bound frequency retain independent source curves. Command words use
+  the existing Float64 numeric transfer codec; do not route fractional timestamps
+  through the unresolved shared inline-number decoder. Late commands, incomplete
+  quanta, underflowed Float32 constants and unimplemented coincident instant/
+  target event types reject explicitly.
+  `scripts/audio_move_source_dsp.gd` binds those curves and oscillators through
+  the optional device-rate wave-table input on `AudioMove`/`AudioMoveVoice`.
+  Keep source filter-frequency words and independent dry/wet curves; never
+  reconstruct physical frequency through scalar divide/multiply round trips.
+  Preserve the exact native fixed-filter prefix until the first changed sample.
+  Source processing consumes complete 128-frame quanta within the existing
+  input-ahead and two-period output reserve. Relative source commands retain
+  their original timestamps; late gain/pan/wet commands still use the output
+  frontier, while rates share the generated-input frontier. Non-unity initial
+  rates and uncaptured detuning remain unavailable in this path.
+  Run `tests/audio_move_source_dsp.tscn`, then add `--source-curves` to all four
+  static/automation/live/rate modes of `tests/audio_move_waveforms.tscn`.
+  This removes fixed-period model errors from the existing strict native bounds.
+  Queue preplanned source commands before input priming, retaining no-op rate
+  events in the live output-control corpus. Also run
+  `tests/audio_move_render.tscn -- --stress --rate-stress --source-curves` for
+  concurrent playback, UI stalls, exact physical LFO phase and route retirement.
+  Finish serialized wave-bank identity/admission, matching-rate catalogue
+  publication, game-frame delivery and device suspension before selecting this
+  optional path in normal resource loading. Keep the archive's
+  `rateOscillatorsQualified` false until that integration passes. Never enlarge
+  native waveform bounds or enable a runtime catalogue from isolated observations.
+  Discard each input's native startup history before advancing the common
+  source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
+  Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)
+  and [generator startup](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/effects/audio_stream_generator.cpp)
+  on engine upgrades. Replace stripped input history with a separately reported
+  output prefix rounded to native refill blocks. Preserve the original
+  two-period service reserve and input-ahead budget; otherwise stripping history
+  can consume the final refill even without a scheduling delay.
+  `tests/audio_generator_buffers.tscn` reproduces this loss at an off-block
+  cursor and checks the replacement independently of driver timing. Do not mask
+  branch phase errors with arbitrary buffering or output-dependent error bounds.
   Reuse panning coefficients only for an exactly unchanged double control value;
   retain per-sample evaluation during automation and the existing buffer latency.
   Movement owners and voices retire permanently on tree exit; reattachment must
@@ -658,6 +912,23 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
   source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
+  Water conformance consumes explicit original immediate-child water flags,
+  geometry parameters and double positions. Preserve `radiusTop ?? radius ?? 6`,
+  zero radii, the source 28-triangle fan, per-add Float32 normal accumulation and
+  retained non-water poses. Flagged water without geometry parameters follows
+  the prop-height branch; current flood `brokenGroundGeometry` has no parameters,
+  while pothole's cylinder is rebuilt. Never infer either branch from bounds.
+  `node tools/water_conformance_capture.mjs` captures the original method and
+  fixed unit-ring geometry under Node and original Chromium; runtime
+  `data/water_conformance.json` retains Chromium's float64 radial words before
+  radius multiplication. Keep the recorded cross-runtime query differences;
+  native trigonometric quadrant residues are not the original geometry.
+  Real-driver `tests/water_conformance.tscn` checks strict source query/vertex/
+  normal words, material/shared-mesh isolation, populated PackedScene reload and
+  interrupted construction. Controlled surface responses and primitive/prop
+  probes do not qualify original entity constructors, world surface admission,
+  conformed material pixels, damage/outline binding or populated transports.
+  The component remains unconnected until the owner contracts below are accepted.
   Mine visibility retains the original zero-initialized absolute throttle clock,
   strict 0.12 s wall-time interval and three-argument compensated distance before
   sight/opacity decisions. Native Float32 observer/anchor components enter double
@@ -863,6 +1134,18 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
   paused zero/slow/fast timers and bar retirement; the original dialogue fixture
   retains every automatic line duration. These clock checks do not qualify radio
   mount/unmount CSS curves, transcript reveal motion or complete overlay pixels.
+  Dialogue detachment cancels pending radio/transcript deadlines and native
+  animations; reattachment requires fresh playback. Seal old radio references
+  before visibility callbacks, and cancel superseded construction or clock
+  continuations before admitting nodes or timers. A queued/detached transcript
+  host must not reveal or scroll from a pending deadline. Preserve replacement
+  state during clear/dispose/expiry callbacks and release unadmitted portraits.
+  `node tools/dialogue_owner_capture.mjs` executes original `_after`, `clear`
+  and `dispose` with declared timer/DOM probes; real-driver
+  `tests/dialogue_owner_retirement.tscn` checks these programs and native
+  admission, reentrancy, paused detachment and retained-owner resource release.
+  This scoped cancellation oracle does not qualify the full original dialogue
+  dependency graph, layout, art/filter pixels or populated campaign delivery.
   Radio mount/unmount retains the original 320/400 ms ease-out/ease-in curves,
   14/10 px offsets and separate 420 ms removal deadline. Animate an isolated
   premultiplied SubViewport through Sprite2D so fractional translation samples
@@ -969,7 +1252,7 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   is [world-inventory.json](../../artifacts/sol/world-inventory.json). Presence
   does not establish source fingerprints, dependency integrity or native parity.
   Browser captures also need process-local `PW_CHROME` pointing to
-  `C:/Users/user/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe`;
+  `C:/Users/user/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe`;
   the sandbox's default Playwright browser cache is empty.
 - Godot 4.7.2 is available at
   `C:/Users/user/AppData/Local/Temp/steel-v-swarm-godot/Godot_v4.7.2-stable_win64_console.exe`.
@@ -1074,6 +1357,12 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   `tools/audio_references.mjs` and `tools/audio_pan_capture.mjs`; do not invent
   outputs or relax the entry guard. The independent native resource/mixer scenes
   use Sol-owned captures and cannot certify the missing shared decision fixtures.
+  In `tests/audio_suite.gd::_buses`, compare the centered player's physical WAV
+  gain with `audio_pcm_gain.gd::native_gain(stream, .35)` after decoder
+  compensation. Preserve the source logical gain `.5 * .7`, centered SFX route
+  and existing tolerance; do not assert the logical gain directly on the native
+  WAV player. Acceptance: the shared routing checks run after fixture publication
+  and verify both source gain semantics and the decoder boundary.
   The shared gate/count/sample sections still declare producer input
   `tools/audio_references.mjs` as
   `d1a87b6357256bf6059f017f3eee3f2bea8e4f6ccf74b445402d0b35cec084d1`,
@@ -1237,6 +1526,25 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for loot frame integration
 
+- **Models/Opus — original water hazard bindings:** preserve original
+  `userData.water`, geometry-parameter presence/nullish radius fields and double
+  `source_trs.p` for every immediate source child through
+  `tools/model_references.mjs`, `tools/import_cockpits.gd` and the shared import
+  publication. The existing packed flood/pothole scenes omit the water flag and
+  parameters. Publish actual constructor seed/radius identity as well: current
+  hazard profiles use seed 0 and one default radius; uniform root scaling cannot
+  replace `buildHazard(kind, entityId, scaledRadius)` because prop sizes and water
+  offsets remain independent of that radius. Opus then binds
+  `WaterConformance.apply(group, bindings, cx, cz, cy, surface)` in
+  `scripts/unit.gd::_build_model` after original world placement and before
+  pristine dimensions, damage, collapse and outline/material geometry binding.
+  `surface(x,z)` must execute original `_surf(x,z,terrain.heightAt(x,z))` ordering
+  and retain the bridge/terrain admission contract, rather than selecting the
+  highest deck unconditionally. Acceptance: populated original flood/pothole
+  models, multiple IDs/radii and sloped/raised-deck cases retain exact query and
+  geometry words, source prop/offset behavior, bounds and damage/outline binding
+  without mutating another instance; then run smoke and both transports. Keep
+  the synthetic conformance gate separate from that complete integration.
 - **Opus — capped/hitstop frame delivery:** `scripts/main.gd::_process` obtains
   the accepted delta from `PresentationFrame.advance`, while the independently
   processing loot/airdrop nodes receive raw engine deltas. Original
@@ -1260,6 +1568,17 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for campaign art
 
+- **Opus — automatic dialogue/transcript provenance:** reconcile the original
+  `public/js/rng.js` dependency through `tools/import_source.mjs` and
+  `data/provenance.json` before full dialogue qualification. Both
+  `tests/fixtures/dialogue_native.json` and `tests/fixtures/dialogue_transcript.json`
+  declare `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`,
+  while shared provenance declares
+  `c46913b415a75aa5f0d2366dd7bfcb4f8f26c1db913ecea2a74b40695dd78aaa`.
+  Preserve the full captures and their source guards. Acceptance: original
+  automatic radio and transcript programs pass with the agreed complete source
+  inputs and unchanged timing/asset comparisons; the narrower cancellation
+  oracle cannot substitute for these checks or certify populated delivery.
 - **Flash — settlement transcript host:** `scripts/campaign_ui.gd::show_result`
   owns the outer expandable transcript ScrollContainer and the result
   title/statistics/buttons. Bind the source settlement host width, outer overflow

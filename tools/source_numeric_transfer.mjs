@@ -1,6 +1,6 @@
 // Offline browser transport. Storage remains the existing little-endian float64 format.
 export function encodeSourceNumericPart(values) {
-  if(!Array.isArray(values)||!values.length)throw new Error('Empty source numeric transfer');
+  if((!Array.isArray(values)&&!(values instanceof Float64Array))||!values.length)throw new Error('Empty source numeric transfer');
   const matrix=Array.isArray(values[0]),width=matrix?values[0].length:1;
   if(!width||matrix&&values.some(row=>!Array.isArray(row)||row.length!==width))
     throw new Error('Inconsistent source numeric transfer shape');

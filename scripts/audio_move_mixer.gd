@@ -14,6 +14,7 @@ var inputs: Array[Dictionary] = []
 var output: AudioStreamGeneratorPlayback
 var controls := AudioMoveControls.new()
 var input_controls := AudioMoveControls.new()
+var source_dsp: RefCounted
 var sample_rate := 0.0
 var origin := 0.0
 var announced := false
@@ -21,6 +22,8 @@ var oscillator_phase := 0.0
 var input_ahead := 0
 var late_control_frames := 0
 var startup_frames := 0
+var startup_budget_frames := 0
+var startup_history_frames := 0
 var lfo_waveform := PackedFloat32Array()
 var lfo_frequency := 0.0
 var lfo_scaled := false
@@ -30,6 +33,7 @@ var has_oscillator_input := false
 var last_pump_usec := 0
 var max_service_gap_usec := 0
 var pump_started_usec := 0
+var max_pump_usec := 0
 
 func configure(name: String, graph_plan: Dictionary, wave_bank: NativeAudioMoveBank, initial: Dictionary, rate: float, start_time: float) -> void:
 	category = name
@@ -44,13 +48,13 @@ func configure(name: String, graph_plan: Dictionary, wave_bank: NativeAudioMoveB
 		has_oscillator_input = has_oscillator_input or branch.kind == "oscillator"
 	for node: int in plan.lfos:
 		lfo_waveform = bank.waveform(category, node)
-		lfo_frequency = float(plan.lfos[node].frequency)
+		lfo_frequency = float(plan.lfos[node].frequency) / bank.cycles(category, node)
 		lfo_scaled = bool(plan.lfos[node].rate_scaled)
 
-func queue(key: String, target: float, tau: float, time: float) -> void:
+func queue(key: String, target: float, tau: float, time: float, relative: bool = false) -> void:
 	mutex.lock()
 	if not stopping:
-		commands.append({"key": key, "target": target, "tau": tau, "time": time})
+		commands.append({"key": key, "target": target, "tau": tau, "time": time, "relative": relative})
 	mutex.unlock()
 
 func stop() -> void:
@@ -67,12 +71,21 @@ func _commands() -> bool:
 	if done:
 		return false
 	for command: Dictionary in pending:
-		var wanted := maxi(0, ceili((float(command.time) - origin) * sample_rate))
-		var editable := maxi(controls.frame, input_controls.frame)
+		var time: float = float(command.time) if command.get("relative", false) else float(command.time) - origin
+		var wanted := maxi(0, ceili(time * sample_rate))
+		# Only rate changes affect samples already generated into the input ring.
+		# Gain, pan and wetness remain editable until the output consumes them.
+		var input_command: bool = has_oscillator_input and command.key == "rate"
+		var editable := maxi(controls.frame, input_controls.frame) if input_command else controls.frame
 		late_control_frames = maxi(late_control_frames, editable - wanted)
 		var at_frame := maxi(wanted, editable)
+		if source_dsp != null:
+			var scheduled: float = time if at_frame == wanted else float(at_frame) / sample_rate
+			var error: Error = source_dsp.queue(command.key, command.target, command.tau, maxf(0, scheduled))
+			if error != OK:
+				return _fault("source_controls", error)
 		controls.queue(command.key, command.target, command.tau, at_frame)
-		if has_oscillator_input:
+		if input_command:
 			input_controls.queue(command.key, command.target, command.tau, at_frame)
 	return true
 
@@ -84,17 +97,32 @@ func prime_inputs() -> bool:
 		var available := playback.get_frames_available()
 		var queued := int(input.capacity) - available
 		var count := mini(available, maxi(0, input_ahead - queued))
+		if source_dsp != null:
+			count = count / 128 * 128
+		if count == 0:
+			continue
 		var branch: Dictionary = input.branch
 		var waveform := bank.waveform(category, int(branch.source))
+		var base_frequency := float(branch.frequency) / bank.cycles(category, int(branch.source))
 		var frames := PackedVector2Array()
 		frames.resize(count)
+		var rates := input_controls.consume_rate(count)
+		if rates.size() != count:
+			return _fault("oscillator_controls", ERR_INVALID_DATA)
+		if source_dsp != null:
+			var values: PackedFloat32Array = source_dsp.render_input(count)
+			if values.size() != count:
+				return _fault("source_oscillator", ERR_INVALID_DATA)
+			for index in range(count):
+				frames[index] = Vector2(values[index], values[index])
+			if not playback.push_buffer(frames):
+				return _fault("oscillator_buffer", ERR_CANT_CREATE)
+			continue
 		for index in range(count):
-			input_controls.begin_frame()
 			var value := _lookup(waveform, oscillator_phase)
 			frames[index] = Vector2(value, value)
-			var frequency := float(branch.frequency) * (input_controls.values[2] if branch.rate_scaled else 1.0)
+			var frequency := base_frequency * (rates[index] if branch.rate_scaled else 1.0)
 			oscillator_phase = fposmod(oscillator_phase + frequency / sample_rate, 1.0)
-			input_controls.end_frame()
 		if count > 0 and not playback.push_buffer(frames):
 			return _fault("oscillator_buffer", ERR_CANT_CREATE)
 	return true
@@ -103,10 +131,17 @@ func prepare() -> bool:
 	return _commands() and prime_inputs()
 
 func prime_output(frames: int) -> bool:
-	startup_frames = frames
+	var history := 0
+	for input: Dictionary in inputs:
+		history = maxi(history, int(input.get("startup_discard", 0)))
+	# Removing input history must not also spend the two-period service reserve.
+	# Restore whole native refills so an off-block cursor retains that reserve.
+	startup_budget_frames = frames
+	startup_history_frames = ceili(float(history) / AudioGeneratorFeed.REFILL_FRAMES) * AudioGeneratorFeed.REFILL_FRAMES
+	startup_frames = frames + startup_history_frames
 	input_ahead = maxi(input_ahead, frames)
 	var silence := PackedVector2Array()
-	silence.resize(frames)
+	silence.resize(startup_frames)
 	silence.fill(Vector2.ZERO)
 	return output.push_buffer(silence)
 
@@ -124,32 +159,69 @@ func pump() -> bool:
 			return _fault("oscillator_underrun", ERR_BUSY)
 	var count := output.get_frames_available()
 	var captured: Array[PackedVector2Array] = []
+	var raw: Array[PackedVector2Array] = []
 	var discarded := false
 	# Both stomp captures must be consumed at the same driver boundary.
 	AudioServer.lock()
 	for input: Dictionary in inputs:
 		var capture: AudioEffectCapture = input.capture
+		# Native playback history is not source time. Align each branch before
+		# advancing the common gain/pan/LFO clock or combining dry and wet beds.
+		var discard := mini(int(input.get("startup_discard", 0)), capture.get_frames_available())
+		if input.has("raw_capture"):
+			discard = mini(discard, input.raw_capture.get_frames_available())
+		if discard > 0:
+			capture.get_buffer(discard)
+			if input.has("raw_capture"):
+				input.raw_capture.get_buffer(discard)
+			input.startup_discard = int(input.startup_discard) - discard
 		count = mini(count, capture.get_frames_available())
 		discarded = discarded or capture.get_discarded_frames() > int(input.discard_origin)
+		if input.has("raw_capture"):
+			count = mini(count, input.raw_capture.get_frames_available())
+			discarded = discarded or input.raw_capture.get_discarded_frames() > int(input.raw_discard_origin)
+	if source_dsp != null:
+		count = count / 128 * 128
 	if count > 0 and not discarded:
 		for input: Dictionary in inputs:
 			captured.append(input.capture.get_buffer(count))
+			raw.append(input.raw_capture.get_buffer(count) if input.has("raw_capture") else PackedVector2Array())
 	AudioServer.unlock()
 	if discarded:
 		return _fault("capture_overflow", ERR_OUT_OF_MEMORY)
 	if count <= 0:
 		_publish()
 		return true
+	var parameters := controls.consume_frames(count)
+	var gains := parameters[0]
+	var pans := parameters[1]
+	var rates := parameters[2]
+	var wets := parameters[3]
+	var source: Dictionary = {}
+	if source_dsp != null:
+		source = source_dsp.render_output(count)
+		if source.get("gain", PackedFloat32Array()).size() != count or source.get("pan", PackedFloat32Array()).size() != count:
+			return _fault("source_parameters", ERR_INVALID_DATA)
+	for branch_index in range(inputs.size()):
+		for filter: Dictionary in inputs[branch_index].filters:
+			if filter.has("processor"):
+				var frequencies := PackedFloat32Array()
+				if source_dsp != null:
+					frequencies = source.filters.get(filter.get("node", -1), PackedFloat32Array())
+					if frequencies.size() != count:
+						return _fault("source_filter_controls", ERR_INVALID_DATA)
+				captured[branch_index] = filter.processor.process_native_buffer(raw[branch_index], captured[branch_index], rates, inputs[branch_index].raw_input_gain, frequencies)
+				if captured[branch_index].size() != count:
+					return _fault("source_filter", ERR_INVALID_DATA)
 	var frames := PackedVector2Array()
 	frames.resize(count)
 	var pan_value := NAN
 	var pan_coefficients := Vector2.ZERO
 	for index in range(count):
-		controls.begin_frame()
 		var modulation := 0.0
 		if not lfo_waveform.is_empty():
-			modulation = _lookup(lfo_waveform, lfo_phase)
-			var frequency := lfo_frequency * (controls.values[2] if lfo_scaled else 1.0)
+			modulation = _lookup(lfo_waveform, lfo_phase) if source_dsp == null else source.modulation[index]
+			var frequency := lfo_frequency * (rates[index] if lfo_scaled else 1.0)
 			lfo_phase = fposmod(lfo_phase + frequency / sample_rate, 1.0)
 		var value := 0.0
 		for branch_index in range(inputs.size()):
@@ -158,21 +230,15 @@ func pump() -> bool:
 			if not branch.modulation.is_empty():
 				sample *= float(branch.modulation.offset) + float(branch.modulation.depth) * modulation
 			if branch.weight == "dry":
-				sample *= 1.0 - controls.values[3]
+				sample *= 1.0 - wets[index] if source_dsp == null else source.dry[index]
 			elif branch.weight == "wet":
-				sample *= controls.values[3]
+				sample *= wets[index] if source_dsp == null else source.wet[index]
 			value += sample
-		if controls.values[1] != pan_value:
-			pan_value = controls.values[1]
+		var pan: float = pans[index] if source_dsp == null else source.pan[index]
+		if pan != pan_value:
+			pan_value = pan
 			pan_coefficients = AudioPan.mono_coefficients(pan_value)
-		frames[index] = pan_coefficients * value * controls.values[0]
-		controls.end_frame()
-	AudioServer.lock()
-	for input: Dictionary in inputs:
-		for filter: Dictionary in input.filters:
-			if filter.rate_scaled:
-				filter.effect.cutoff_hz = float(filter.frequency) * controls.values[2]
-	AudioServer.unlock()
+		frames[index] = pan_coefficients * value * (gains[index] if source_dsp == null else source.gain[index])
 	if not output.push_buffer(frames):
 		return _fault("output_buffer", ERR_CANT_CREATE)
 	if not announced:
@@ -189,16 +255,25 @@ func snapshot() -> Dictionary:
 
 func _publish() -> void:
 	var source_frames: Array[int] = []
+	var filter_modes: Array[bool] = []
 	for input: Dictionary in inputs:
 		source_frames.append(input.capture.get_frames_available())
+		for filter: Dictionary in input.filters:
+			if filter.has("processor"):
+				filter_modes.append(filter.processor.dynamic)
+	max_pump_usec = maxi(max_pump_usec, Time.get_ticks_usec() - pump_started_usec)
 	mutex.lock()
 	diagnostics = {"frames": controls.frame, "input_frames": input_controls.frame,
 		"startup_frames": startup_frames, "late_control_frames": late_control_frames,
+		"startup_budget_frames": startup_budget_frames, "startup_history_frames": startup_history_frames,
 		"lfo_phase": lfo_phase, "ready": announced, "output_skips": output.get_skips(),
 		"gain": controls.values[0], "rate": controls.values[2], "wet": controls.values[3],
 		"output_position": output.get_playback_position(), "output_available": output.get_frames_available(),
 		"source_frames": source_frames, "max_service_gap_usec": max_service_gap_usec,
+		"max_pump_usec": max_pump_usec, "dynamic_filters": filter_modes,
 		"pump_usec": Time.get_ticks_usec() - pump_started_usec}
+	if source_dsp != null:
+		diagnostics.source_dsp = source_dsp.snapshot()
 	mutex.unlock()
 
 static func _lookup(waveform: PackedFloat32Array, phase: float) -> float:

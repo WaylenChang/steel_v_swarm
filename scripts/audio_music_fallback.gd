@@ -1,6 +1,8 @@
 class_name AudioMusicFallback
 extends Node
 
+const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
+
 signal unavailable(mood: String, error: Error)
 
 var metadata: Dictionary = {}
@@ -54,7 +56,7 @@ func start(mood: String) -> void:
 	player.stream = clip.centered
 	player.bus = buses.bgm
 	player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
-	player.volume_linear = clip.centered_gain * envelope.value_at(start_time)
+	player.volume_linear = PcmGain.native_gain(player.stream, clip.centered_gain * envelope.value_at(start_time))
 	var voice := {"mood": mood, "player": player, "envelope": envelope, "gain": clip.centered_gain, "retire_wall": INF}
 	current = voice
 	voices.append(voice)
@@ -95,7 +97,7 @@ func _process(_delta: float) -> void:
 			voice.player.queue_free()
 			voices.remove_at(index)
 			continue
-		voice.player.volume_linear = float(voice.gain) * envelope.value_at(now)
+		voice.player.volume_linear = PcmGain.native_gain(voice.player.stream, float(voice.gain) * envelope.value_at(now))
 
 func _clip(arrangement: String) -> NativeAudioClip:
 	if clips.has(arrangement):

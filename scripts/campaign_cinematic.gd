@@ -192,6 +192,7 @@ func _process(_delta: float) -> void:
 		hold_indicator.advance((now - held_at) / (float(Content.campaign.presentation.skip.hold) * 1000))
 	if held_at >= 0 and now - held_at >= float(Content.campaign.presentation.skip.hold) * 1000:
 		held_at = -1
+		hold_indicator.cancel()
 		var token := generation
 		_try_skip()
 		if token != generation or not playing or closing:

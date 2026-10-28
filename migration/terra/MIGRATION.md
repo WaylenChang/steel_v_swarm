@@ -323,6 +323,11 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   replacement callbacks. Event-target doubles and direct native input dispatch
   do not qualify hardware touch bundling, GUI button activation, source image
   buffering, crawl/art pixels or complete campaign/transport acceptance.
+  A completed long press cancels and resets its feedback before checking the
+  buffer, including repeated blocked attempts and a later successful skip.
+  `node tools/campaign_hold_warning_capture.mjs`,
+  `node --test tests/campaign_hold_warning.test.mjs` and real-driver
+  `tests/campaign_hold_warning.tscn` retain the original warning/hold sequence.
   Hold feedback retains the original zero-coordinate fallback and viewport clamp,
   circumference targets, CSS ease/linear curves and reversal-shortened durations.
   Restarting an active hold resets progress without restarting its opacity fade.

@@ -116,6 +116,17 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   until the shared pulse-sine contract below is accepted. The shared texture
   probe, measured-dimension probe and component states do not qualify glow
   texture pixels, actor bounds, populated targeting or full frame composition.
+  `node tools/player_tps_anchor_capture.mjs`,
+  `node --test tests/player_tps_anchor.test.mjs` and real-driver
+  `tests/player_tps_anchor.tscn` retain the original Chromium shoulder/floor
+  branch and strict native Float32 comparison for imported heights, controlled
+  surfaces, pitches and unbounded headings. The shared authority contract below
+  blocks changes to this consumer. `node tools/player_view_body_capture.mjs`,
+  `node --test tests/player_view_body.test.mjs` and real-driver
+  `tests/player_view_body.tscn` retain the original movement-threshold and heading
+  traces; its strict gate also remains open pending the authority contract below.
+  Neither controlled fixture qualifies upstream precision, populated surfaces,
+  clipping, ring placement, transport or rendered body/camera poses.
 - [ ] **S13 — Minimap:** certify full/vicinity windows, warmup/draw deadlines,
   original baked pixels, lane grades/dash/miter rules, labels, remembered bunkers,
   neutral exclusions and public entity markers. Finish persistent exploration,
@@ -461,6 +472,24 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   and existing `tests/pip_composition.tscn` pass at portrait and landscape
   sizes, followed by actual hardware-DPI and populated match checks. Simulated
   pixel ratios alone do not qualify hardware-DPI or actor rendering.
+
+- **Opus — shared player camera and body heading:** agree an authority/presentation
+  contract for `scripts/simulation.gd::camera_origin_at`/`third_person_camera`
+  and `scripts/unit.gd::advance_player_view` before Terra changes
+  `scripts/camera_pose.gd::third_person_anchor` or
+  `scripts/player_view_state.gd::advance_body`. The same helpers feed both the
+  displayed camera/body and authority view origins, muzzle targeting, blast
+  feedback and reported body headings. In controlled native-representable inputs,
+  `tests/player_tps_anchor.tscn` currently disagrees with the captured Chromium
+  query or camera Float32 values in 312 of 720 cases; the original method uses
+  scalar-double shoulder, height and floor arithmetic before native conversion.
+  `tests/player_view_body.tscn` retains 96 failing consecutive-frame assertions
+  because native Vector3 squared-length rounding crosses the original strict
+  threshold in both directions. Acceptance: preserve authority settlement and
+  visibility while defining which side owns these boundaries, then pass both
+  strict source fixtures, the player-view suite and populated TPS ENet/WebSocket
+  cases. Terra binds an accepted presentation contract in a separate change;
+  the controlled fixtures cannot establish upstream precision or populated worlds.
 
 - **Sol — camera obstruction hit distance:** agree a source-faithful segment-hit
   contract for `scripts/world.gd::obstruction_hit` before Terra changes the

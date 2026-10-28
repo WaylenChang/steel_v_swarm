@@ -177,6 +177,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   power changes. The real pre-draw test also checks controlled raster composition
   and world retirement. These cases do not qualify actual model pixels, populated
   transport, full frame ordering or performance.
+  `node tools/pip_publication_capture.mjs`, `node --test tests/pip_publication.test.mjs`
+  and `tests/pip_publication.tscn` compare the original selector on controlled
+  snapshot membership with the native authority presentation. Keep the five
+  failures across unpublished creation, loss, recovery and removal until the
+  snapshot-lifetime contract below is accepted. These cases do not qualify
+  populated delivery or actual model pixels.
   `node tools/pip_composition_capture.mjs`, `node --test tests/pip_composition.test.mjs`
   and real-driver `tests/pip_composition.tscn` compare the original Three.js/WebGL
   PiP render and complete opaque browser rasters at 320x568, 1440x900 and
@@ -397,6 +403,22 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   the shared advance contract below is accepted for the relevant text consumer.
 
 ## Integration and handoffs
+
+- **Opus — PiP recipient snapshot lifetime:** define the recipient presentation
+  boundary in `scripts/simulation.gd::apply_presentation_view`,
+  `scripts/unit.gd` and, if needed, `scripts/main.gd::_receive_state`, before
+  Terra binds `scripts/pip_view.gd` to it. The original client selects from its
+  received entity map and updates a decoy's lost flag only on receipt. The native
+  authority instead exposes live `units` and `special`; new units default to
+  `presentation_visible = true`, and a removed carrier is erased and queued
+  before the next presentation snapshot. In `tests/pip_publication.tscn`, a newly
+  created decoy appears before publication, loss and recovery take effect early,
+  and a removed decoy disappears while the prior snapshot still contains it.
+  Acceptance: expose recipient snapshot membership, loss state and renderable
+  lifetime through the publication boundary without changing combat authority;
+  pass all eleven original selection steps and existing PiP lifecycle/composition
+  tests, then verify offline, ENet and WebSocket with populated carriers. The
+  controlled snapshot program alone does not qualify delivery or real model pixels.
 
 - **Sol — camera obstruction hit distance:** agree a source-faithful segment-hit
   contract for `scripts/world.gd::obstruction_hit` before Terra changes the

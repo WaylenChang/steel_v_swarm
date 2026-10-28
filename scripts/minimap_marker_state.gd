@@ -32,16 +32,27 @@ static func commands(rows: Array, viewer: String, known: Array, own: Variant, ya
 			command.width = width
 	return result
 
-static func _append(result: Array, template: Array, point: Vector2, yaw: float = 0, local: bool = false) -> void:
+static func _append(result: Array, template: Array, point: Variant, yaw: float = 0, local: bool = false) -> void:
+	var x: float
+	var y: float
+	if point is Vector2:
+		x = point.x
+		y = point.y
+	elif point is Array and point.size() == 2:
+		x = float(point[0])
+		y = float(point[1])
+	else:
+		push_error("Minimap marker requires a two-coordinate point")
+		return
 	for primitive: Dictionary in template:
 		var command := primitive.duplicate(true)
 		if local:
-			command.position = [point.x, point.y]
+			command.position = [x, y]
 			command.rotation = yaw
 		elif command.shape == "rect":
-			command.rect[0] += point.x
-			command.rect[1] += point.y
+			command.rect[0] += x
+			command.rect[1] += y
 		elif command.shape == "circle":
-			command.center[0] += point.x
-			command.center[1] += point.y
+			command.center[0] += x
+			command.center[1] += y
 		result.append(command)

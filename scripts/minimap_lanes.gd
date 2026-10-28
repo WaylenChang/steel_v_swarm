@@ -45,9 +45,10 @@ func configure(source: Array) -> bool:
 		lines.append(line)
 	return true
 
-func update_window(window: Rect2, canvas_size: Vector2) -> void:
+func update_window(window: Rect2, canvas_size: Vector2, precise: Dictionary = {}) -> void:
 	for index in groups.size():
 		var points := PackedVector2Array()
 		for point: Array in groups[index].points:
-			points.append(MinimapWindow.project(Vector2(point[0], point[1]), window, canvas_size))
+			points.append(MinimapWindow.project_components(float(point[0]), float(point[1]), precise, canvas_size) \
+				if not precise.is_empty() else MinimapWindow.project(Vector2(point[0], point[1]), window, canvas_size))
 		lines[index].points = points

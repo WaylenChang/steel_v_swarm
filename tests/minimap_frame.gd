@@ -1,5 +1,7 @@
 extends "res://tests/run.gd"
 
+var evidence_dir := "res://artifacts/terra"
+
 class Probe extends "res://scripts/minimap.gd":
 	var observations: Array[Dictionary] = []
 	var drawn: Array[Dictionary] = []
@@ -22,6 +24,11 @@ class Probe extends "res://scripts/minimap.gd":
 		super._draw_marker(command)
 
 func _run() -> void:
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("--evidence-dir="):
+			evidence_dir = argument.trim_prefix("--evidence-dir=")
+	_check(not evidence_dir.is_empty() and DirAccess.make_dir_recursive_absolute(evidence_dir) == OK,
+		"Create the minimap frame evidence directory")
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/minimap_frame.json")
 	_check(DisplayServer.get_name() != "headless", "Minimap frame order requires a real renderer")
 	_check(capture.get("formatVersion") == 1 and capture.get("cases") is Array and capture.cases.size() == 5
@@ -181,7 +188,7 @@ func _check_faction_marks(view: Probe, viewport: SubViewport, expected: Dictiona
 	var image := viewport.get_texture().get_image()
 	_check(image != null, description + " renders its missile marker")
 	if image != null:
-		image.save_png("res://artifacts/terra/minimap-frame-" + ("near" if expected.name == "faction-near" else "full") + ".png")
+		image.save_png(evidence_dir.path_join("minimap-frame-" + ("near" if expected.name == "faction-near" else "full") + ".png"))
 		var point: Array = expected.missiles[0]
 		var colour := image.get_pixel(int(floorf(point[0])), int(floorf(point[1])))
 		var source_colour := Color(String(expected.missileColour))

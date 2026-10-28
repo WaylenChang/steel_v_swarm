@@ -33,15 +33,18 @@ func _check_rasters(capture: Dictionary) -> void:
 	viewport.disable_3d = true
 	var samples := 0
 	var supersample := 1
+	var evidence_root := "res://artifacts/terra/minimap-markers"
 	for argument: String in OS.get_cmdline_user_args():
 		if argument.begins_with("--msaa2d="):
 			samples = int(argument.trim_prefix("--msaa2d="))
 		elif argument.begins_with("--supersample="):
 			supersample = int(argument.trim_prefix("--supersample="))
+		elif argument.begins_with("--evidence-dir="):
+			evidence_root = argument.trim_prefix("--evidence-dir=")
 		elif argument == "--rect-no-aa":
 			rect_antialias = false
-	if supersample not in [1, 2, 4, 8] or samples not in [0, 2, 4, 8]:
-		_check(false, "Unsupported controlled antialiasing factor")
+	if supersample not in [1, 2, 4, 8] or samples not in [0, 2, 4, 8] or evidence_root.is_empty():
+		_check(false, "Unsupported antialiasing factor or empty evidence directory")
 		viewport.free()
 		return
 	match samples:
@@ -63,8 +66,8 @@ func _check_rasters(capture: Dictionary) -> void:
 	viewport.add_child(painter)
 	map_view = MapView.new()
 	map_view.canvas = painter
-	var directory := "res://artifacts/terra/minimap-markers/msaa%d-ss%d%s" % [samples, supersample, "" if rect_antialias else "-rect-no-aa"]
-	DirAccess.make_dir_recursive_absolute(directory)
+	var directory := evidence_root.path_join("msaa%d-ss%d%s" % [samples, supersample, "" if rect_antialias else "-rect-no-aa"])
+	_check(DirAccess.make_dir_recursive_absolute(directory) == OK, "Create the minimap marker evidence directory")
 	var report: Array = []
 	await get_tree().process_frame
 	for sample: Dictionary in capture.cases:

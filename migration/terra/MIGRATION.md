@@ -125,6 +125,23 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   legend colors, source window/crop/marker geometry and room retirement. The
   controlled sources do not qualify complete fog pixels, actual baked terrain,
   populated delivery or platform performance.
+  Window edges retain scalar doubles through the committed terrain crop, marker,
+  lane and hard/soft reveal plans; conversion occurs at the native drawing
+  boundary. The label rounds the unconverted source width.
+  `node tools/minimap_window_precision_capture.mjs`,
+  `node --test tests/minimap_window_precision.test.mjs` and real-driver
+  `tests/minimap_window_precision.tscn` compare 448 original source windows,
+  projections, crops, labels and controlled reveal calls, including imported map
+  bounds and zero/tiny axes. A live frame also checks the retained window across
+  terrain changes. These probes use native-representable actor positions and do
+  not qualify source position precision, baked terrain pixels, mask coverage or
+  populated delivery.
+  Marker and missile offsets are applied to the double projection before native
+  primitive storage. `node tools/minimap_marker_precision_capture.mjs`,
+  `node --test tests/minimap_marker_precision.test.mjs` and real-driver
+  `tests/minimap_marker_precision.tscn` compare the original draw order and
+  geometry for 96 controlled faction/observer frames, including the live canvas.
+  These probes do not qualify marker edge coverage or populated actor rendering.
   `node tools/minimap_marker_raster_capture.mjs`,
   `node --test tests/minimap_marker_raster.test.mjs` and real-driver
   `tests/minimap_marker_raster.tscn` retain the original browser marker callback

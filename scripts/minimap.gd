@@ -100,7 +100,9 @@ func advance(now: float) -> bool:
 	if map_data.is_empty() or not MinimapWindow.available() or not cadence.advance(now):
 		return false
 	draw_enabled = true
-	window = MinimapWindow.bounds(map_data.bounds, near, focus, hero_kind)
+	var terrain: Dictionary = map_data.bounds.duplicate()
+	var precise := MinimapWindow.components(terrain, near, focus, hero_kind)
+	window = MinimapWindow.rectangle(precise)
 	var units: Array = []
 	for unit: Dictionary in state.get("units", []):
 		var captured := unit.duplicate()
@@ -108,12 +110,13 @@ func advance(now: float) -> bool:
 			captured.special = captured.special.duplicate()
 		units.append(captured)
 	# One source draw commits its window and inputs before later UI/snapshot events.
-	draw_frame = {"window": window, "size": size, "near": near, "focus": focus, "side": side,
+	draw_frame = {"window": window, "window_components": precise, "terrain": terrain,
+		"size": size, "near": near, "focus": focus, "side": side,
 		"heading": heading, "own_id": own_id, "kind": hero_kind, "peer": view_peer,
 		"dead": view_dead, "aiming": aiming, "fog": weather_fog, "pulse_until": vision.pulse_until,
 		"units": units, "positions": positions.duplicate(), "bunkers": markers.bunkers.values().duplicate(true),
 		"missiles": missile_points.duplicate()}
-	lane_view.update_window(window, size)
+	lane_view.update_window(window, size, precise)
 	lane_view.show()
 	base_canvas.queue_redraw()
 	canvas.queue_redraw()
@@ -135,7 +138,7 @@ func update_fog(now: float, columns: Array, shared_blockers: SourceBlockerQuery 
 	var view := {"side": draw_frame.side, "peer": draw_frame.peer, "kind": draw_frame.kind, "dead": draw_frame.dead,
 		"aiming": draw_frame.aiming, "fog": draw_frame.fog, "point": draw_frame.focus}
 	fog_view.update_view(MinimapVision.sources(rows, view) if not String(draw_frame.side).is_empty() else [],
-		map_data.bounds, draw_frame.window, draw_frame.side, now < float(draw_frame.pulse_until), columns, shared_blockers)
+		draw_frame.terrain, draw_frame.window, draw_frame.side, now < float(draw_frame.pulse_until), columns, shared_blockers, draw_frame.window_components)
 
 func accept_snapshot(snapshot: Dictionary) -> void:
 	state = snapshot
@@ -154,7 +157,7 @@ func _draw_base() -> void:
 		return
 	if base_texture != null:
 		base_canvas.draw_texture_rect_region(base_texture, Rect2(Vector2.ZERO, draw_frame.size),
-			MinimapWindow.texture_region(map_data.bounds, draw_frame.window, base_texture.get_size()))
+			MinimapWindow.texture_region(draw_frame.terrain, draw_frame.window, base_texture.get_size(), draw_frame.window_components))
 
 func _draw_map() -> void:
 	if not draw_enabled or map_data.is_empty() or not MinimapWindow.available():
@@ -169,7 +172,7 @@ func _draw_map() -> void:
 		var extent := Vector2(marker.size[0], marker.size[1])
 		var color := Color.hex((int(marker.color) << 8) | 0xff)
 		for point: Vector3 in draw_frame.missiles:
-			canvas.draw_rect(Rect2(_project(point, draw_frame.window, draw_frame.size) - extent * .5, extent), color)
+			canvas.draw_rect(_missile_rect(point, draw_frame, extent), color)
 	if not arrow.is_empty():
 		_draw_marker(arrow)
 	canvas.draw_set_transform(Vector2.ZERO)
@@ -181,7 +184,8 @@ func _draw_label() -> void:
 		mode_font = SystemFont.new()
 		mode_font.font_names = PackedStringArray([String(rules.fontFamily)])
 	var font_size := int(rules.fontSize)
-	var text := MinimapWindow.label(draw_frame.near, draw_frame.window.size.x)
+	var precise: Dictionary = draw_frame.window_components
+	var text := MinimapWindow.label(draw_frame.near, float(precise.x1) - float(precise.x0))
 	var measured := mode_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var box: Array = rules.box.rect
 	var background: Array = rules.box.colour
@@ -194,20 +198,22 @@ func _draw_label() -> void:
 func marker_commands() -> Array:
 	if map_data.is_empty():
 		return []
-	return _commands_for({"window": MinimapWindow.bounds(map_data.bounds, near, focus, hero_kind),
+	var precise := MinimapWindow.components(map_data.bounds, near, focus, hero_kind)
+	return _commands_for({"window": MinimapWindow.rectangle(precise), "window_components": precise,
 		"size": size, "focus": focus, "side": side, "heading": heading, "own_id": own_id,
 		"units": state.get("units", []), "bunkers": markers.bunkers.values()}, positions)
 
 func _commands_for(frame: Dictionary, shown_positions: Dictionary) -> Array:
 	var rows: Array = []
+	var precise: Dictionary = frame.window_components
 	for unit: Dictionary in frame.units:
 		rows.append({"kind": unit.kind, "side": unit.side, "hero": not String(unit.character).is_empty(),
 			"self": int(unit.id) == int(frame.own_id), "neutral": unit.get("special", {}).get("neutral", false),
-			"point": _project(shown_positions.get(int(unit.id), unit.position), frame.window, frame.size)})
+			"point": _project(shown_positions.get(int(unit.id), unit.position), frame.window, frame.size, precise)})
 	var known: Array = []
 	for record: Dictionary in frame.bunkers:
-		known.append({"side": record.side, "point": MinimapWindow.project(record.point, frame.window, frame.size)})
-	var own: Variant = MinimapWindow.project(frame.focus, frame.window, frame.size) if not String(frame.side).is_empty() else null
+		known.append({"side": record.side, "point": MinimapWindow.project_components_pair(record.point.x, record.point.y, precise, frame.size)})
+	var own: Variant = MinimapWindow.project_components_pair(frame.focus.x, frame.focus.y, precise, frame.size) if not String(frame.side).is_empty() else null
 	return MinimapMarkerState.commands(rows, frame.side, known, own, frame.heading)
 
 func _draw_marker(command: Dictionary) -> void:
@@ -225,8 +231,15 @@ func _draw_marker(command: Dictionary) -> void:
 				points.append(Vector2(point[0], point[1]))
 			canvas.draw_colored_polygon(points, colour)
 
-func _project(point: Vector3, frame_window: Rect2, frame_size: Vector2) -> Vector2:
-	return MinimapWindow.project(Vector2(point.x, point.z), frame_window, frame_size)
+func _project(point: Vector3, frame_window: Rect2, frame_size: Vector2, precise: Dictionary = {}) -> Array:
+	if not precise.is_empty():
+		return MinimapWindow.project_components_pair(point.x, point.z, precise, frame_size)
+	var projected := MinimapWindow.project(Vector2(point.x, point.z), frame_window, frame_size)
+	return [projected.x, projected.y]
+
+func _missile_rect(point: Vector3, frame: Dictionary, extent: Vector2) -> Rect2:
+	var projected := _project(point, frame.window, frame.size, frame.window_components)
+	return Rect2(float(projected[0]) - float(extent.x) * .5, float(projected[1]) - float(extent.y) * .5, extent.x, extent.y)
 
 func _background() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

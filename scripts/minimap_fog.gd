@@ -82,7 +82,7 @@ func configure(canvas_size: Vector2) -> void:
 	present.set_shader_parameter("fog_colour", Vector3(colour[0], colour[1], colour[2]))
 	configured = true
 
-func update_view(sources: Array, terrain: Dictionary, window: Rect2, side: String, pulse: bool, columns: Array, shared_blockers: SourceBlockerQuery = null) -> void:
+func update_view(sources: Array, terrain: Dictionary, window: Rect2, side: String, pulse: bool, columns: Array, shared_blockers: SourceBlockerQuery = null, precise: Dictionary = {}) -> void:
 	if not configured:
 		return
 	if side.is_empty():
@@ -106,7 +106,7 @@ func update_view(sources: Array, terrain: Dictionary, window: Rect2, side: Strin
 	for source: Array in sources:
 		var point := Vector2(source[0], source[1])
 		shadows.append(MinimapVision.shadows(point, source[2], query.near(point, source[2])))
-	var entries := atlas.update(MinimapRevealPlan.build(sources, shadows, terrain, window, size))
+	var entries := atlas.update(MinimapRevealPlan.build(sources, shadows, terrain, window, size, precise))
 	var hard: Array = []
 	var soft: Array = []
 	for entry: Dictionary in entries:
@@ -116,7 +116,7 @@ func update_view(sources: Array, terrain: Dictionary, window: Rect2, side: Strin
 			hard.append(entry)
 	_sync(explored, explored_tiles, hard, explored_read)
 	_sync(current, current_tiles, soft, current_read)
-	seen_region.region = MinimapWindow.texture_region(terrain, window, size)
+	seen_region.region = MinimapWindow.texture_region(terrain, window, size, precise)
 	seen_cutout.texture = seen_region
 	explored.render_target_update_mode = SubViewport.UPDATE_ONCE
 	current.render_target_update_mode = SubViewport.UPDATE_ONCE

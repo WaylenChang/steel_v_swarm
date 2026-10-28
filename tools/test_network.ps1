@@ -1,6 +1,6 @@
-param([Parameter(Mandatory = $true)][string]$Godot, [switch]$LobControl, [switch]$KineticShots, [switch]$MissileShots, [switch]$Reachability, [switch]$Footprints, [switch]$Cockpits, [switch]$Cameras, [switch]$Bursts, [switch]$Projectiles, [switch]$Aiming, [switch]$MissileDefenses, [switch]$Bots, [switch]$Bosses, [switch]$Campaign, [switch]$Super, [switch]$Controls, [switch]$Mobile, [switch]$View, [switch]$Bodies, [switch]$Tps, [switch]$Deaths, [switch]$Blasts, [switch]$Rooms, [switch]$Loading, [switch]$Roster, [switch]$Members, [switch]$Spectators, [switch]$LateSpectators, [switch]$Rematch, [switch]$Recovery, [switch]$QuickRestart, [switch]$Fatal, [switch]$Pips, [switch]$HeadMarks, [switch]$VitalBars, [switch]$Minimap, [switch]$Balance, [ValidateSet("enet", "websocket")][string[]]$Transport = @("enet", "websocket"))
+param([Parameter(Mandatory = $true)][string]$Godot, [switch]$LobControl, [switch]$KineticShots, [switch]$MissileShots, [switch]$Reachability, [switch]$Footprints, [switch]$Cockpits, [switch]$Cameras, [switch]$Bursts, [switch]$Projectiles, [switch]$Aiming, [switch]$MissileDefenses, [switch]$Bots, [switch]$Bosses, [switch]$Campaign, [switch]$Super, [switch]$Controls, [switch]$Mobile, [switch]$View, [switch]$Bodies, [switch]$Tps, [switch]$Deaths, [switch]$Blasts, [switch]$Rooms, [switch]$Loading, [switch]$Roster, [switch]$Members, [switch]$Spectators, [switch]$LateSpectators, [switch]$Rematch, [switch]$Recovery, [switch]$RecoveryQueue, [switch]$SnapshotEvents, [switch]$QuickRestart, [switch]$Fatal, [switch]$Pips, [switch]$HeadMarks, [switch]$VitalBars, [switch]$Minimap, [switch]$Balance, [ValidateSet("enet", "websocket")][string[]]$Transport = @("enet", "websocket"))
 $ErrorActionPreference = 'Stop'
-if (@($LobControl, $KineticShots, $MissileShots, $Reachability, $Footprints, $Cockpits, $Cameras, $Bursts, $Projectiles, $Aiming, $MissileDefenses, $Bots, $Bosses, $Campaign, $Super, $Controls, $Mobile, $View, $Bodies, $Tps, $Deaths, $Blasts, $Rooms, $Loading, $Roster, $Members, $Spectators, $LateSpectators, $Rematch, $Recovery, $QuickRestart, $Fatal, $Pips, $HeadMarks, $VitalBars, $Minimap, $Balance).Where({ $_ }).Count -gt 1) { throw 'Choose one gameplay transport fixture per run' }
+if (@($LobControl, $KineticShots, $MissileShots, $Reachability, $Footprints, $Cockpits, $Cameras, $Bursts, $Projectiles, $Aiming, $MissileDefenses, $Bots, $Bosses, $Campaign, $Super, $Controls, $Mobile, $View, $Bodies, $Tps, $Deaths, $Blasts, $Rooms, $Loading, $Roster, $Members, $Spectators, $LateSpectators, $Rematch, $Recovery, $RecoveryQueue, $SnapshotEvents, $QuickRestart, $Fatal, $Pips, $HeadMarks, $VitalBars, $Minimap, $Balance).Where({ $_ }).Count -gt 1) { throw 'Choose one gameplay transport fixture per run' }
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $processes = @()
 $recoveryStores = @()
@@ -8,6 +8,25 @@ $recoveryRunId = [Guid]::NewGuid().ToString('N')
 try {
     foreach ($mode in $Transport) {
         $listenPort = if ($mode -eq 'enet') { 18762 } else { 18763 }
+        if ($RecoveryQueue -or $SnapshotEvents) {
+            # Isolated real peers exercise delivery; no authored-world or combat parity is implied.
+            $isolatedScene = if ($SnapshotEvents) { 'res://tests/snapshot_events_transport.tscn' } else { 'res://tests/room_recovery_transport.tscn' }
+            $isolatedMarker = if ($SnapshotEvents) { 'SNAPSHOT_EVENTS_TRANSPORT_RESULT' } else { 'RECOVERY_TRANSPORT_RESULT' }
+            $isolatedName = if ($SnapshotEvents) { 'snapshot-events' } else { 'recovery-queue' }
+            $queueArguments = @('--headless', '--path', $projectRoot, $isolatedScene, '--', "--port=$listenPort")
+            if ($mode -eq 'websocket') { $queueArguments += '--websocket' }
+            $queue = Start-Process -FilePath $Godot -ArgumentList $queueArguments -WindowStyle Hidden -PassThru -RedirectStandardOutput "$projectRoot/tests/$mode-$isolatedName.log" -RedirectStandardError "$projectRoot/tests/$mode-$isolatedName-errors.log"
+            $processes += $queue
+            $isolatedTimeout = if ($SnapshotEvents) { 90000 } else { 40000 }
+            if (-not $queue.WaitForExit($isolatedTimeout)) { throw "$mode $isolatedName test timed out" }
+            $queueLog = [string](Get-Content -LiteralPath "$projectRoot/tests/$mode-$isolatedName.log" -Raw)
+            $queueErrors = [string](Get-Content -LiteralPath "$projectRoot/tests/$mode-$isolatedName-errors.log" -Raw)
+            if ($queue.ExitCode -ne 0 -or $queueLog -notmatch "$isolatedMarker transport=$mode assertions=\d+ failures=0" -or -not [string]::IsNullOrWhiteSpace($queueErrors) -or $queueLog -match 'ERROR|above the MTU') {
+                throw "$mode $isolatedName failed: $queueLog $queueErrors"
+            }
+            Write-Output $queueLog.Trim()
+            continue
+        }
         $serverArguments = @('--headless', '--path', $projectRoot, '--', '--server', '--port', $listenPort)
         if ($MissileShots) { $serverArguments = @('--headless', '--path', $projectRoot, 'res://tests/missile_network.tscn', '--', '--server', '--port', $listenPort) }
         if ($Reachability) { $serverArguments = @('--headless', '--path', $projectRoot, 'res://tests/reachability_network.tscn', '--', '--server', '--port', $listenPort) }

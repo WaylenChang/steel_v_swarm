@@ -7,18 +7,27 @@ class DeliverySession extends SessionScript:
 	var delivered: Array = []
 	var recovery_order: Array = []
 	var delivery_owners: Array = []
+	var delivery_budget := -1
+	var disconnects := 0
 	func _identity(player: int, token: String, character: String, side: String) -> void:
 		super._identity(player, token, character, side)
 		recovery_order.append({"t": "reattach", "token": token})
 	func _combat_connected() -> bool:
 		return active and not reconnecting and not leaving
 	func _deliver_combat(message: Dictionary) -> bool:
+		if delivery_budget == 0:
+			return false
+		if delivery_budget > 0:
+			delivery_budget -= 1
 		if int(message.get("match", -1)) == round_id and phase == "game":
 			if delivered.is_empty():
 				recovery_order.append({"t": "flush"})
 			delivery_owners.append(local_player_id)
 			delivered.append(message.duplicate(true))
 		return true
+	func _server_disconnected() -> void:
+		disconnects += 1
+		reconnecting = true
 
 static func run(h: Node, fixtures: Dictionary) -> void:
 	if not fixtures.has("roomCommandQueues") or not fixtures.has("roomReconnectOrder"):
@@ -49,7 +58,46 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 			Helper.compare(h, wire.sent, frame.sent, "Original disconnected input/action FIFO replay without resending successful prefix")
 	_credential_files(h)
 	_session_queue(h, fixtures.roomReconnectOrder)
+	_session_partial_flush(h)
 	_session_credentials(h)
+
+static func _session_partial_flush(h: Node) -> void:
+	for budget: int in [0, 3]:
+		var session := DeliverySession.new()
+		h.add_child(session)
+		session.active = true
+		session.started = true
+		session.phase = "game"
+		session.round_id = 7
+		session.launch_announced = true
+		session.reconnecting = true
+		var battle := BattleSimulation.new()
+		h.add_child(battle)
+		battle.set_physics_process(false)
+		session.simulation = battle
+		for index in 6:
+			session.act("aim", str(index))
+		var original := session.command_queue.pending.duplicate(true)
+		session.reconnecting = false
+		session.delivery_budget = budget
+		# A new live action must join the failed suffix, never jump ahead of it.
+		var final_action := {"kind": "action", "type": "aim", "argument": "6", "match": 7}
+		session._send_combat(final_action)
+		h._check(session.disconnects == 1 and session.reconnecting and not session.command_queue.connected, "Failed native flush starts recovery once")
+		Helper.compare(h, session.delivered, original.slice(0, budget), "Native session retains only the successfully sent prefix")
+		var suffix := original.slice(budget)
+		suffix.append(final_action)
+		Helper.compare(h, session.command_queue.pending, suffix, "Native failed head and unsent suffix precede the new live action")
+		session._flush_commands()
+		h._check(session.disconnects == 1 and session.delivered.size() == budget, "Retry cannot flush before reclaim or reschedule the same failure")
+		session.delivery_budget = -1
+		session.reconnecting = false
+		session._flush_commands()
+		original.append(final_action)
+		Helper.compare(h, session.delivered, original, "Native recovery resends only the failed suffix in reliable order")
+		h._check(session.command_queue.pending.is_empty(), "Successful retry drains the suffix")
+		session.free()
+		battle.free()
 
 static func _credential_files(h: Node) -> void:
 	var saved := RoomCredential.new()

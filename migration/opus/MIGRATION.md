@@ -144,12 +144,32 @@ runtime acceptance remain incomplete. Component results do not certify the build
   restoration. Complete recipient-specific snapshots/events, public special-role
   whitelists, clone/player identity, owner-only magazines/recharge/lift/view,
   status summaries and stale replica clearing across all populated modes.
+  Keep complete source weather event frames independent of unit fog filtering,
+  including hidden/removed target points, absolute strikes and repeated recipients.
+  `tests/snapshot_events_suite.gd` and `-SnapshotEvents` guard publication;
+  combined authored-world weather/render/actor-state acceptance remains open.
+  Preserve hidden/removed-caster `cast`/`cast_start` reports, defensive radius
+  and duration, explicit owner-only recipients and private weapon fields through
+  both publication routes. `tests/cast_events_suite.gd` and `-SnapshotEvents`
+  exercise original cast producers and native delivery; populated cast rendering,
+  missing-caster effect anchors and simultaneous settlement still need combined
+  authored-world acceptance.
+  Preserve source field reports after actor removal, phase start/exit, reverse
+  decoy termination order and once-only expiry through `tests/field_events_suite.gd`
+  and `-SnapshotEvents`. Their mesh-free lifecycle fixtures do not certify field
+  geometry, damage, crowd-control settlement, decorative identities or rendered
+  effects; those still require combined authored-world acceptance.
 - [ ] **O20 — Recovery/leave/cleanup:** certify retry backoff, held human
   seats, credential persistence/revisions, stale route revocation, explicit leave
   acknowledgement, owner-seat departure with retained battle bodies and no-human
   cleanup. Preserve latest-120 disconnected input/action FIFO, reliable ordering,
   unsent suffix retention and reclaim-before-flush. Test loss, delay and failure
   without crossing match IDs or leaking private state.
+  Keep `tests/room_recovery_suite.gd` failed-head/partial-flush checks and
+  `-RecoveryQueue` real-socket checks as transport guards. These isolate the
+  native command seam without terrain or combat settlement; populated recovery,
+  packet loss/delay and private actor-state acceptance still require authored
+  worlds and the separate-process `-Recovery` cases.
 - [ ] **O21 — Rematch/replay/fatal lifecycle:** certify retained seats and
   credentials, base re-roll/architecture seed, prebuild invalidation and old-round
   packet rejection. Verify complete quick-start recipes, authored-arena room size,
@@ -172,6 +192,10 @@ runtime acceptance remain incomplete. Component results do not certify the build
   calling a path verified. Current `tests/run.tscn` cannot complete cleanly with
   failed world setup and owner-specific geometry/audio/scenery differences;
   engine errors remain failed acceptance even when a component's assertions pass.
+  The current checkout has CRLF/LF byte drift in unchanged pinned fixture
+  consumers. Preserve canonical Git bytes when publishing their plan; each owner
+  must restore its captured source bytes before a clean local whole-suite rerun.
+  Never normalize bytes inside the runtime hash check to hide this mismatch.
   Native fixture consumers must use the generated
   section plan and exact numeric tapes, preserving source order and tolerances.
   Populated core fixtures in `tests/run.gd` and layered blast/bridge/tunnel cases
@@ -195,6 +219,12 @@ runtime acceptance remain incomplete. Component results do not certify the build
   on available authored seasonal resources. The ordinary smoke and both baseline
   transport cases must pass world preparation without early simulation or a
   fabricated replacement map.
+  Sol handoff: `scripts/combat_effects.gd` needs the original cast-effect consumer
+  for the existing public `character`, `side`, `slot`, `fx`, `point`, `radius`,
+  `duration`, `level`, `fraction`, `carrier`, `origin` and `cast_duration` reports.
+  Match `public/js/game.js`/`castfx.js` with a hidden or removed caster anchored
+  at the effect point; carrier casts must defer their destination effect until
+  delivery. Do not infer a generic effect from a passing publication fixture.
   Sol handoff: the original `public/assets/story/*.png` includes JPEG/JFIF
   bytes under PNG names. `assets/story/` native imports must decode the actual
   source media and retain provenance; the offline copier must preserve authored
@@ -228,6 +258,8 @@ Baseline commands from the repository root:
 godot --headless --path . res://tests/run.tscn
 godot --headless --path . -- --smoke
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -RecoveryQueue
+./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -SnapshotEvents
 ```
 
 Source publication is serialized. Capture into a separate directory, then use
@@ -268,7 +300,7 @@ file from GitHub's object-size limit.
 
 Use `--status-references`, `--bot-references`, `--companion-references`,
 `--missile-defense-references`, `--ability-route-references`, `--tick-references`
-or `--death-references` with the source path for focused authority-oracle
+or `--death-references` / `--snapshot-event-references` with the source path for focused authority-oracle
 publication. Each seals its
 producer, rechecks all published original input
 hashes and rejects a changed destination without replacing unrelated sections.

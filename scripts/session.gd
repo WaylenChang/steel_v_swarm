@@ -1080,7 +1080,8 @@ func broadcast_body_event(event: Dictionary) -> void:
 	if simulation == null or not multiplayer.is_server() or not failure_reason.is_empty():
 		return
 	var actor: BattleUnit = simulation.units.get(int(event.actor))
-	if actor == null:
+	var public_cast: bool = event.type in ["cast", "cast_start"]
+	if actor == null and not public_cast:
 		return
 	for peer: int in multiplayer.get_peers():
 		var player := seats.player_for(peer)
@@ -1088,8 +1089,8 @@ func broadcast_body_event(event: Dictionary) -> void:
 			continue
 		var viewer: BattleUnit = simulation.pilots.get(player)
 		var side: String = seats.members[player].side
-		if side.is_empty() or simulation.visible_to_side(actor, side):
-			_body_event.rpc_id(peer, ActorSnapshot.event(event, viewer == actor), round_id)
+		if public_cast or side.is_empty() or simulation.visible_to_side(actor, side):
+			_body_event.rpc_id(peer, ActorSnapshot.event(event, viewer != null and viewer == actor), round_id)
 
 # Short tactical notifications must not wait behind fragmented full snapshots.
 @rpc("authority", "call_remote", "reliable", 4)

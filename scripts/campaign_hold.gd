@@ -86,6 +86,8 @@ func _set_active(value: bool) -> void:
 	active = value
 	opacity_tween = preload("res://scripts/css_transition.gd").start(self, "opacity", float(value),
 		rules.opacityDuration, opacity_tween, opacity_transition, _ease)
+	if opacity_tween != null:
+		opacity_tween.set_ignore_time_scale(true)
 
 func _set_offset(value: float) -> void:
 	if dash_target == value:
@@ -93,6 +95,8 @@ func _set_offset(value: float) -> void:
 	dash_target = value
 	dash_tween = preload("res://scripts/css_transition.gd").start(self, "dash_offset", value,
 		rules.dashDuration, dash_tween, dash_transition, _linear)
+	if dash_tween != null:
+		dash_tween.set_ignore_time_scale(true)
 
 static func _ease(value: float) -> float:
 	return HurtFlashState.bezier(value, Vector2(.25, .1), Vector2(.25, 1))

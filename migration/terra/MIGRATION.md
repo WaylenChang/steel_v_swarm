@@ -264,6 +264,11 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_transition.tscn` retain the original finish method/CSS, deadline
   boundaries and layered opacity rasters. Controlled color layers do not qualify
   actual story art, blur/vignette filters or complete cinematic composition.
+  Crawl frames, art/camera transitions, hold feedback, input and the exit fade
+  use wall time while the scene tree is paused or gameplay speed is zero.
+  Real-driver `tests/campaign_wall_clock.tscn` checks those boundaries against
+  the existing original crawl and CSS references. Its controlled art and coarse
+  scheduling checks do not qualify exact transition pixels or hardware input.
   Art opacity retains the original 0.9 s cubic-bezier(0.4,0,0.2,1), stable scene
   order and independent state for every still-visible scene during rapid
   three-way changes. `node tools/campaign_art_capture.mjs` and real-driver

@@ -213,7 +213,7 @@ func hud(actors: Array, side: String = "") -> Variant:
 # Actors are presentation rows with interpolated positions, not authority units.
 # Visibility commands retain the prior row until its FPV body has been restored.
 func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descending: bool,
-		surface: Callable, ceiling: float, pull: Callable) -> Array:
+		surface: Callable, ceiling: float, pull: Callable, precise_pull: Callable = Callable()) -> Array:
 	var actor := target(actors)
 	if not pid.is_empty() and actor.is_empty():
 		select_mode("god", actors)
@@ -255,12 +255,22 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 			if view == "tps":
 				yaw = follow_yaw
 			var distance := maxf(c.MIN_DIST, height * float(c.DIST_F))
-			var aim := anchor + Vector3.UP * height * float(c.AIM_F)
-			camera_position = aim + Vector3(sin(yaw) * distance * cos(pitch), -sin(pitch) * distance, cos(yaw) * distance * cos(pitch))
-			camera_position = pull.call(aim, camera_position)
-			var floor_height: float = float(surface.call(camera_position)) + float(c.FLOOR_M)
-			if camera_position.y < floor_height:
-				camera_position.y = floor_height
+			var aim_y := _anchor_y + height * float(c.AIM_F)
+			var cosine_pitch := cos(pitch)
+			var aim := [_anchor_x, aim_y, _anchor_z]
+			var camera := [_anchor_x + sin(yaw) * distance * cosine_pitch,
+				aim_y - sin(pitch) * distance, _anchor_z + cos(yaw) * distance * cosine_pitch]
+			camera_position = Vector3(camera[0], camera[1], camera[2])
+			var pulled: Array
+			if precise_pull.is_valid():
+				pulled = precise_pull.call(aim, camera)
+			else:
+				var result: Vector3 = pull.call(Vector3(aim[0], aim[1], aim[2]), Vector3(camera[0], camera[1], camera[2]))
+				pulled = [float(result.x), float(result.y), float(result.z)]
+			var floor_height: float = float(surface.call(Vector3(pulled[0], pulled[1], pulled[2]))) + float(c.FLOOR_M)
+			if float(pulled[1]) < floor_height:
+				pulled[1] = floor_height
+			camera_position = Vector3(pulled[0], pulled[1], pulled[2])
 	else:
 		var forward_x := -sin(yaw)
 		var forward_z := -cos(yaw)

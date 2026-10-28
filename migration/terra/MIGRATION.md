@@ -78,6 +78,18 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   World surface queries still receive native Vector3 coordinates; these controlled
   surfaces do not qualify populated terrain queries, the shared angle transfer,
   camera orientation or recipient delivery.
+  Third-person follow and orbit retain scalar anchor/camera coordinates through
+  the local pull calculation; native vectors are created at world-query and
+  camera boundaries. Segment samples retain scalar interpolation and floor
+  comparisons, while the legacy Vector3 pull callback remains supported.
+  `node tools/spectator_tps_capture.mjs`,
+  `node --test tests/spectator_tps.test.mjs` and real-driver
+  `tests/spectator_tps_geometry.tscn` compare 630 clear cases, 24 controlled
+  blocker/ridge cases and 48 moving orbit frames. The geometry scene checks the
+  pull inputs and sample counts but excludes final hit-position equality;
+  `tests/spectator_tps.tscn` retains the full strict gate and its two hit-distance
+  failures below. Controlled query doubles do not certify actual world blockers,
+  populated transport, browser `Math.hypot` or complete camera rendering.
   Lock-glow hit decay retains millisecond subtraction before division by 200;
   ring rotation derives its quaternion from the double phase before native
   storage. `node tools/lock_glow_capture.mjs` executes the original constructor
@@ -354,6 +366,24 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   the shared advance contract below is accepted for the relevant text consumer.
 
 ## Integration and handoffs
+
+- **Sol — camera obstruction hit distance:** agree a source-faithful segment-hit
+  contract for `scripts/world.gd::obstruction_hit` before Terra changes the
+  collision binding in `scripts/spectator_camera.gd` and
+  `scripts/camera_pose.gd`. The original `_blockerHitT` returns a scalar hit
+  distance from the double-precision segment; the existing world API returns a
+  native Vector3 hit position. In the controlled four-metre ray cases 652/653 of
+  `tests/fixtures/spectator_tps.json`, constructing that native hit position and
+  measuring it from the original anchor yields 3.99999989123131 m. The resulting
+  final z is 1.6303430795669556 instead of 1.6303431987762451, so the strict
+  `tests/spectator_tps.tscn` keeps both failures. Native/source witnesses are in
+  `artifacts/terra/spectator-tps-final.json`; these are controlled rays, not a
+  populated world qualification. Preserve collision masks, segment ordering and
+  real blocker geometry. Acceptance: publish source-equivalent scalar distances
+  for the original double endpoints, pass the strict captured and additional
+  boundary cases without fabricated distances or wider tolerances, then verify
+  actual world obstruction, terrain and player/spectator camera integration.
+  Terra binds the accepted producer contract in a separate change.
 
 - **Models — source camera quaternion composition:** provide a double-preserving
   yaw-to-basis contract in `scripts/source_quaternion.gd` for consumers including

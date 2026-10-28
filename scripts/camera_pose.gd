@@ -136,20 +136,38 @@ static func _box_entry(box: Dictionary, x: float, z: float, ux: float, uz: float
 	return maxf(0, minimum)
 
 static func _pull(anchor_point: Vector3, camera: Vector3, collision: Callable, surface: Callable) -> Vector3:
-	var offset := camera - anchor_point
-	var length := sqrt(float(offset.x) * offset.x + float(offset.y) * offset.y + float(offset.z) * offset.z)
+	var result := _pull_components([float(anchor_point.x), float(anchor_point.y), float(anchor_point.z)],
+		[float(camera.x), float(camera.y), float(camera.z)], collision, surface)
+	return Vector3(result[0], result[1], result[2])
+
+static func _pull_components(anchor: Array, camera: Array, collision: Callable, surface: Callable) -> Array:
+	var ax := float(anchor[0])
+	var ay := float(anchor[1])
+	var az := float(anchor[2])
+	var dx := float(camera[0]) - ax
+	var dy := float(camera[1]) - ay
+	var dz := float(camera[2]) - az
+	var length := sqrt(dx * dx + dy * dy + dz * dz)
 	if length < 0.001:
 		return camera
 	var fraction := 1.0
-	var hit: Dictionary = collision.call(anchor_point, camera)
+	var hit: Dictionary = collision.call(Vector3(ax, ay, az), Vector3(camera[0], camera[1], camera[2]))
 	var rules: Dictionary = Content.balance.cameraRules
 	if not hit.is_empty():
-		fraction = minf(fraction, maxf(0, (anchor_point.distance_to(hit.position) - rules.pullClearance) / length))
+		var point: Vector3 = hit.position
+		var hx := float(point.x) - ax
+		var hy := float(point.y) - ay
+		var hz := float(point.z) - az
+		var hit_distance := sqrt(hx * hx + hy * hy + hz * hz)
+		fraction = minf(fraction, maxf(0, (hit_distance - rules.pullClearance) / length))
 	var count := clampi(ceili(length / 4), 2, 12)
 	for i in range(1, count + 1):
-		var point := anchor_point + offset * (float(i) / count)
-		var floor_height: float = surface.call(point)
-		if is_finite(floor_height) and point.y < floor_height + rules.surfaceClearance:
+		var t := float(i) / count
+		var x := ax + dx * t
+		var y := ay + dy * t
+		var z := az + dz * t
+		var floor_height: float = surface.call(Vector3(x, y, z))
+		if is_finite(floor_height) and y < floor_height + rules.surfaceClearance:
 			fraction = minf(fraction, maxf(0, float(i - 1) / count - rules.surfaceRetreat))
 			break
-	return anchor_point + offset * fraction if fraction < 1 else camera
+	return [ax + dx * fraction, ay + dy * fraction, az + dz * fraction] if fraction < 1 else camera

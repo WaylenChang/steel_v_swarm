@@ -54,7 +54,8 @@ func advance(delta: float, angles: Vector2, axis: Dictionary, rising: bool, desc
 	var world := simulation.world
 	var collision := func(start: Vector3, end: Vector3) -> Dictionary: return world.obstruction_hit(start, end, false)
 	var pull := func(start: Vector3, end: Vector3) -> Vector3: return CameraPose._pull(start, end, collision, world.visual_surface)
-	for command: Dictionary in state.advance(delta, rows.values(), axis, rising, descending, world.visual_surface, world.ceiling, pull):
+	var precise_pull := func(start: Array, end: Array) -> Array: return CameraPose._pull_components(start, end, collision, world.visual_surface)
+	for command: Dictionary in state.advance(delta, rows.values(), axis, rising, descending, world.visual_surface, world.ceiling, pull, precise_pull):
 		_visibility(command.actor, command.visible)
 	_apply_pose(state.camera_position)
 	fov = state.camera_fov

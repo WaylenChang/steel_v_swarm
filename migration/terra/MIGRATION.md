@@ -32,6 +32,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Unknown remote magazines and movement resources remain null. These checks do
   not qualify populated ray queries, actor pixels, recipient publication or the
   shared main-to-camera angle transfer contract below.
+  Observer heading retains the previous value when a target heading is absent
+  or null, and clamps nonpositive interpolation time to the original no-motion
+  behavior. `node tools/spectator_heading_capture.mjs`,
+  `node --test tests/spectator_heading.test.mjs` and real-driver
+  `tests/spectator_heading.tscn` compare 300 original Chromium cases across
+  follow modes, unbounded headings and delta boundaries. Controlled rows do not
+  qualify populated snapshot delivery or complete camera rendering.
   Nearest-player selection compares squared distances in scalar doubles, in the
   source operation and stable reduction order; Vector3 squared-distance rounding
   can otherwise turn distinct candidates into a tie.

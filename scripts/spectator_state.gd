@@ -237,7 +237,10 @@ func advance(delta: float, actors: Array, axis: Dictionary, rising: bool, descen
 			_anchor_y += (float(point.y) - _anchor_y) * weight
 			_anchor_z += (float(point.z) - _anchor_z) * weight
 			_anchor_position = Vector3(_anchor_x, _anchor_y, _anchor_z)
-		follow_yaw = CameraPose.angle_step(follow_yaw, actor.get("ry", follow_yaw), c.FPV_YAW_K if view == "fpv" else c.YAW_K, delta)
+		var target_yaw: Variant = actor.get("ry")
+		if target_yaw == null:
+			target_yaw = follow_yaw
+		follow_yaw = CameraPose.angle_step(follow_yaw, float(target_yaw), c.FPV_YAW_K if view == "fpv" else c.YAW_K, maxf(0.0, delta))
 		_position_x = _anchor_x
 		_position_y = _anchor_y
 		_position_z = _anchor_z

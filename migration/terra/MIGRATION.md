@@ -448,6 +448,17 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
 
 ## Integration and handoffs
 
+- **Opus — shared campaign dialogue deadline fixture:** update
+  `tests/campaign_suite.gd::dialogue_lifecycle` to advance a controlled wall
+  clock before expecting the next radio line. The fixture currently emits a
+  fresh timer immediately and expects delivery before its source deadline;
+  `CampaignDialogue` correctly rearms that early signal, as retained by
+  `tests/dialogue_clock.tscn`. Preserve the retired-generation cancellation
+  check, verify that an early signal does not advance the line and that the
+  deadline advances it once. Acceptance: both dialogue clock and campaign
+  lifecycle assertions pass; the separate missing campaign terrain resources
+  remain an independent acceptance gate.
+
 - **Opus — PiP recipient snapshot lifetime:** define the recipient presentation
   boundary in `scripts/simulation.gd::apply_presentation_view`,
   `scripts/unit.gd` and, if needed, `scripts/main.gd::_receive_state`, before

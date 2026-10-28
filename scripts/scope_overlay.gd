@@ -46,17 +46,19 @@ func update_view(state: ScopeState, scoped: bool) -> void:
 		weather_target = state.weather_fog
 		weather_tween = _start_fade("weather_opacity", weather_target, rules.weatherTransition, weather_tween, weather_transition)
 	var radius := ScopeState.radius_vmin(state.fire_fog, state.weather_fog)
-	var inner := maxf(float(rules.weatherInnerMinimum), radius - float(rules.weatherInnerInset))
-	var stops := ScopeState.weather_stops(state.weather_fog)
-	# Original CSS serializes gradient anchors to one decimal place.
-	shader_material.set_shader_parameter("radius_vmin", roundf(radius * 10) / 10)
-	shader_material.set_shader_parameter("weather_inner_vmin", roundf(inner * 10) / 10)
-	shader_material.set_shader_parameter("weather_stops", Vector2(roundf(stops.x * 1000) / 1000, roundf(stops.y * 1000) / 1000))
+	shader_material.set_shader_parameter("radius_vmin", CssDecimal.fixed(radius, 1))
+	if state.weather_fog > 0:
+		var inner := maxf(float(rules.weatherInnerMinimum), radius - float(rules.weatherInnerInset))
+		var stops := ScopeState.weather_stop_components(state.weather_fog)
+		# The source keeps the last gradient while its opacity fades to zero.
+		shader_material.set_shader_parameter("weather_inner_vmin", CssDecimal.fixed(inner, 1))
+		shader_material.set_shader_parameter("weather_stops", Vector2(CssDecimal.fixed(stops[0] * 100, 1) / 100,
+			CssDecimal.fixed(stops[1] * 100, 1) / 100))
 	shader_material.set_shader_parameter("viewport_size", size)
 	shader_material.set_shader_parameter("scoped", scoped)
 	shader_material.set_shader_parameter("fire_opacity", fire_opacity)
 	shader_material.set_shader_parameter("weather_opacity", weather_opacity)
-	shader_material.set_shader_parameter("fire_blur", roundf(state.fire_fog * float(rules.blurPixels) * 100) / 100)
+	shader_material.set_shader_parameter("fire_blur", CssDecimal.fixed(state.fire_fog * float(rules.blurPixels), 2))
 	visible = scoped or fire_opacity > 0 or weather_opacity > 0 or fire_target > 0 or weather_target > 0
 
 func _start_fade(property: String, target: float, seconds: float, previous: Tween, transition: Dictionary) -> Tween:

@@ -20,6 +20,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/scope_transition.tscn` compare original browser transitions and native
   uniforms; these checks do not certify scope gradient/blur pixels or complete
   frame-order, freeze/death and populated view integration.
+  Scope radius, visible weather-gradient stops and fire blur retain the original
+  double-precision CSS serialization before native vector storage.
+  `node tools/scope_values_capture.mjs`, `node --test tests/scope_values.test.mjs`
+  and real-driver `tests/scope_values.tscn` compare 749 original browser HUD
+  cases, including decimal rounding boundaries and exact input bits, against the
+  shader parameters. An unscoped weather gradient also keeps its prior stops
+  while fading to zero. `tests/scope_weather_retention.tscn` retains the original
+  fade and mode-change programs, including the four shared-shader failures below.
+  These values do not qualify the shared shader or full pixels.
   `node tools/scope_raster_capture.mjs` and real-driver `tests/scope_raster.tscn`
   retain original CSS/HUD callback composition over controlled browser backgrounds.
   Keep the strict raster failures and exact byte witnesses in `build/scope_raster/`;
@@ -698,6 +707,19 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   blur amount and scope-edge coverage; do not loosen the existing tolerance.
   Acceptance: original `tests/scope_raster.tscn` cases, including mixed fire/weather
   and high-density small scoped views, after the ring-color producer is corrected.
+- **Opus — weather-gradient lifetime:** separate the weather gradient's mode and
+  outer scoped stop from the current scope mode and ring radius in
+  `shaders/scope_mask.gdshader`. The original `weatherFog` callback keeps its last
+  CSS background when density reaches zero, while its opacity fades for 0.5 s;
+  the scope ring and aiming mode can change independently during that fade. In
+  `tests/fixtures/scope_values.json::programs`, a scoped weather gradient retains
+  9.8/17.8 vmin while the ring moves to 22.4 vmin. Native currently reuses
+  `radius_vmin` and `scoped` for both layers. `tests/scope_weather_retention.tscn`
+  retains four failures across radius changes and scope toggles; the unscoped
+  no-toggle fade passes. Preserve independent parameters and the original fade,
+  gradients and ring composition. Acceptance: Terra binds the agreed parameters
+  and updates this strict scene to read them, all captured retention programs and
+  transition/raster tests pass, and no wider pixel tolerance is used.
 - **Opus — raster comparator byte boundary:** `tests/raster_compare.gd` compares
   Color's Float32-normalized channel differences against double `2.0/255`.
   Opaque weather-only cases 2/8/14 in `build/scope_raster/report.json` have exact

@@ -29,10 +29,14 @@ func radius(viewport: Vector2) -> float:
 	return radius_vmin(fire_fog, weather_fog) / 100.0 * minf(viewport.x, viewport.y)
 
 static func weather_stops(density: float) -> Vector2:
+	var stops := weather_stop_components(density)
+	return Vector2(stops[0], stops[1])
+
+static func weather_stop_components(density: float) -> Array:
 	var config: Dictionary = Content.constants.WEATHER_FOG_MASK
 	var multiplier := 1 - (1 - float(Content.constants.FOG_SIGHT.MIN_MULT)) * clampf(density, 0, 1)
 	var start: float = config.R0_CLEAR + config.R0_SPAN * multiplier
-	return Vector2(start, minf(1, start + float(config.R1_PAD)))
+	return [start, minf(1, start + float(config.R1_PAD))]
 
 static func fov_step(current: float, wanted: float, delta: float) -> float:
 	var rules: Dictionary = Content.balance.view

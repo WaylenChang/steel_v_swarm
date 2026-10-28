@@ -9,6 +9,10 @@ const ALL_LAYERS := (1 << 20) - 1
 var views: Array[Dictionary] = []
 var layers: Dictionary = {}
 var pending_tags: Array[Dictionary] = []
+var _active_battle: WeakRef
+var _active_pilot: WeakRef
+var _active_side := ""
+var _active_render_scale := 1.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -21,13 +25,24 @@ func _notification(what: int) -> void:
 
 func update_view(battle: BattleSimulation, pilot: BattleUnit, side: String, render_scale: float = 1.0) -> void:
 	var rules: Dictionary = Content.balance.get("pip", {})
-	if rules.is_empty() or battle == null or battle.world == null or pilot == null or not is_visible_in_tree():
+	if rules.is_empty() or not _renderable_root(battle) or not _renderable_root(pilot) or not is_visible_in_tree():
 		clear()
 		return
+	if not _renderable_root(battle.world) or not pilot.alive() or side.is_empty():
+		clear()
+		return
+	if _active_battle == null or not is_same(_active_battle.get_ref(), battle):
+		_active_battle = weakref(battle)
+	if _active_pilot == null or not is_same(_active_pilot.get_ref(), pilot):
+		_active_pilot = weakref(pilot)
+	_active_side = side
+	_active_render_scale = render_scale
 	var rows: Array = []
 	for actor: BattleUnit in battle.units.values():
+		if not is_instance_valid(actor):
+			continue
 		var peer := int(actor.special.get("owner_peer", actor.peer_id))
-		if peer != pilot.peer_id:
+		if peer != pilot.peer_id or not _renderable_root(actor):
 			continue
 		rows.append({"id": actor.entity_id, "peer": peer,
 			"hero": actor.is_hero(), "self": actor == pilot, "dead": not actor.alive(), "decoy": actor.kind == "decoy",
@@ -71,6 +86,16 @@ func _begin_frame() -> void:
 	if is_queued_for_deletion() or not is_visible_in_tree():
 		clear()
 		return
+	if _active_pilot != null:
+		var pilot: Variant = _active_pilot.get_ref()
+		var battle: Variant = _active_battle.get_ref() if _active_battle != null else null
+		if not _renderable_root(pilot) or not pilot.alive() or not _renderable_root(battle):
+			clear()
+			return
+		update_view(battle, pilot, _active_side, _active_render_scale)
+		if _active_pilot == null or is_queued_for_deletion() or not is_visible_in_tree():
+			clear()
+			return
 	var retained := {}
 	var valid_tags: Array[Dictionary] = []
 	var source_available := false
@@ -150,6 +175,10 @@ func _restore_unused(retained: Dictionary) -> void:
 		layers.erase(id)
 
 func clear() -> void:
+	_active_battle = null
+	_active_pilot = null
+	_active_side = ""
+	_active_render_scale = 1.0
 	pending_tags.clear()
 	for view: Dictionary in views:
 		_disable_view(view)

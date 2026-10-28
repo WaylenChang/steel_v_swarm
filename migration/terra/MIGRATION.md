@@ -163,6 +163,20 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   its own viewport before drawing; a queued PiP owner releases every viewport and
   temporary layer at that boundary. Losing the last source restores the cockpit
   mask. A fresh selection is required after source reattachment.
+  The selected pilot is weakly retained and rechecked before rendering; death,
+  detachment, queued deletion of it or an ancestor, or freeing releases every
+  viewport and temporary layer. Revival or reattachment needs a fresh selection.
+  `node tools/pip_pilot_capture.mjs`, `node --test tests/pip_pilot.test.mjs` and
+  real-driver `tests/pip_pilot.tscn` retain the original death/revival render
+  decisions and native owner/source retirement checks. These controlled actors
+  do not qualify populated transport or actual model pixels.
+  Source selection, power limits and camera pose are refreshed before drawing.
+  `node tools/pip_selection_capture.mjs`, `node --test tests/pip_selection.test.mjs`
+  and real-driver `tests/pip_selection.tscn` compare 23 original render decisions
+  for loss, death, recovery, insertion, removal, model replacement, movement and
+  power changes. The real pre-draw test also checks controlled raster composition
+  and world retirement. These cases do not qualify actual model pixels, populated
+  transport, full frame ordering or performance.
   `node tools/pip_composition_capture.mjs`, `node --test tests/pip_composition.test.mjs`
   and real-driver `tests/pip_composition.tscn` compare the original Three.js/WebGL
   PiP render and complete opaque browser rasters at 320x568, 1440x900 and

@@ -612,22 +612,22 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   axes before native storage with the original view-lock program.
 ### Shared-owner contracts required for presentation
 
-- **Opus — spectator, minimap, PiP and dialogue provenance:** reconcile the original
+- **Opus — spectator, minimap, PiP, scope and dialogue provenance:** reconcile the original
   `public/js/rng.js` dependency through `tools/import_source.mjs` and
-  `data/provenance.json` before full spectator, minimap, dialogue and PiP qualification.
+  `data/provenance.json` before full spectator, minimap, dialogue, scope and PiP qualification.
   The captures `tests/fixtures/spectator_native.json`, `tests/fixtures/minimap_native.json`,
-  `tests/fixtures/dialogue_native.json`, `tests/fixtures/dialogue_transcript.json`
-  and `tests/fixtures/pip.json` declare
+  `tests/fixtures/dialogue_native.json`, `tests/fixtures/dialogue_transcript.json`,
+  `tests/fixtures/scope_raster.json` and `tests/fixtures/pip.json` declare
   `96773f680724e2fc8e695270333d41d3a18e539dabb88968dad0b9cb68fae654`,
   while shared provenance declares
   `c46913b415a75aa5f0d2366dd7bfcb4f8f26c1db913ecea2a74b40695dd78aaa`.
   Preserve the full captures and their source guards. Acceptance: original
-  spectator, minimap, automatic radio, transcript and PiP programs pass with the agreed
+  spectator, minimap, automatic radio, transcript, scope and PiP programs pass with the agreed
   complete source inputs and unchanged timing/asset comparisons;
   `tools/spectator_native_capture.mjs`, `tests/spectator_native.tscn`,
   `tools/minimap_native_capture.mjs`, `tests/minimap_native.tscn`,
-  `tools/pip_capture.mjs` and `tests/pip_native.tscn` must also accept the shared
-  identity. The narrower
+  `tools/pip_capture.mjs`, `tests/pip_native.tscn`, `tools/scope_raster_capture.mjs`
+  and `tests/scope_raster.tscn` must also accept the shared identity. The narrower
   cancellation oracle cannot substitute for these checks or certify populated
   delivery.
 - **Flash — settlement transcript host:** `scripts/campaign_ui.gd::show_result`

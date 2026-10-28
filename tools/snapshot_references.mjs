@@ -76,7 +76,7 @@ export function snapshotReferences(d, BattleSim) {
     const serialized=context._serializeEnt(entity);
     iconBuffs.push({now:context.t,buffs,result:{stealthLeft:0,slowF:.6,hiSupLeft:0,selfMods:serialized.md||[],_buffsLeft:serialized.bf||[]}});
   }
-  return {snapshotAbilities: fixtures, snapshotStatuses: statusFixtures, snapshotBuffs: buffFixtures, snapshotIconBuffs:iconBuffs,snapshotRoles: roleReferences(d, context)};
+  return {snapshotEvents: snapshotEventReferences(BattleSim), castEvents: castEventReferences(d, BattleSim), fieldEvents: fieldEventReferences(d, BattleSim), snapshotAbilities: fixtures, snapshotStatuses: statusFixtures, snapshotBuffs: buffFixtures, snapshotIconBuffs:iconBuffs,snapshotRoles: roleReferences(d, context)};
 }
 
 function roleReferences(d, context) {
@@ -140,5 +140,127 @@ function roleReferences(d, context) {
       expected: {boss: true, boss_segment: output.bs, ...(output.lk ? {siege_locked: true} : {})}, economy: !!output.act, super_level: null, charred: false, status: {}});
   }
   context.siege = false;
+  return result;
+}
+
+// Execute the original fog-filtered snapshot and shared event-frame seams. The
+// lightning consumer in public/js/game.js renders every reported point by
+// coordinates, including points whose struck entity is absent from ents.
+export function snapshotEventReferences(BattleSim) {
+  const points = [
+    {id:71,x:0,y:2.5,z:0},
+    {id:72,x:10000,y:4,z:10000},
+    {id:99,x:-5000,y:7.25,z:3000},
+    {x:31,y:93.5,z:-27,absolute:true},
+  ];
+  const result=[];
+  for(const selected of [[],[1],[2],[3],[0,1,2,3]]) for(const removed of [false,true]) for(const pulse of [false,true]) {
+    const actors=[{id:71,side:'STEEL',x:0,z:0},{id:72,side:'SWARM',x:10000,z:10000}];
+    const input={e:'lightning_strike',pts:selected.map(index=>structuredClone(points[index]))};
+    const sim=Object.assign(Object.create(BattleSim.prototype),{t:12.3,_tickN:5,siege:false,heroes:new Map(),
+      ents:new Map(actors.filter(actor=>!removed||actor.id!==72).map(actor=>[actor.id,{...actor,kind:'soldier',hp:100,maxHp:100}])),
+      events:[structuredClone(input)],missiles:[],loots:[],airdrops:[],weatherScars:[],weatherSurface:{},
+      creepUpg:{STEEL:[],SWARM:[]},nextWaveAt:20,wave:1,stats:{},over:false,winner:null,
+      visionUntil:pulse?{STEEL:20,SWARM:20}:{},curWeatherVec:{fog:0},fogs:[]});
+    const snapshots=[];
+    for(const side of [null,'STEEL','SWARM','STEEL',null]) {
+      const snapshot=sim.snapshotFor(side);
+      snapshots.push({side,visible:snapshot.ents.map(actor=>actor.id),events:structuredClone(snapshot.ev)});
+    }
+    result.push({actors:actors.filter(actor=>!removed||actor.id!==72),pulse,input,snapshots,remaining:sim.events.length});
+  }
+  return result;
+}
+
+// Capture the real active cast producers before exercising shared snapshotFor
+// publication. Terrain and effect settlement are separate seams, as in the
+// ability-route oracle; these callbacks cannot create fabricated match geometry.
+export function castEventReferences(d, BattleSim) {
+  const result=[];
+  for(const character of Object.keys(d.CHARACTERS)) for(const action of ['attack','start','interrupt','complete'])
+    for(const removed of [false,true]) for(const pulse of [false,true]) {
+      const side=d.CHARACTERS[character].side==='MERC'?'STEEL':d.CHARACTERS[character].side;
+      const actor={id:72,pid:'42',hero:true,ch:character,kind:d.CHARACTERS[character].kind,side,
+        x:10000,z:10000,y:12,hp:100,maxHp:100,mp:100000,dead:false,defending:true,
+        abil:{def:1,atk:1},acd:{},achg:{},mods:[],buffs:{}};
+      const other={id:71,kind:'soldier',hp:100,maxHp:100,side:side==='STEEL'?'SWARM':'STEEL',x:0,z:0};
+      const sim=Object.assign(Object.create(BattleSim.prototype),{t:10,_tickN:5,siege:false,over:false,winner:null,
+        heroes:new Map([[actor.pid,actor]]),ents:new Map([[71,other],[72,actor]]),events:[],
+        curWeatherDyn:null,_readyCharges:()=>1,_jammed:()=>false,
+        _launchOrigin:()=>({x:-100,z:200,y:0}),_launchAtkCarrier:()=>{},_castEffect:()=>{},
+        missiles:[],loots:[],airdrops:[],weatherScars:[],weatherSurface:{},creepUpg:{STEEL:[],SWARM:[]},
+        nextWaveAt:20,wave:1,stats:{},visionUntil:pulse?{STEEL:20,SWARM:20}:{},curWeatherVec:{fog:0},fogs:[]});
+      sim.heroCast(actor.pid,action==='attack'?'atk':'def',10008,10000);
+      if(action==='interrupt'||action==='complete') {
+        sim.t=actor.cast.start+actor.cast.dur*(action==='interrupt'?.5:1);
+        if(action==='interrupt')sim._interruptCast(actor);else sim._tickCasts(0);
+      }
+      const events=JSON.parse(JSON.stringify(sim.events));
+      if(events.length!==(action==='attack'||action==='start'?1:2))throw new Error('Missing active original cast report');
+      if(removed)sim.ents.delete(actor.id);
+      const snapshots=[];
+      for(const recipient of [null,'STEEL','SWARM','STEEL',null]) {
+        const packet=sim.snapshotFor(recipient);
+        snapshots.push({side:recipient,visible:packet.ents.map(entity=>entity.id),events:JSON.parse(JSON.stringify(packet.ev))});
+      }
+      result.push({character,action,side,removed,pulse,now:sim.t,events,snapshots});
+    }
+  return result;
+}
+
+export function fieldEventReferences(d, BattleSim) {
+  const reports=new Set(['cube_spawn','fog_spawn','phase_start','phase_exit','decoy_beacon_spawn','flashbang_detonate','heal_aoe']);
+  const profiles=[];
+  for(const character of Object.keys(d.CHARACTERS))for(const slot of ['def','atk']) {
+    const A=d.heroAbility(character,slot,1);
+    if(['cube','fog','phaseshift','decoy_beacon'].includes(A.fx)||A.fx==='heal'&&A.target==='team'&&A.r>0)
+      profiles.push({character,slot,fx:A.fx});
+  }
+  const result=[];
+  for(const profile of profiles)for(const level of [1,4])for(const fraction of [0,.25,1])
+    for(const removed of [false,true])for(const pulse of [false,true])
+      for(const termination of ['phaseshift','decoy_beacon'].includes(profile.fx)?['expiry','lethal']:['expiry']) {
+        const side=d.CHARACTERS[profile.character].side==='MERC'?'STEEL':d.CHARACTERS[profile.character].side;
+        const sim=Object.assign(Object.create(BattleSim.prototype),{t:10,_tickN:0,siege:false,over:false,winner:null,
+          heroes:new Map(),ents:new Map(),events:[],missiles:[],loots:[],airdrops:[],weatherScars:[],weatherSurface:{},
+          creepUpg:{STEEL:[],SWARM:[]},nextWaveAt:20,wave:1,stats:{},curWeatherDyn:null,
+          visionUntil:pulse?{STEEL:1000,SWARM:1000}:{},curWeatherVec:{fog:0},fogs:[],cubicSlabs:[],hologramDecoys:[],
+          _blast:()=>{},_applyCC:()=>{},_autoTarget:()=>null});
+        const other=sim._add({kind:'soldier',side:side==='STEEL'?'SWARM':'STEEL',x:0,z:0,hp:1000});
+        const actor=sim._add({pid:'42',hero:true,ch:profile.character,kind:d.CHARACTERS[profile.character].kind,side,
+          x:10000,z:10000,y:0,ry:0,hp:1000,sp:30,maxSp:500,mp:1000,maxMp:1000,dead:false,
+          abil:{light:level,heavy:level,def:level,atk:level},acd:{},mods:[],buffs:{}});
+        sim.heroes.set(actor.pid,actor);
+        const definition=d.heroAbility(profile.character,profile.slot,level);
+        sim._castEffect(actor,definition,actor.x,actor.z,fraction,null,true);
+        const identities=new Map([[other.id,71],[actor.id,72]]);
+        for(const entity of sim.ents.values())if(!identities.has(entity.id))identities.set(entity.id,80+identities.size-2);
+        const lifetime=profile.fx==='phaseshift'?actor.phaseUntil-10:profile.fx==='decoy_beacon'?sim.hologramDecoys[0].until-10:
+          profile.fx==='cube'?sim.cubicSlabs[0].until-10:profile.fx==='fog'?sim.fogs[0].until-10:0;
+        const frames=[];
+        for(const [index,now] of [10,10+lifetime/2,10+lifetime,11+lifetime].entries()) {
+          sim.t=now;sim._tickN++;
+          if(index>0) {
+            if(index===1&&termination==='lethal') {
+              if(profile.fx==='phaseshift'){actor.hp=0;actor.dead=true;}
+              else for(const decoy of sim.hologramDecoys)decoy.hp=0;
+            }
+            if(profile.fx==='phaseshift')sim._tickPhaseShift(0);
+            if(profile.fx==='decoy_beacon')sim._tickDecoyBeacons(0);
+            if(profile.fx==='cube')sim._tickCubicSlabs(0);
+            if(profile.fx==='fog')sim._tickFogs(0);
+          }
+          if(removed)sim.ents.delete(actor.id);
+          const snapshots=[];
+          for(const recipient of [null,'STEEL','SWARM','STEEL',null]) {
+            const packet=sim.snapshotFor(recipient);
+            snapshots.push({side:recipient,visible:packet.ents.filter(entity=>entity.id===other.id||entity.id===actor.id).map(entity=>identities.get(entity.id)),
+              events:JSON.parse(JSON.stringify(packet.ev.filter(event=>reports.has(event.e))))});
+          }
+          frames.push({now,snapshots,fields:[...sim.ents.keys()].filter(id=>id!==other.id&&id!==actor.id).map(id=>identities.get(id)),
+            cubes:sim.cubicSlabs.length,fogs:sim.fogs.length,holograms:sim.hologramDecoys.length,phase:!!actor.phaseUntil});
+        }
+        result.push({...profile,level,fraction,removed,pulse,termination,side,identities:Object.fromEntries(identities),frames});
+      }
   return result;
 }

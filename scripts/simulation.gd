@@ -4586,8 +4586,10 @@ func _cast_effect(unit: BattleUnit, definition: Dictionary, center: Vector3, fra
 			unit.status.reflect_arc = deg_to_rad(float(definition.get("arc", 120)))
 			unit.status.reflect_ratio = definition.get("ratio", 0.6)
 		"phaseshift":
-			unit.status.phase_until = clock + (definition.dur if definition.dur else 1.8) * fraction
+			var phase_duration: float = (definition.dur if definition.dur else 1.8) * fraction
+			unit.status.phase_until = clock + phase_duration
 			unit.status.phase_damage = (definition.dmg if definition.dmg else 50) * fraction
+			events.append({"type": "phase_start", "actor": unit.entity_id, "peer": unit.peer_id, "side": unit.side, "duration": phase_duration})
 		"fog": _spawn_fog(unit, definition, center)
 		"cube": _spawn_cubic_slabs(unit, definition, center, fraction)
 		"summon": _spawn_autonomous_summons(unit, definition, center, fraction, count_override)
@@ -4694,7 +4696,8 @@ func _interrupt_cast(unit: BattleUnit) -> void:
 	var fraction := ratio * ratio
 	_cast_effect(unit, state.definition, state.point, fraction)
 	_emit_body_event({"type": "cast", "actor": unit.entity_id, "slot": "def", "fx": state.definition.fx,
-		"fraction": fraction, "interrupted": true, "point": state.point, "level": state.level})
+		"fraction": fraction, "interrupted": true, "point": state.point, "level": state.level,
+		"radius": state.definition.r, "duration": state.definition.dur})
 
 func _apply_cc(unit: BattleUnit, added: Dictionary, center: Vector3, radius: float) -> void:
 	for target: BattleUnit in units.values():
@@ -5372,7 +5375,8 @@ func _tick_casts(_delta: float) -> void:
 			unit.cast_state.clear()
 			_cast_effect(unit, state.definition, state.point)
 			events.append({"type": "cast", "actor": unit.entity_id, "character": unit.character, "side": unit.side,
-				"slot": "def", "fx": state.definition.fx, "fraction": 1.0, "point": state.point, "level": state.level})
+				"slot": "def", "fx": state.definition.fx, "fraction": 1.0, "point": state.point, "level": state.level,
+				"radius": state.definition.r, "duration": state.definition.dur})
 
 func _tick_persistent_abilities(delta: float) -> void:
 	_tick_heal_auras(delta)
@@ -5448,10 +5452,11 @@ func snapshot(peer: int = 0, recipient_side: Variant = null) -> Dictionary:
 			if event.has("only_peer"):
 				if int(event.only_peer) == peer:
 					visible_events.append(event)
-			elif event.type == "lightning_strike":
-				var points: Array = event.points.filter(func(point): return point.get("absolute", false) or visible_ids.has(int(point.id)))
-				if not points.is_empty():
-					visible_events.append({"type": "lightning_strike", "actor": 0, "points": points, "notice_serial": event.notice_serial})
+			elif event.type in ["lightning_strike", "cast", "cast_start", "phase_start", "phase_exit",
+					"decoy_beacon_spawn", "flashbang_detonate", "cube_spawn", "fog_spawn", "heal_aoe"]:
+				# Source snapshotFor shares weather, cast and field reports even
+				# when the referenced body is hidden or no longer in the snapshot.
+				visible_events.append(event)
 			elif event.type == "die" or str(event.type) in BlastFeedback.REPORT_TYPES:
 				# Source death/explosion broadcasts survive entity removal and fog filtering.
 				visible_events.append(event)

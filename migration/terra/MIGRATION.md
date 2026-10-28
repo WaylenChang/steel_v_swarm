@@ -210,6 +210,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   empty scenes do not qualify actual source model pixels, authored HUD composition,
   DPI behavior, full-scene performance or populated transport. The separate
   `tests/pip_native.tscn` retains the full source-provenance gate below.
+  `node tools/pip_window_capture.mjs`, `node --test tests/pip_window.test.mjs`
+  and real-driver `tests/pip_window.tscn` compare the original WebGL border
+  pixel bounds with the actual root-window PiP at eight controlled window/scale cases.
+  Keep the seven strict failures and window witnesses below until the shared
+  responsive-window contract is accepted. The non-unit ratios simulate the
+  source CSS-to-framebuffer relation on a scale-1 display; they do not certify
+  hardware DPI behavior, populated scene pixels or full HUD composition.
   Decoy and hero eye offsets are added as scalar doubles to the native model
   position before the camera vector enters Float32 storage. `tests/pip_pose.tscn`
   compares 26 original browser poses with Float32-representable model positions,
@@ -435,6 +442,25 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   pass all eleven original selection steps and existing PiP lifecycle/composition
   tests, then verify offline, ENet and WebSocket with populated carriers. The
   controlled snapshot program alone does not qualify delivery or real model pixels.
+
+- **Opus — responsive root window:** establish a shared full-client-area and
+  pixel-ratio contract in `project.godot` and `scripts/main.gd::_build_ui` before
+  Terra retargets the `PipView` window coordinates. The current canvas-items
+  stretch fixes the visible viewport at 1440×900 and letterboxes other aspect
+  ratios. With a real 320×568 window at display scale 1, the original Chromium
+  PiP border bounds are `[10, 56, 58, 37]` pixels, while native bounds are
+  `[2, 196, 56, 35]`; at 640×360 they are `[10, 56, 113, 72]` and
+  `[36, 22, 100, 63]`. Even the same-aspect 720×450 window produces
+  `[5, 28, 124, 78]` instead of `[10, 56, 126, 80]`, because fixed source
+  margins are scaled. `tests/pip_window.tscn` keeps seven of eight original
+  window/scale cases failing; captured bounds remain in
+  `artifacts/terra/pip-window-report.json` and the 1440×900 control passes.
+  New evidence requires an unused directory via `--evidence-dir`.
+  Coordinate and clipping changes must preserve the main camera, HUD, minimap,
+  scope and input consumers. Acceptance: the strict source/native border bounds
+  and existing `tests/pip_composition.tscn` pass at portrait and landscape
+  sizes, followed by actual hardware-DPI and populated match checks. Simulated
+  pixel ratios alone do not qualify hardware-DPI or actor rendering.
 
 - **Sol — camera obstruction hit distance:** agree a source-faithful segment-hit
   contract for `scripts/world.gd::obstruction_hit` before Terra changes the

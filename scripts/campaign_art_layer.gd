@@ -12,6 +12,7 @@ var selected := false
 var loaded := false
 var texture_provider := Callable()
 var rules: Dictionary
+var backdrop_rules: Dictionary
 var opacity := 0.0:
 	set(value):
 		opacity = value
@@ -40,6 +41,7 @@ var pose_progress := 1.0:
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules = Content.read_json("res://data/campaign_art.json").rules
+	backdrop_rules = Content.read_json("res://data/campaign_backdrop.json").rules
 	pose_rules = Content.read_json("res://data/campaign_pose.json").rules
 	viewport = SubViewport.new()
 	viewport.disable_3d = true
@@ -119,9 +121,12 @@ func layout_art(view_size: Vector2) -> void:
 	var landscape := size.x >= size.y
 	frame.size = Vector2(minf(size.y, size.x * .94), size.y) if landscape else size
 	frame.position = Vector2((size.x - frame.size.x) / 2, 0)
-	var scale_factor: float = Content.campaign.presentation.art.backgroundScale
-	background.size = size * scale_factor
-	background.position = (size - background.size) / 2
+	var inset := float(backdrop_rules.inset)
+	var scale_factor := float(backdrop_rules.scale)
+	var width := (float(size.x) + inset * 2) * scale_factor
+	var height := (float(size.y) + inset * 2) * scale_factor
+	background.size = Vector2(width, height)
+	background.position = Vector2((float(size.x) - width) / 2, (float(size.y) - height) / 2)
 	_apply_pose()
 
 func set_pose(value: Dictionary) -> void:

@@ -32,6 +32,7 @@ func _run() -> void:
 				var displayed: Dictionary = layer.pose.duplicate()
 				layer.layout_art(layout)
 				_check(layer.pose_tween == previous and layer.pose == displayed, "Resizing preserves the running source transform transition")
+			var background := Rect2(layer.background.position, layer.background.size)
 			if sample.select:
 				var target := CampaignRules.camera_pose(program.camera, sample.progress, program.landscape)
 				layer.set_pose(target)
@@ -43,7 +44,7 @@ func _run() -> void:
 				_near(layer.pose[key], sample.pose[key], "Original typed CSS transform interpolation, retarget and reversal: " + key)
 			_check(layer.image.scale == Vector2(sample.pose.scale, sample.pose.scale) or absf(layer.image.scale.x - sample.pose.scale) < .000001,
 				"Presented native foreground scale follows the browser interpolation")
-			_check(layer.background.scale == Vector2.ONE and layer.background.position == (layer.size - layer.background.size) / 2,
+			_check(layer.background.scale == Vector2.ONE and Rect2(layer.background.position, layer.background.size) == background,
 				"Foreground pan and zoom leave the source background fixed")
 			if sample.settled:
 				var base := (float(sample.layout[1]) - float(sample.imageSize)) / 2

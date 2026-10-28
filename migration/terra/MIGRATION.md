@@ -279,6 +279,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   transparent render targets. Preserve the strict frame-7 comparator failure
   and byte witness below. Declared colors do not qualify actual art decoding,
   fallback pixels, blur, framing, populated transitions or performance.
+  The static backdrop expands by the original CSS inset before its centered
+  scale; foreground motion does not move it. `node tools/campaign_backdrop_capture.mjs`,
+  `node --test tests/campaign_backdrop.test.mjs` and real-driver
+  `tests/campaign_backdrop.tscn` retain source bounds for twelve scale-1 viewports.
+  The geometry comparison does not qualify image decoding, blur pixels, exact
+  browser transform rounding or complete cinematic composition.
   Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
   whole-transform reversal shortening and unchanged-target behavior. Serialize
   source camera targets through `CssDecimal` before comparison; keep interpolation

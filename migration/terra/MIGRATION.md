@@ -313,6 +313,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_heading.tscn` retain original scene changes, repeated and invalid
   indices, imported text and usable portrait/landscape header geometry. Native
   font metrics and header styling still require their separate visual contracts.
+  The crawl ending retains the source divider and distinct prologue/chapter notes.
+  Prologue uses its original terminal button even when a caller supplies another
+  label; a chapter uses its supplied label or the source fallback when empty.
+  `node tools/campaign_ending_capture.mjs`, `node --test tests/campaign_ending.test.mjs`
+  and real-driver `tests/campaign_ending.tscn` retain the original construction,
+  both briefing labels and finish-button reachability. These checks do not qualify
+  ending spacing, typography, source button styling or the caller contract below.
   Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
   whole-transform reversal shortening and unchanged-target behavior. Serialize
   source camera targets through `CssDecimal` before comparison; keep interpolation
@@ -490,6 +497,16 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   the shared advance contract below is accepted for the relevant text consumer.
 
 ## Integration and handoffs
+
+- **Flash — cinematic chapter return label:** update `scripts/campaign_ui.gd`
+  and `data/ui.json` to pass the source `▶ 返回戰區簡報` for chapter replay.
+  The shared `story_back_brief` label currently omits the arrow and is also used
+  by a separate briefing button, so keep that other use's contract intact. Source
+  `public/js/main.js` passes `▶ 出擊` for deployment and `▶ 返回戰區簡報` for
+  replay; both original labels are captured in `tests/fixtures/campaign_ending.json`.
+  Acceptance: chapter replay shows the original cinematic label and returns to the
+  briefing, deployment retains its original label, and the non-cinematic briefing
+  button and prologue terminal label retain their own behavior.
 
 - **Opus — shared campaign dialogue deadline fixture:** update
   `tests/campaign_suite.gd::dialogue_lifecycle` to advance a controlled wall

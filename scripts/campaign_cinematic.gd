@@ -24,12 +24,15 @@ var system_bar: Control
 var system_bar_content: HBoxContainer
 var archive_label: Label
 var tag: Label
+var end_divider: Label
+var end_note: Label
 var finish_button: Button
 var caption: Label
 var hold_indicator: Control
 var presentation_group: CanvasGroup
 var transition_rules: Dictionary
 var card_rules: Dictionary
+var ending_rules: Dictionary
 var fade_opacity := 1.0:
 	set(value):
 		fade_opacity = value
@@ -63,6 +66,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	transition_rules = Content.read_json("res://data/campaign_transition.json").rules
 	card_rules = Content.read_json("res://data/campaign_card.json").rules
+	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
@@ -166,6 +170,7 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	dispose()
 	_write_scroll()
 	var token := generation
+	var is_prologue := is_same(sequence, Content.campaign.get("prologue", []))
 	scenes = sequence.duplicate(true)
 	start_index = clampi(start_index, 0, scenes.size() - 1)
 	for scene: Dictionary in scenes:
@@ -180,8 +185,20 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		section.add_child(NativeUi.prose("\n\n".join(PackedStringArray(scene.paragraphs)), 18))
 		column.add_child(section)
 		sections.append(section)
-	finish_button = NativeUi.button(finish_text, finish)
-	column.add_child(finish_button)
+	var ending: Dictionary = ending_rules.prologue if is_prologue else ending_rules.chapter
+	var ending_box := VBoxContainer.new()
+	column.add_child(ending_box)
+	end_divider = NativeUi.label(ending_rules.divider, 14)
+	end_divider.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ending_box.add_child(end_divider)
+	end_note = NativeUi.label(ending.note, 11)
+	end_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	end_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ending_box.add_child(end_note)
+	var button_text := String(ending.button) if is_prologue or finish_text.is_empty() else finish_text
+	finish_button = NativeUi.button(button_text, finish)
+	finish_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ending_box.add_child(finish_button)
 	closing = false
 	modulate.a = 1.0
 	fade_opacity = 1.0
@@ -191,7 +208,7 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	_layout()
 	playing = true
 	_set_scene(start_index)
-	if is_same(sequence, Content.campaign.get("prologue", [])):
+	if is_prologue:
 		var loader := _make_buffer()
 		buffer_loader = loader
 		loader.progress.connect(_buffer_progress.bind(token))

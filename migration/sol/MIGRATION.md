@@ -762,16 +762,10 @@ player's position when pausing/resuming.
   The source DOM/stick-paint probes and native state-only checks do not certify
   Flash-owned control-node lifetime, hardware pointer capture, complete input
   publication, populated transport behavior or mobile exports.
-  **Flash — `scripts/touch_controls.gd::reset`:** seal the old `held` mirror
-  before calling `TouchState.reset()`. Its release signals can synchronously
-  admit a fresh button; the current trailing `held.clear()` erases that new
-  command's mirror after the state has retained it. Acceptance: a release
-  callback that admits a fresh fire/jump hold, including the same pointer ID,
-  retains both the state roster and the control's mirrored input; nested resets
-  release old holds once without clearing replacement commands. Keep ordinary
-  focus/overlay release and source gesture/button handoff order unchanged.
-  The native reproduction in `artifacts/sol/touch-mirror-probe.log` retains
-  state pointer 8 as `fire` while the control mirror is empty.
+  Flash owns the control-wrapper reset correction and node-lifetime acceptance
+  in [F1](../flash/MIGRATION.md#ready-for-bounded-implementation). Keep
+  `TouchState` release/reentry contracts stable while that task is implemented;
+  S11 retains hardware input and populated publication/transport acceptance.
 - [ ] **S15 — Local feedback:** finish integrated immutable rounded control
   publication, rising-edge notices and replay rejection. Keep the source
   eligibility, silent rejection, optimistic cast/defense and shared fire/cast

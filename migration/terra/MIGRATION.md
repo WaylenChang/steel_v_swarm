@@ -576,15 +576,10 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
 
 ## Integration and handoffs
 
-- **Flash — cinematic chapter return label:** update `scripts/campaign_ui.gd`
-  and `data/ui.json` to pass the source `▶ 返回戰區簡報` for chapter replay.
-  The shared `story_back_brief` label currently omits the arrow and is also used
-  by a separate briefing button, so keep that other use's contract intact. Source
-  `public/js/main.js` passes `▶ 出擊` for deployment and `▶ 返回戰區簡報` for
-  replay; both original labels are captured in `tests/fixtures/campaign_ending.json`.
-  Acceptance: chapter replay shows the original cinematic label and returns to the
-  briefing, deployment retains its original label, and the non-cinematic briefing
-  button and prologue terminal label retain their own behavior.
+- **Flash — cinematic chapter return label:** tracked in
+  [F2](../flash/MIGRATION.md#ready-for-bounded-implementation). Terra retains
+  `CampaignCinematic.play()` and its source-derived default/override contract;
+  the caller correction requires no Terra producer or shared-label change.
 
 - **Opus — shared campaign dialogue deadline fixture:** update
   `tests/campaign_suite.gd::dialogue_lifecycle` to advance a controlled wall
@@ -789,17 +784,10 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   and `tests/scope_raster.tscn` must also accept the shared identity. The narrower
   cancellation oracle cannot substitute for these checks or certify populated
   delivery.
-- **Flash — settlement transcript host:** `scripts/campaign_ui.gd::show_result`
-  owns the outer expandable transcript ScrollContainer and the result
-  title/statistics/buttons. Bind the source settlement host width, outer overflow
-  and placement around `CampaignDialogue.transcript()` without expanding the
-  inner script beyond its original 42vh cap or counting background portraits in
-  text flow. Terra's visible inner box preserves fractional CSS height; native VBox
-  allocation alone does not establish source outer spacing. Acceptance: complete
-  populated victory/defeat and replay layouts at 360/720/721/1440 px widths after
-  the accepted font/material bindings, including nested nearest scrolling.
-  `tests/fixtures/dialogue_layout.json` populates only original `overTalk`; its
-  crops cannot certify the missing winner/statistics and outer-host content.
+- **Flash — settlement transcript host:** tracked as blocked
+  [F4](../flash/MIGRATION.md#blocked-on-accepted-producer-contracts). Terra keeps
+  the inner dialogue geometry, 42vh cap, portrait slots and scrolling contract;
+  accepted font/material bindings below remain prerequisites for full host pixels.
 - **Opus — source text advances:** provide an accepted shared adapter in
   `scripts/source_font_metrics.gd` before Terra certifies source dialogue wrapping.
   Input is the published native Font, original text, pixel size and `zh-Hant`

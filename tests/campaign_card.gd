@@ -60,7 +60,8 @@ func _check_cases(cases: Array) -> void:
 				"HUD labels remain within the viewport: size=" + str(view.size) + " caption=" + str(view.caption.get_rect()))
 			view.scroll.scroll_vertical = int(view.scroll.get_v_scroll_bar().max_value)
 			await get_tree().process_frame
-			_check(view._finish_target(view.finish_button.get_global_rect().get_center()), "The crawl finish button remains reachable")
+			var visible := scroll_rect.intersection(view.finish_button.get_global_rect())
+			_check(visible.has_area() and view._finish_target(visible.get_center()), "The visible crawl finish button remains reachable")
 			view.scroll.scroll_vertical = 0
 	view._set_scene(1)
 	await get_tree().process_frame

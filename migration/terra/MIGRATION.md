@@ -377,9 +377,18 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   fractional/DPI placement, hardware input, export or performance from these probes.
   Prologue playback continues while native image/font cache attempts run. Gesture
   skipping waits for every attempt; the explicit finish button retains its source
-  bypass. Failed attempts count toward progress, not asset availability. Preserve
-  independent 1800 ms warning deadlines, generation checks and decoder drains
-  across replacement/exit, including pause and zero gameplay speed. Original model
+  bypass. A non-prologue chapter starts already ready, displays the original ready
+  status and skip hint, and never starts another buffer. Replacing a prologue with
+  a chapter must reject retired progress callbacks without hiding that status.
+  `node tools/campaign_chapter_status_capture.mjs`,
+  `node --test tests/campaign_chapter_status.test.mjs` and real-driver
+  `tests/campaign_chapter_status.tscn` retain both original play branches, progress,
+  immediate chapter skipping and replacement. Status visibility callbacks may
+  retire, detach or queue the owner without starting stale buffering or clocks.
+  These checks do not certify status icon, color or flash pixels. Failed attempts
+  count toward progress, not asset availability. Preserve independent 1800 ms
+  warning deadlines, generation checks and decoder drains across replacement/exit,
+  including pause and zero gameplay speed. Original model
   warming currently has an empty base manifest; reject nonempty/custom manifests
   until their native preload contract is published. Keep retained successful
   resource-cache entries separate from cancelled owners and private scene state.

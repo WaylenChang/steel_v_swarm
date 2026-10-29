@@ -191,9 +191,16 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		if token != generation or not playing or closing or is_queued_for_deletion() or buffer_loader != loader:
 			return
 		buffer_status.show()
+		if not is_instance_valid(self) or is_queued_for_deletion() or not is_inside_tree() or token != generation or not playing or closing:
+			return
 		_render_buffer()
 		loader.begin(buffer_rules)
 		if token != generation or not playing or closing or is_queued_for_deletion():
+			return
+	else:
+		_render_buffer()
+		buffer_status.show()
+		if not is_instance_valid(self) or is_queued_for_deletion() or not is_inside_tree() or token != generation or not playing or closing:
 			return
 	last_frame_at = _now_msec()
 	await get_tree().process_frame
@@ -374,10 +381,9 @@ func _buffer_progress(_loaded: int, _total: int, _percent: int, _name: String, _
 		_render_buffer()
 
 func _render_buffer() -> void:
-	if buffer_loader == null:
-		return
-	buffer_status.text = buffer_rules.ready if buffer_loader.complete else String(buffer_rules.pending).replace("{percent}", str(buffer_loader.percent))
-	caption.text = buffer_rules.readyHint if buffer_loader.complete else buffer_rules.pendingHint
+	var complete := buffer_loader == null or buffer_loader.complete
+	buffer_status.text = buffer_rules.ready if complete else String(buffer_rules.pending).replace("{percent}", str(buffer_loader.percent))
+	caption.text = buffer_rules.readyHint if complete else buffer_rules.pendingHint
 	_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func _try_skip() -> void:

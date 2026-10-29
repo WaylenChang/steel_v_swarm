@@ -115,8 +115,9 @@ func _gestures() -> void:
 	view.set_process(false)
 	var old_caption := view.caption.text
 	stale.progress.emit(12, 12, 100, "models", true)
-	_check(view.buffer_loader == null and view.caption.text == old_caption and not view.buffer_status.visible,
-		"Replacing the prologue with a chapter rejects the previous progress callback")
+	_check(view.buffer_loader == null and view.caption.text == old_caption and view.caption.text == reference.rules.readyHint
+		and view.buffer_status.visible and view.buffer_status.text == reference.rules.ready,
+		"Replacing the prologue with a ready chapter rejects the previous progress callback")
 	view.play(Content.campaign.prologue, "Continue")
 	view.set_process(false)
 	view.finish_button.pressed.emit()

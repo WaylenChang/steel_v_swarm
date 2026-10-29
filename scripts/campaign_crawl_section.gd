@@ -2,6 +2,7 @@ extends Container
 
 var scene: Dictionary = {}
 var marker_rules: Dictionary = {}
+var geometry_rules: Dictionary = {}
 var opacity_rules: Dictionary = {}
 var layer: Sprite2D
 var content: VBoxContainer
@@ -40,12 +41,17 @@ func _ready() -> void:
 	queue_sort()
 
 func _get_minimum_size() -> Vector2:
-	return content.get_combined_minimum_size() if is_instance_valid(content) else Vector2.ZERO
+	if not is_instance_valid(content):
+		return Vector2.ZERO
+	var minimum := content.get_combined_minimum_size()
+	minimum.y += float(geometry_rules.bottomPadding) + float(geometry_rules.borderWidth)
+	return minimum
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_SORT_CHILDREN and is_instance_valid(layer) and is_instance_valid(content):
 		layer.layout_radio(size)
-		content.size = size
+		var bottom := float(geometry_rules.bottomPadding) + float(geometry_rules.borderWidth)
+		content.size = Vector2(size.x, maxf(0, size.y - bottom))
 
 func _content_changed() -> void:
 	update_minimum_size()

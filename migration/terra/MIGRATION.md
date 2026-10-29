@@ -343,6 +343,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   and pause/visibility/retirement behavior. These controlled colors do not qualify
   actual text pixels, clipping at hardware DPI, full cinematic composition or
   the performance of populated sections.
+  Section heights include the source bottom padding and reserved border width;
+  the inter-section margin also precedes the ending block. `node
+  tools/campaign_section_geometry_capture.mjs`,
+  `node --test tests/campaign_section_geometry.test.mjs` and real-driver
+  `tests/campaign_section_geometry.tscn` compare controlled scroll bounds, section
+  offsets and focus progress in both orientations and a square viewport. The
+  original dashed border is not yet drawn, and actual text layout remains open.
   The crawl ending retains the source divider and distinct prologue/chapter notes.
   Prologue uses its original terminal button even when a caller supplies another
   label; a chapter uses its supplied label or the source fallback when empty.

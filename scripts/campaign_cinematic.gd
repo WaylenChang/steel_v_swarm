@@ -39,6 +39,7 @@ var card_rules: Dictionary
 var header_rules: Dictionary
 var ending_rules: Dictionary
 var section_marker_rules: Dictionary
+var section_geometry_rules: Dictionary
 var paragraph_rules: Dictionary
 var section_opacity_rules: Dictionary
 var crawl_inset_rules: Dictionary
@@ -79,6 +80,7 @@ func _ready() -> void:
 	header_rules = Content.read_json("res://data/campaign_header.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
+	section_geometry_rules = Content.read_json("res://data/campaign_section_geometry.json").rules
 	paragraph_rules = Content.read_json("res://data/campaign_paragraph.json").rules
 	section_opacity_rules = Content.read_json("res://data/campaign_section_opacity.json").rules
 	crawl_inset_rules = Content.read_json("res://data/campaign_crawl_insets.json").rules
@@ -159,7 +161,7 @@ func _ready() -> void:
 	scroll.add_child(crawl_margin)
 	column = VBoxContainer.new()
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", 38)
+	column.add_theme_constant_override("separation", int(section_geometry_rules.marginBottom))
 	crawl_margin.add_child(column)
 	caption = NativeUi.label(Content.label("story_skip_hint"), 14)
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -210,6 +212,7 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		var section := CrawlSection.new()
 		section.scene = scene
 		section.marker_rules = section_marker_rules
+		section.geometry_rules = section_geometry_rules
 		section.opacity_rules = section_opacity_rules
 		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		column.add_child(section)

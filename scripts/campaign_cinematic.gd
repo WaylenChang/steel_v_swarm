@@ -20,6 +20,8 @@ var art_layers: Array[Control] = []
 var shade: ColorRect
 var card: Control
 var card_panel: PanelContainer
+var header_panel: PanelContainer
+var header_style: StyleBoxFlat
 var badge_label: Label
 var heading: Label
 var system_bar: Control
@@ -34,6 +36,7 @@ var hold_indicator: Control
 var presentation_group: CanvasGroup
 var transition_rules: Dictionary
 var card_rules: Dictionary
+var header_rules: Dictionary
 var ending_rules: Dictionary
 var section_marker_rules: Dictionary
 var paragraph_rules: Dictionary
@@ -73,6 +76,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	transition_rules = Content.read_json("res://data/campaign_transition.json").rules
 	card_rules = Content.read_json("res://data/campaign_card.json").rules
+	header_rules = Content.read_json("res://data/campaign_header.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
 	paragraph_rules = Content.read_json("res://data/campaign_paragraph.json").rules
@@ -124,9 +128,18 @@ func _ready() -> void:
 	system_bar_content.add_child(tag)
 	archive_label.resized.connect(_queue_hud_layout)
 	tag.resized.connect(_queue_hud_layout)
+	header_panel = PanelContainer.new()
+	header_style = StyleBoxFlat.new()
+	var background: Array = header_rules.background
+	var border: Array = header_rules.border
+	header_style.bg_color = Color(background[0], background[1], background[2], background[3])
+	header_style.border_color = Color(border[0], border[1], border[2], border[3])
+	header_style.border_width_bottom = int(header_rules.borderWidth)
+	header_panel.add_theme_stylebox_override("panel", header_style)
+	body.add_child(header_panel)
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 0)
-	body.add_child(header)
+	header_panel.add_child(header)
 	badge_label = NativeUi.label("", 14)
 	header.add_child(badge_label)
 	heading = NativeUi.label("", 23)
@@ -266,6 +279,9 @@ func _layout() -> void:
 	crawl_top = float(insets.top)
 	for side in ["top", "right", "bottom", "left"]:
 		crawl_margin.add_theme_constant_override("margin_" + side, int(insets[side]))
+	var header_padding: Dictionary = header_rules.landscape if landscape else header_rules.portrait
+	for side in ["top", "right", "bottom", "left"]:
+		header_style.set("content_margin_" + side, float(header_padding[side]) + (float(header_rules.borderWidth) if side == "bottom" else 0.0))
 	var paragraph_gap := int(paragraph_rules.landscapeGap) if landscape else int(paragraph_rules.portraitGap)
 	for section: Control in sections:
 		if section is CrawlSection:

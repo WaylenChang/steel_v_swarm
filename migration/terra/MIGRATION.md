@@ -313,6 +313,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_heading.tscn` retain original scene changes, repeated and invalid
   indices, imported text and usable portrait/landscape header geometry. Native
   font metrics and header styling still require their separate visual contracts.
+  The header panel retains source orientation-dependent padding, background and
+  bottom-border values. `node tools/campaign_header_capture.mjs`,
+  `node --test tests/campaign_header.test.mjs` and real-driver
+  `tests/campaign_header.tscn` check those values and the remaining crawl viewport
+  in portrait, landscape and square cases. They do not qualify text baselines,
+  fractional coverage, the parent card's effects or complete header pixels.
   Each crawl section retains the original separate badge and prefixed title,
   including the source marker gap. `node tools/campaign_section_marker_capture.mjs`,
   `node --test tests/campaign_section_marker.test.mjs` and real-driver

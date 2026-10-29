@@ -374,6 +374,11 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_crawl_insets.tscn` compare original padded geometry, focus,
   camera targets, chapter jumps and native GUI wheel/touch propagation. Controlled
   section sizes do not qualify source typography, scrollbar pixels or hardware input.
+  `node tools/campaign_crawl_mask_capture.mjs`,
+  `node --test tests/campaign_crawl_mask.test.mjs` and real-driver
+  `tests/campaign_crawl_mask.tscn` retain original edge-mask pixels and unmasked
+  controls. Keep the three strict mask failures and renderer contract below;
+  controlled color layers do not qualify text, scrollbars or full cinematics.
   Camera-target delivery follows the original frame branch: paused or saturated
   automatic scrolling does not reevaluate focus solely because section geometry
   changed. Explicit scroll/resize producers retain their own focus updates.
@@ -808,6 +813,27 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   background and portrait paths remain reusable without corrupting cached art.
 
 ### Shared renderer contracts
+
+- **Opus — cinematic crawl edge mask:** publish an accepted binding in
+  `shaders/campaign_crawl_mask.gdshader` for the scroll viewport consumed by
+  `scripts/campaign_cinematic.gd`. The original viewport masks its already-composed
+  contents with a vertical alpha gradient: transparent at 0%, opaque at 4% and
+  95%, then transparent at 100%. The native scroll viewport currently has no mask.
+  At the unchanged two-byte raster gate, the three original mask cases at 96×64,
+  101×73 and 320×100 differ in 576, 707 and 2,880 pixels, with maximum channel
+  differences of 137, 140 and 146 bytes; all three unmasked controls pass.
+  At the top-right pixel of the 96×64 case, source RGBA is `[21,61,80,255]`
+  and native is `[40,180,210,255]`. The original PNGs are retained in
+  `tests/fixtures/campaign_crawl_mask.json`; isolated source/native images and
+  witnesses are in `artifacts/terra/campaign-crawl-mask-9f0a12d8/`. The material
+  contract uses viewport-local, unscrolled coordinates on already-composed
+  premultiplied RGBA; scale both RGB and alpha by the original mask. Preserve
+  scrolling and the outer presentation fade. Acceptance: Opus validates its
+  material against the three enabled source rasters and additional fractional-size
+  cases without wider tolerances or baked per-size images. Terra then binds the
+  agreed material, adapts `tests/campaign_crawl_mask.tscn` to disable that binding
+  for its unmasked controls, and checks all six rasters, visible scrollbars,
+  populated text, touch scrolling and complete cinematic composition.
 
 - **Opus — cinematic fractional frame coverage:** agree a native material or
   rendering binding under `shaders/campaign_frame*.gdshader` for the clipped

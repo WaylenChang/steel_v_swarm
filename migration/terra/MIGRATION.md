@@ -297,12 +297,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   The narrative card retains the original centered landscape/portrait bounds,
   CSS layout-unit quantization and bottom safe-area offset; square viewports use
   the portrait rule. The date and buffering/skip labels sit outside the crawl
-  card, keeping its scroll viewport and finish control accessible. `node
+  card, keeping its scroll viewport and finish control accessible. The source
+  archive/date system bar is fixed to the viewport with its own 44 px horizontal
+  and 5 px top padding, independent of the outer HUD's safe-area padding. `node
   tools/campaign_card_capture.mjs`, `node --test tests/campaign_card.test.mjs`
   and real-driver `tests/campaign_card.tscn` compare fifteen browser sizes and
-  exercise wrapped HUD labels, supplied safe insets and finish-button reachability.
-  These geometry checks do not qualify the card's typography, gradient, blur,
-  clipped corners, hardware safe areas or complete cinematic pixels.
+  exercise the fixed bar, wrapped HUD labels, supplied safe insets and finish-button
+  reachability. Native font advances determine the current bar's flex allocation;
+  these checks do not qualify source text wrapping, the card's typography,
+  gradient, blur, clipped corners, hardware safe areas or complete cinematic pixels.
   Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
   whole-transform reversal shortening and unchanged-target behavior. Serialize
   source camera targets through `CssDecimal` before comparison; keep interpolation

@@ -18,7 +18,7 @@ for(const path of ['public/css/style.css','public/index.html']){
 }
 const css=await readFile(join(source,'public/css/style.css'),'utf8');
 const html=await readFile(join(source,'public/index.html'),'utf8');
-for(const fragment of ['id="prologueNarrativeBox"','id="prologueBoxBadge"','id="prologueBoxTitle"','id="prologueCrawlViewport"'])
+for(const fragment of ['id="prologueNarrativeBox"','id="prologueBoxBadge"','id="prologueBoxTitle"','id="prologueCrawlViewport"','id="prologueDateTag"'])
   if(!html.includes(fragment))throw new Error('Original cinematic card markup changed: '+fragment);
 const {chromiumOrNull,chromePath}=await import(pathToFileURL(join(source,'tools/pw.mjs')).href);
 const chromium=await chromiumOrNull();
@@ -31,9 +31,13 @@ try{
   const page=await browser.newPage({deviceScaleFactor:1});
   for(const [width,height] of sizes){
     await page.setViewportSize({width,height});
-    const sample=await page.evaluate(css=>{
+    const sample=await page.evaluate(({css,html})=>{
       document.head.innerHTML='<style></style>';document.head.firstChild.textContent=css;
       document.body.innerHTML='<div class="prologue-screen"><div class="prologue-hud-top"></div><div class="prologue-narrative-box" id="prologueNarrativeBox"><div class="prologue-box-header"><span class="prologue-box-badge" id="prologueBoxBadge"></span><h2 class="prologue-box-title" id="prologueBoxTitle"></h2></div><div class="prologue-crawl-viewport" id="prologueCrawlViewport"><div class="prologue-crawl-content" id="prologueCrawlContent"></div></div></div><div class="prologue-hud-bottom"></div></div>';
+      const original=new DOMParser().parseFromString(html,'text/html');
+      const originalBar=original.querySelector('#prologueIntro .prologue-hud-top .sysbar');
+      if(!originalBar||!originalBar.querySelector('#prologueDateTag')||originalBar.children.length!==2)throw new Error('Original cinematic system bar changed');
+      document.querySelector('.prologue-hud-top').append(originalBar.cloneNode(true));
       const media={},chrome={};
       for(const rule of document.styleSheets[0].cssRules){
         if(rule.selectorText==='.prologue-hud-top')chrome.top=rule.style;
@@ -60,19 +64,27 @@ try{
       const box=document.getElementById('prologueNarrativeBox'),style=getComputedStyle(box),rect=box.getBoundingClientRect();
       const top=getComputedStyle(document.querySelector('.prologue-hud-top'));
       const bottom=getComputedStyle(document.querySelector('.prologue-hud-bottom'));
+      const bar=document.querySelector('.prologue-hud-top .sysbar'),barStyle=getComputedStyle(bar),barRect=bar.getBoundingClientRect();
+      if(barStyle.position!=='fixed'||barStyle.display!=='flex')throw new Error('Original cinematic system bar is not fixed flex layout');
+      const systemBar={top:parseFloat(barStyle.top),left:parseFloat(barStyle.left),right:parseFloat(barStyle.right),
+        paddingTop:parseFloat(barStyle.paddingTop),paddingBottom:parseFloat(barStyle.paddingBottom),
+        paddingLeft:parseFloat(barStyle.paddingLeft),paddingRight:parseFloat(barStyle.paddingRight),borderBottom:parseFloat(barStyle.borderBottomWidth),
+        archive:bar.firstElementChild.textContent.trim()};
+      if(Object.entries(systemBar).some(([key,value])=>key!=='archive'&&!Number.isFinite(value)))throw new Error('Unsupported original cinematic system bar');
       const chromeRule={topHorizontal:parseFloat(top.paddingRight),top:parseFloat(top.paddingTop),
         bottomHorizontal:parseFloat(bottom.paddingRight),bottom:parseFloat(bottom.paddingBottom),gap:parseFloat(bottom.gap)||0};
       if(Object.values(chromeRule).some(value=>!Number.isFinite(value)))throw new Error('Unsupported original HUD padding');
       return {rules:{landscape:{maxWidth:lw[0][0],widthRatio:lw[1][0]/100,maxHeight:lh[0][0],heightRatio:lh[1][0]/100,bottom:lb[0][0]},
         portrait:{widthMargin:pw.find(x=>x[1]==='px')[0],maxWidth:pm[0][0],maxHeight:ph[0][0],heightRatio:ph[1][0]/100,bottom:pb[0][0]},
-        border:parseFloat(style.borderLeftWidth)},chrome:chromeRule,rect:[rect.x,rect.y,rect.width,rect.height]};
-    },css);
+        border:parseFloat(style.borderLeftWidth),systemBar},chrome:chromeRule,rect:[rect.x,rect.y,rect.width,rect.height],
+        systemBarRect:[barRect.x,barRect.y,barRect.width,barRect.height]};
+    },{css,html});
     if(rules&&JSON.stringify(sample.rules)!==JSON.stringify(rules))throw new Error('Card rules vary across source viewports');
     rules=sample.rules;
     const mode=width>height?'landscape':'portrait';
     if(chromeRules[mode]&&JSON.stringify(chromeRules[mode])!==JSON.stringify(sample.chrome))throw new Error('HUD rules vary within '+mode);
     chromeRules[mode]=sample.chrome;
-    cases.push({size:[width,height],rect:sample.rect});
+    cases.push({size:[width,height],rect:sample.rect,systemBarRect:sample.systemBarRect});
   }
 }finally{await browser.close();}
 const units=[1,2,4,8,16,32,64,128,256,512,1024].find(value=>cases.every(row=>row.rect.slice(2).every(number=>Math.abs(number*value-Math.round(number*value))<1e-7)));

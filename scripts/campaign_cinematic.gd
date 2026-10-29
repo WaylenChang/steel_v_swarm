@@ -19,6 +19,9 @@ var shade: ColorRect
 var card: Control
 var card_panel: PanelContainer
 var heading: Label
+var system_bar: Control
+var system_bar_content: HBoxContainer
+var archive_label: Label
 var tag: Label
 var finish_button: Button
 var caption: Label
@@ -87,10 +90,24 @@ func _ready() -> void:
 	var body := VBoxContainer.new()
 	body.add_theme_constant_override("separation", 0)
 	card_panel.add_child(body)
-	tag = NativeUi.label("", 14)
-	tag.clip_text = true
+	system_bar = Control.new()
+	system_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	presentation_group.add_child(system_bar)
+	system_bar_content = HBoxContainer.new()
+	system_bar_content.add_theme_constant_override("separation", 0)
+	system_bar_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	system_bar.add_child(system_bar_content)
+	archive_label = NativeUi.label(card_rules.systemBar.archive, 10)
+	archive_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	archive_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	system_bar_content.add_child(archive_label)
+	tag = NativeUi.label("", 12)
+	tag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tag.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	presentation_group.add_child(tag)
+	system_bar_content.add_child(tag)
+	archive_label.resized.connect(_queue_hud_layout)
+	tag.resized.connect(_queue_hud_layout)
 	heading = NativeUi.label("", 23)
 	heading.clip_text = true
 	heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -214,12 +231,19 @@ func _layout() -> void:
 
 func _layout_hud(safe: Rect2, landscape: bool) -> void:
 	var rule: Dictionary = card_rules.chrome.landscape if landscape else card_rules.chrome.portrait
-	var top := float(rule.top) + maxf(0, safe.position.y)
+	var bar_rule: Dictionary = card_rules.systemBar
 	var bottom := float(rule.bottom) + maxf(0, size.y - safe.end.y)
-	var top_side := float(rule.topHorizontal)
 	var bottom_side := float(rule.bottomHorizontal)
-	tag.position = Vector2(top_side, top)
-	tag.size = Vector2(maxf(0, size.x - top_side * 2), tag.get_combined_minimum_size().y)
+	for label: Label in [archive_label, tag]:
+		var font := label.get_theme_font("font")
+		var text_width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, label.get_theme_font_size("font_size")).x
+		label.size_flags_stretch_ratio = maxf(1, text_width)
+	system_bar.position = Vector2(float(bar_rule.left), float(bar_rule.top))
+	system_bar_content.position = Vector2(float(bar_rule.paddingLeft), float(bar_rule.paddingTop))
+	system_bar_content.size.x = maxf(0, size.x - float(bar_rule.paddingLeft) - float(bar_rule.paddingRight))
+	system_bar_content.size.y = maxf(archive_label.get_combined_minimum_size().y, tag.get_combined_minimum_size().y)
+	system_bar.size = Vector2(size.x - float(bar_rule.left) - float(bar_rule.right), system_bar_content.size.y
+		+ float(bar_rule.paddingTop) + float(bar_rule.paddingBottom) + float(bar_rule.borderBottom))
 	var available := maxf(0, size.x - bottom_side * 2)
 	caption.size.x = available / 2 if landscape else available
 	buffer_status.size.x = available / 2 if landscape else available
@@ -343,6 +367,7 @@ func _set_scene(index: int) -> void:
 		art_layers[layer_index].select(layer_index == index)
 	heading.text = scene.badge + " · " + scene.title
 	tag.text = scene.tag
+	_queue_hud_layout()
 
 func _buffer_progress(_loaded: int, _total: int, _percent: int, _name: String, _ready: bool, token: int) -> void:
 	if token == generation and playing and not closing and is_inside_tree() and not is_queued_for_deletion():

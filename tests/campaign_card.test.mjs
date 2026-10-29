@@ -28,7 +28,11 @@ test('original cinematic narrative card retains responsive viewport geometry',as
   assert.deepEqual(capture.rules.chrome,{
     landscape:{topHorizontal:24,top:14,bottomHorizontal:24,bottom:14,gap:0},
     portrait:{topHorizontal:14,top:8,bottomHorizontal:14,bottom:10,gap:4}});
+  assert.deepEqual(capture.rules.systemBar,{top:0,left:0,right:0,paddingTop:5,paddingBottom:5,paddingLeft:44,paddingRight:44,borderBottom:1,
+    archive:'TACTICAL ARCHIVE // 戰術檔案解密記錄'});
   assert.equal(capture.rules.border,1);
   assert.equal(capture.rules.layoutUnits,64);
   assert.equal(capture.cases.length,15);
+  for(const sample of capture.cases.filter(row=>row.size[0]>=320))
+    assert.deepEqual(sample.systemBarRect.slice(0,3),[0,0,sample.size[0]]);
 });

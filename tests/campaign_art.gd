@@ -55,7 +55,7 @@ func _run() -> void:
 		_pause_art(view)
 		await get_tree().process_frame
 		view.card.hide()
-		view.tag.hide()
+		view.system_bar.hide()
 		view.buffer_status.hide()
 		view.caption.hide()
 		view.hold_indicator.hide()

@@ -313,6 +313,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_heading.tscn` retain original scene changes, repeated and invalid
   indices, imported text and usable portrait/landscape header geometry. Native
   font metrics and header styling still require their separate visual contracts.
+  Each crawl section retains the original separate badge and prefixed title,
+  including the source marker gap. `node tools/campaign_section_marker_capture.mjs`,
+  `node --test tests/campaign_section_marker.test.mjs` and real-driver
+  `tests/campaign_section_marker.tscn` compare the prologue and both first-chapter
+  perspectives and check the marker controls at portrait/landscape sizes. The
+  checks do not qualify source typography, paragraph spacing or active styling.
   The crawl ending retains the source divider and distinct prologue/chapter notes.
   Prologue uses its original terminal button even when a caller supplies another
   label; a chapter uses its supplied label or the source fallback when empty.

@@ -33,6 +33,7 @@ var presentation_group: CanvasGroup
 var transition_rules: Dictionary
 var card_rules: Dictionary
 var ending_rules: Dictionary
+var section_marker_rules: Dictionary
 var fade_opacity := 1.0:
 	set(value):
 		fade_opacity = value
@@ -67,6 +68,7 @@ func _ready() -> void:
 	transition_rules = Content.read_json("res://data/campaign_transition.json").rules
 	card_rules = Content.read_json("res://data/campaign_card.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
+	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
@@ -181,7 +183,14 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		art_layers.append(layer)
 		var section := VBoxContainer.new()
 		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		section.add_child(NativeUi.label(scene.badge + " · " + scene.title, 19))
+		var marker := HBoxContainer.new()
+		marker.add_theme_constant_override("separation", int(section_marker_rules.gap))
+		section.add_child(marker)
+		marker.add_child(NativeUi.label(scene.badge, 19))
+		var section_title := NativeUi.label(String(section_marker_rules.prefix) + String(scene.title), 19)
+		section_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		section_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		marker.add_child(section_title)
 		section.add_child(NativeUi.prose("\n\n".join(PackedStringArray(scene.paragraphs)), 18))
 		column.add_child(section)
 		sections.append(section)

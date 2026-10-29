@@ -53,6 +53,17 @@ func _check_cases(cases: Array) -> void:
 			"Original ending text and button selection for " + str(sample.kind) + " / " + str(sample.finishText))
 		view.scroll.scroll_vertical = int(view.scroll.get_v_scroll_bar().max_value)
 		await get_tree().process_frame
-		_check(view._finish_target(view.finish_button.get_global_rect().get_center()), "Ending button stays reachable in the crawl viewport")
+		var visible := view.scroll.get_global_rect().intersection(view.finish_button.get_global_rect())
+		_check(visible.has_area() and view._finish_target(visible.get_center()), "Visible ending button stays reachable in the crawl viewport")
+		if visible.has_area():
+			for pressed in [true, false]:
+				var click := InputEventMouseButton.new()
+				click.position = visible.get_center()
+				click.global_position = click.position
+				click.button_index = MOUSE_BUTTON_LEFT
+				click.pressed = pressed
+				Input.parse_input_event(click)
+				await get_tree().process_frame
+			_check(view.closing, "Visible ending button receives a real GUI click")
 	view.dispose()
 	view.free()

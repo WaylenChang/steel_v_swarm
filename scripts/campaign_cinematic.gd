@@ -38,6 +38,7 @@ var transition_rules: Dictionary
 var card_rules: Dictionary
 var header_rules: Dictionary
 var ending_rules: Dictionary
+var ending_geometry_rules: Dictionary
 var section_marker_rules: Dictionary
 var marker_geometry_rules: Dictionary
 var section_geometry_rules: Dictionary
@@ -80,6 +81,7 @@ func _ready() -> void:
 	card_rules = Content.read_json("res://data/campaign_card.json").rules
 	header_rules = Content.read_json("res://data/campaign_header.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
+	ending_geometry_rules = Content.read_json("res://data/campaign_ending_geometry.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
 	marker_geometry_rules = Content.read_json("res://data/campaign_marker_geometry.json").rules
 	section_geometry_rules = Content.read_json("res://data/campaign_section_geometry.json").rules
@@ -222,18 +224,36 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		sections.append(section)
 	var ending: Dictionary = ending_rules.prologue if is_prologue else ending_rules.chapter
 	var ending_box := VBoxContainer.new()
+	ending_box.mouse_filter = Control.MOUSE_FILTER_PASS
+	ending_box.add_theme_constant_override("separation", 0)
 	column.add_child(ending_box)
+	var top_space := Control.new()
+	top_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_space.custom_minimum_size.y = float(ending_geometry_rules.padding.top)
+	ending_box.add_child(top_space)
 	end_divider = NativeUi.label(ending_rules.divider, 14)
 	end_divider.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ending_box.add_child(end_divider)
+	var divider_space := Control.new()
+	divider_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	divider_space.custom_minimum_size.y = float(ending_geometry_rules.dividerGap)
+	ending_box.add_child(divider_space)
 	end_note = NativeUi.label(ending.note, 11)
 	end_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	end_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ending_box.add_child(end_note)
+	var note_space := Control.new()
+	note_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	note_space.custom_minimum_size.y = float(ending_geometry_rules.noteGap)
+	ending_box.add_child(note_space)
 	var button_text := String(ending.button) if is_prologue or finish_text.is_empty() else finish_text
 	finish_button = NativeUi.button(button_text, finish)
 	finish_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ending_box.add_child(finish_button)
+	var bottom_space := Control.new()
+	bottom_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom_space.custom_minimum_size.y = float(ending_geometry_rules.padding.bottom)
+	ending_box.add_child(bottom_space)
 	closing = false
 	modulate.a = 1.0
 	fade_opacity = 1.0

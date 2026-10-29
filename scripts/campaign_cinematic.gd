@@ -2,6 +2,7 @@ class_name CampaignCinematic
 extends Control
 
 const Buffer = preload("res://scripts/campaign_buffer.gd")
+const CrawlSection = preload("res://scripts/campaign_crawl_section.gd")
 
 signal finished
 signal finishing
@@ -35,6 +36,7 @@ var card_rules: Dictionary
 var ending_rules: Dictionary
 var section_marker_rules: Dictionary
 var paragraph_rules: Dictionary
+var section_opacity_rules: Dictionary
 var fade_opacity := 1.0:
 	set(value):
 		fade_opacity = value
@@ -71,6 +73,7 @@ func _ready() -> void:
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
 	paragraph_rules = Content.read_json("res://data/campaign_paragraph.json").rules
+	section_opacity_rules = Content.read_json("res://data/campaign_section_opacity.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
@@ -183,20 +186,11 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		art_host.add_child(layer)
 		layer.scene = scene
 		art_layers.append(layer)
-		var section := VBoxContainer.new()
+		var section := CrawlSection.new()
+		section.scene = scene
+		section.marker_rules = section_marker_rules
+		section.opacity_rules = section_opacity_rules
 		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var marker := HBoxContainer.new()
-		marker.add_theme_constant_override("separation", int(section_marker_rules.gap))
-		section.add_child(marker)
-		marker.add_child(NativeUi.label(scene.badge, 19))
-		var section_title := NativeUi.label(String(section_marker_rules.prefix) + String(scene.title), 19)
-		section_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		section_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		marker.add_child(section_title)
-		var paragraphs := VBoxContainer.new()
-		section.add_child(paragraphs)
-		for paragraph: String in scene.paragraphs:
-			paragraphs.add_child(NativeUi.prose(paragraph, 18))
 		column.add_child(section)
 		sections.append(section)
 	var ending: Dictionary = ending_rules.prologue if is_prologue else ending_rules.chapter
@@ -262,8 +256,8 @@ func _layout() -> void:
 		layer.layout_art(size)
 	var paragraph_gap := int(paragraph_rules.landscapeGap) if landscape else int(paragraph_rules.portraitGap)
 	for section: Control in sections:
-		var paragraphs := section.get_child(1) as VBoxContainer
-		paragraphs.add_theme_constant_override("separation", paragraph_gap)
+		if section is CrawlSection:
+			section.set_paragraph_gap(paragraph_gap)
 	var rule: Dictionary = card_rules.landscape if landscape else card_rules.portrait
 	var units := float(card_rules.layoutUnits)
 	var width := minf(float(rule.maxWidth), size.x * float(rule.widthRatio) if landscape else size.x - float(rule.widthMargin))
@@ -411,10 +405,14 @@ func _update_scene() -> void:
 func _set_scene(index: int) -> void:
 	if index == active or index < 0 or index >= scenes.size():
 		return
+	var initial := active < 0
 	active = index
 	var scene: Dictionary = scenes[index]
 	for layer_index in range(art_layers.size()):
 		art_layers[layer_index].select(layer_index == index)
+	for section_index in range(sections.size()):
+		if sections[section_index] is CrawlSection:
+			sections[section_index].select(section_index == index, initial)
 	badge_label.text = scene.badge
 	heading.text = scene.title
 	tag.text = scene.tag

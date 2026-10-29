@@ -41,7 +41,7 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 			var source: Dictionary = program.sections[index]
 			_check(sequence[index].id == source.id and sequence[index].paragraphs == source.paragraphs,
 				"Original paragraph content is imported for " + String(source.id))
-			var paragraphs := section.get_child(1)
+			var paragraphs: Variant = section.get("paragraphs")
 			_check(paragraphs is VBoxContainer and paragraphs.get_child_count() == source.paragraphs.size(),
 				"Original paragraphs remain distinct for " + String(source.id))
 			if paragraphs is VBoxContainer and paragraphs.get_child_count() == source.paragraphs.size():
@@ -53,11 +53,14 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 			view._layout()
 			await get_tree().process_frame
 			await get_tree().process_frame
-			var paragraphs := view.sections[0].get_child(1)
+			var paragraphs: Variant = view.sections[0].get("paragraphs")
 			var expected := int(rules.landscapeGap) if dimensions.x > dimensions.y else int(rules.portraitGap)
 			_check(paragraphs is VBoxContainer and paragraphs.get_theme_constant("separation") == expected,
 				"Original paragraph gap at " + str(dimensions))
 			if paragraphs is VBoxContainer:
+				var content := view.sections[0].get("content") as Control
+				_check(content != null and Rect2(Vector2.ZERO, content.size).encloses(paragraphs.get_rect()),
+					"The isolated section surface contains every paragraph at " + str(dimensions))
 				for index in range(paragraphs.get_child_count()):
 					var label := paragraphs.get_child(index) as Control
 					var separated := label != null and label.size.y > 0

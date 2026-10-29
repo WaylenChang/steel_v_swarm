@@ -318,13 +318,25 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node --test tests/campaign_section_marker.test.mjs` and real-driver
   `tests/campaign_section_marker.tscn` compare the prologue and both first-chapter
   perspectives and check the marker controls at portrait/landscape sizes. The
-  checks do not qualify source typography or active styling.
+  checks do not qualify source typography or complete section styling.
   Crawl paragraphs remain separate, preserve original text and use the captured
   orientation-dependent inter-paragraph margin. `node
   tools/campaign_paragraph_capture.mjs`, `node --test tests/campaign_paragraph.test.mjs`
   and real-driver `tests/campaign_paragraph.tscn` compare browser DOM content and
   margins with native controls for the prologue and both first-chapter perspectives.
   These checks do not qualify text indent, line height, source wrapping or pixels.
+  Active and inactive crawl sections retain the original opacity, 0.4 s ease
+  transition and reversal-shortened durations. The initial selection, including a
+  middle-chapter start, appears immediately; later changes animate independently
+  on wall time. Each section isolates its content before applying group opacity
+  and retires its render target and tween on removal.
+  `node tools/campaign_section_opacity_capture.mjs`,
+  `node --test tests/campaign_section_opacity.test.mjs` and real-driver
+  `tests/campaign_section_opacity.tscn` compare original transition programs,
+  initial and controlled overlapping-layer pixels inside the presentation group,
+  and pause/visibility/retirement behavior. These controlled colors do not qualify
+  actual text pixels, clipping at hardware DPI, full cinematic composition or
+  the performance of populated sections.
   The crawl ending retains the source divider and distinct prologue/chapter notes.
   Prologue uses its original terminal button even when a caller supplies another
   label; a chapter uses its supplied label or the source fallback when empty.

@@ -39,7 +39,7 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 		for index in range(mini(view.sections.size(), program.markers.size())):
 			var section: Control = view.sections[index]
 			var marker: Dictionary = program.markers[index]
-			var row := section.get_child(0)
+			var row: Variant = section.get("marker")
 			_check(row is HBoxContainer and row.get_child_count() == 2, "Original section marker retains separate fields")
 			if row is HBoxContainer and row.get_child_count() == 2:
 				var badge := row.get_child(0) as Label
@@ -52,7 +52,7 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 			view._layout()
 			await get_tree().process_frame
 			await get_tree().process_frame
-			var row := view.sections[0].get_child(0) as HBoxContainer
+			var row := view.sections[0].get("marker") as HBoxContainer
 			if row != null and row.get_child_count() == 2:
 				var bounds := row.get_global_rect()
 				var badge := (row.get_child(0) as Control).get_global_rect()

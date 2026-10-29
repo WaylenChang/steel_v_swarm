@@ -285,6 +285,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_backdrop.tscn` retain source bounds for twelve scale-1 viewports.
   The geometry comparison does not qualify image decoding, blur pixels, exact
   browser transform rounding or complete cinematic composition.
+  The foreground uses the original CSS orientation boundary, clipped inner box,
+  landscape borders and browser layout-unit inset; square viewports retain the
+  portrait frame while the original camera function still selects its landscape
+  pose. `node tools/campaign_frame_geometry_capture.mjs`,
+  `node --test tests/campaign_frame_geometry.test.mjs` and real-driver
+  `tests/campaign_frame_geometry.tscn` retain seventeen source frame sizes,
+  camera targets and six controlled border rasters. Keep the three fractional
+  raster failures and shared coverage contract below. These rasters omit the frame
+  shadow and do not qualify original art, DPI or complete composition.
   Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
   whole-transform reversal shortening and unchanged-target behavior. Serialize
   source camera targets through `CssDecimal` before comparison; keep interpolation
@@ -722,6 +731,22 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   background and portrait paths remain reusable without corrupting cached art.
 
 ### Shared renderer contracts
+
+- **Opus — cinematic fractional frame coverage:** agree a native material or
+  rendering binding under `shaders/campaign_frame*.gdshader` for the clipped
+  foreground and its translucent one-pixel borders in
+  `scripts/campaign_art_layer.gd`. The source and native frame/image bounds agree,
+  but the unchanged two-byte `tests/campaign_frame_geometry.tscn` raster gate
+  differs at 501×500, 377×376 and 641×640: respectively 1,000, 1,128 and 1,280
+  pixels exceed two bytes, with maximum channel differences 23, 151 and 36.
+  For 377×376 at row 188, source pixels 364/365 are `[48,144,208]` and
+  `[29,39,45]`; native pixels are `[37,49,57]` and `[5,7,10]`. Captured source
+  rasters are in `tests/fixtures/campaign_frame_geometry.json`; isolated native
+  and source images can be regenerated with an unused `--evidence-dir`.
+  Preserve the CSS layout-unit positions, clip/border order, alpha and camera
+  transforms. Acceptance: all six captured rasters plus additional fractional
+  frame positions pass without wider tolerance or per-size baked images, then
+  recheck original art, shadows, DPI and populated cinematic composition.
 
 - **Opus — minimap marker coverage:** agree native bindings under
   `shaders/minimap_marker*.gdshader` before Terra replaces the marker drawing in

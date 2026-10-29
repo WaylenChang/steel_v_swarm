@@ -25,12 +25,17 @@ func _run() -> void:
 		var layer = preload("res://scripts/campaign_art_layer.gd").new()
 		add_child(layer)
 		layer.layout_art(Vector2(1000, 500))
+		# This fixture captures a borderless CSS image; actual frame geometry has its own oracle.
+		layer.foreground_clip.size = layer.frame.size
+		layer._apply_pose()
 		for sample: Dictionary in program.frames:
 			var layout := Vector2(sample.layout[0], sample.layout[1])
 			if layer.size != layout:
 				var previous: Tween = layer.pose_tween
 				var displayed: Dictionary = layer.pose.duplicate()
 				layer.layout_art(layout)
+				layer.foreground_clip.size = layer.frame.size
+				layer._apply_pose()
 				_check(layer.pose_tween == previous and layer.pose == displayed, "Resizing preserves the running source transform transition")
 			var background := Rect2(layer.background.position, layer.background.size)
 			if sample.select:

@@ -6,13 +6,16 @@ var viewport: SubViewport
 var content: Control
 var background: TextureRect
 var frame: Control
+var foreground_clip: Control
 var image: TextureRect
+var frame_edges: Array[ColorRect] = []
 var scene: Dictionary = {}
 var selected := false
 var loaded := false
 var texture_provider := Callable()
 var rules: Dictionary
 var backdrop_rules: Dictionary
+var frame_rules: Dictionary
 var opacity := 0.0:
 	set(value):
 		opacity = value
@@ -42,6 +45,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules = Content.read_json("res://data/campaign_art.json").rules
 	backdrop_rules = Content.read_json("res://data/campaign_backdrop.json").rules
+	frame_rules = Content.read_json("res://data/campaign_frame_geometry.json").rules
 	pose_rules = Content.read_json("res://data/campaign_pose.json").rules
 	viewport = SubViewport.new()
 	viewport.disable_3d = true
@@ -68,8 +72,19 @@ func _ready() -> void:
 	frame.clip_contents = true
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(frame)
+	foreground_clip = Control.new()
+	foreground_clip.clip_contents = true
+	foreground_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(foreground_clip)
 	image = _image()
-	frame.add_child(image)
+	foreground_clip.add_child(image)
+	var edge_color: Array = frame_rules.borderColor
+	for index in range(2):
+		var edge := ColorRect.new()
+		edge.color = Color(edge_color[0], edge_color[1], edge_color[2], edge_color[3])
+		edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		frame.add_child(edge)
+		frame_edges.append(edge)
 	opacity = 0
 
 func _image() -> TextureRect:
@@ -118,9 +133,21 @@ func layout_art(view_size: Vector2) -> void:
 	viewport.size = Vector2i(view_size)
 	content.size = view_size
 	group.size = view_size
-	var landscape := size.x >= size.y
-	frame.size = Vector2(minf(size.y, size.x * .94), size.y) if landscape else size
-	frame.position = Vector2((size.x - frame.size.x) / 2, 0)
+	var landscape := size.x > size.y
+	var units := float(frame_rules.layoutUnits)
+	var border := float(frame_rules.borderWidth) if landscape else 0.0
+	var frame_width := float(size.x)
+	if landscape:
+		frame_width = maxf(border * 2, minf(float(size.y), floorf(float(size.x) * float(frame_rules.maxWidthRatio) * units) / units))
+	frame.size = Vector2(frame_width, size.y)
+	frame.position = Vector2((float(size.x) - frame_width) / 2, 0)
+	foreground_clip.position = Vector2(border, 0)
+	foreground_clip.size = Vector2(maxf(0, frame_width - border * 2), size.y)
+	for index in frame_edges.size():
+		var edge := frame_edges[index]
+		edge.visible = landscape
+		edge.position = Vector2(0 if index == 0 else frame_width - border, 0)
+		edge.size = Vector2(border, size.y)
 	var inset := float(backdrop_rules.inset)
 	var scale_factor := float(backdrop_rules.scale)
 	var width := (float(size.x) + inset * 2) * scale_factor
@@ -159,12 +186,15 @@ func _pose_curve(value: float) -> float:
 func _apply_pose() -> void:
 	if image == null:
 		return
-	var inset: float = Content.campaign.presentation.art.inset
-	image.size = frame.size * (1 + inset * 2)
+	var inset := float(frame_rules.inset)
+	var units := float(frame_rules.layoutUnits)
+	var inset_x := floorf(float(foreground_clip.size.x) * inset * units) / units
+	var inset_y := floorf(float(foreground_clip.size.y) * inset * units) / units
+	image.size = Vector2(float(foreground_clip.size.x) + inset_x * 2, float(foreground_clip.size.y) + inset_y * 2)
 	image.pivot_offset = image.size / 2
 	image.scale = Vector2.ONE * float(pose.scale)
-	image.position = Vector2(-float(frame.size.x) * inset + float(image.size.x) * float(pose.x) / 100,
-		-float(frame.size.y) * inset + float(image.size.y) * float(pose.y) / 100)
+	image.position = Vector2(-inset_x + float(image.size.x) * float(pose.x) / 100,
+		-inset_y + float(image.size.y) * float(pose.y) / 100)
 
 func cancel() -> void:
 	if tween != null and tween.is_valid():

@@ -370,8 +370,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node --test tests/campaign_ending_geometry.test.mjs` and real-driver
   `tests/campaign_ending_geometry.tscn` compare the source ending's padding,
   divider and note spacing, scroll limit and focus with controlled element heights
-  in three orientations. Actual typography, text wrapping, source button styling
-  and the caller contract below remain unqualified.
+  in three orientations. The finish button also retains the computed source
+  content insets, font size and pointer cursor. The `.btn.big` selector overrides
+  the later, less-specific `.prologue-finish-btn` declarations.
+  `node tools/campaign_finish_button_capture.mjs`,
+  `node --test tests/campaign_finish_button.test.mjs` and real-driver
+  `tests/campaign_finish_button.tscn` check those insets in normal, hover, pressed
+  and disabled states and controlled content boxes at three viewport sizes. Actual typography,
+  letter spacing, text wrapping, button colors, notch and the caller contract
+  below remain unqualified.
   Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
   whole-transform reversal shortening and unchanged-target behavior. Serialize
   source camera targets through `CssDecimal` before comparison; keep interpolation

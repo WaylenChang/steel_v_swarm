@@ -39,6 +39,7 @@ var card_rules: Dictionary
 var header_rules: Dictionary
 var ending_rules: Dictionary
 var ending_geometry_rules: Dictionary
+var finish_button_rules: Dictionary
 var section_marker_rules: Dictionary
 var marker_geometry_rules: Dictionary
 var section_geometry_rules: Dictionary
@@ -82,6 +83,7 @@ func _ready() -> void:
 	header_rules = Content.read_json("res://data/campaign_header.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	ending_geometry_rules = Content.read_json("res://data/campaign_ending_geometry.json").rules
+	finish_button_rules = Content.read_json("res://data/campaign_finish_button.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
 	marker_geometry_rules = Content.read_json("res://data/campaign_marker_geometry.json").rules
 	section_geometry_rules = Content.read_json("res://data/campaign_section_geometry.json").rules
@@ -250,6 +252,17 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	finish_button = NativeUi.button(button_text, finish)
 	finish_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ending_box.add_child(finish_button)
+	finish_button.add_theme_font_size_override("font_size", int(finish_button_rules.fontSize))
+	if finish_button_rules.cursor == "pointer":
+		finish_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	for state in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
+		if not finish_button.has_theme_stylebox(state):
+			continue
+		var style := finish_button.get_theme_stylebox(state).duplicate() as StyleBox
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			var key: String = ["left", "top", "right", "bottom"][side]
+			style.set_content_margin(side, float(finish_button_rules.padding[key]) + float(finish_button_rules.border[key]))
+		finish_button.add_theme_stylebox_override(state, style)
 	var bottom_space := Control.new()
 	bottom_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bottom_space.custom_minimum_size.y = float(ending_geometry_rules.padding.bottom)

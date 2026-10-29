@@ -34,6 +34,7 @@ var transition_rules: Dictionary
 var card_rules: Dictionary
 var ending_rules: Dictionary
 var section_marker_rules: Dictionary
+var paragraph_rules: Dictionary
 var fade_opacity := 1.0:
 	set(value):
 		fade_opacity = value
@@ -69,6 +70,7 @@ func _ready() -> void:
 	card_rules = Content.read_json("res://data/campaign_card.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
+	paragraph_rules = Content.read_json("res://data/campaign_paragraph.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
@@ -191,7 +193,10 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		section_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		section_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		marker.add_child(section_title)
-		section.add_child(NativeUi.prose("\n\n".join(PackedStringArray(scene.paragraphs)), 18))
+		var paragraphs := VBoxContainer.new()
+		section.add_child(paragraphs)
+		for paragraph: String in scene.paragraphs:
+			paragraphs.add_child(NativeUi.prose(paragraph, 18))
 		column.add_child(section)
 		sections.append(section)
 	var ending: Dictionary = ending_rules.prologue if is_prologue else ending_rules.chapter
@@ -255,6 +260,10 @@ func _layout() -> void:
 	art_host.size = size
 	for layer: Control in art_layers:
 		layer.layout_art(size)
+	var paragraph_gap := int(paragraph_rules.landscapeGap) if landscape else int(paragraph_rules.portraitGap)
+	for section: Control in sections:
+		var paragraphs := section.get_child(1) as VBoxContainer
+		paragraphs.add_theme_constant_override("separation", paragraph_gap)
 	var rule: Dictionary = card_rules.landscape if landscape else card_rules.portrait
 	var units := float(card_rules.layoutUnits)
 	var width := minf(float(rule.maxWidth), size.x * float(rule.widthRatio) if landscape else size.x - float(rule.widthMargin))

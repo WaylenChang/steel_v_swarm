@@ -318,7 +318,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node --test tests/campaign_section_marker.test.mjs` and real-driver
   `tests/campaign_section_marker.tscn` compare the prologue and both first-chapter
   perspectives and check the marker controls at portrait/landscape sizes. The
-  checks do not qualify source typography, paragraph spacing or active styling.
+  checks do not qualify source typography or active styling.
+  Crawl paragraphs remain separate, preserve original text and use the captured
+  orientation-dependent inter-paragraph margin. `node
+  tools/campaign_paragraph_capture.mjs`, `node --test tests/campaign_paragraph.test.mjs`
+  and real-driver `tests/campaign_paragraph.tscn` compare browser DOM content and
+  margins with native controls for the prologue and both first-chapter perspectives.
+  These checks do not qualify text indent, line height, source wrapping or pixels.
   The crawl ending retains the source divider and distinct prologue/chapter notes.
   Prologue uses its original terminal button even when a caller supplies another
   label; a chapter uses its supplied label or the source fallback when empty.

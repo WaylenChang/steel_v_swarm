@@ -12,6 +12,7 @@ var active := -1
 var playing := false
 var closing := false
 var scroll: ScrollContainer
+var crawl_margin: MarginContainer
 var column: VBoxContainer
 var sections: Array[Control] = []
 var art_host: Control
@@ -37,6 +38,8 @@ var ending_rules: Dictionary
 var section_marker_rules: Dictionary
 var paragraph_rules: Dictionary
 var section_opacity_rules: Dictionary
+var crawl_inset_rules: Dictionary
+var crawl_top := 0.0
 var fade_opacity := 1.0:
 	set(value):
 		fade_opacity = value
@@ -74,6 +77,7 @@ func _ready() -> void:
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
 	paragraph_rules = Content.read_json("res://data/campaign_paragraph.json").rules
 	section_opacity_rules = Content.read_json("res://data/campaign_section_opacity.json").rules
+	crawl_inset_rules = Content.read_json("res://data/campaign_crawl_insets.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
@@ -136,10 +140,14 @@ func _ready() -> void:
 	scroll.get_v_scroll_bar().step = 1
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(scroll)
+	crawl_margin = MarginContainer.new()
+	crawl_margin.mouse_filter = Control.MOUSE_FILTER_PASS
+	crawl_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(crawl_margin)
 	column = VBoxContainer.new()
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_theme_constant_override("separation", 38)
-	scroll.add_child(column)
+	crawl_margin.add_child(column)
 	caption = NativeUi.label(Content.label("story_skip_hint"), 14)
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buffer_status = NativeUi.label("", 14)
@@ -241,7 +249,7 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		return
 	if start_index > 0:
 		var section: Control = sections[start_index]
-		scroll_offset = maxf(0, section.position.y + section.size.y * float(Content.campaign.presentation.crawl.start) - scroll.size.y * float(Content.campaign.presentation.crawl.focus))
+		scroll_offset = maxf(0, section.position.y + crawl_top + section.size.y * float(Content.campaign.presentation.crawl.start) - scroll.size.y * float(Content.campaign.presentation.crawl.focus))
 		_write_scroll()
 		_update_scene()
 		_set_scene(start_index)
@@ -254,6 +262,10 @@ func _layout() -> void:
 	art_host.size = size
 	for layer: Control in art_layers:
 		layer.layout_art(size)
+	var insets: Dictionary = crawl_inset_rules.landscape if landscape else crawl_inset_rules.portrait
+	crawl_top = float(insets.top)
+	for side in ["top", "right", "bottom", "left"]:
+		crawl_margin.add_theme_constant_override("margin_" + side, int(insets[side]))
 	var paragraph_gap := int(paragraph_rules.landscapeGap) if landscape else int(paragraph_rules.portraitGap)
 	for section: Control in sections:
 		if section is CrawlSection:
@@ -394,7 +406,7 @@ func _update_scene() -> void:
 		return
 	var positions: Array = []
 	for section: Control in sections:
-		positions.append({"top": section.position.y, "height": section.size.y})
+		positions.append({"top": section.position.y + crawl_top, "height": section.size.y})
 	var focus := CampaignRules.focus_section(scroll.scroll_vertical, scroll.size.y, positions, active)
 	_set_scene(int(focus.index))
 	var pose := CampaignRules.camera_pose(scenes[active].camera, focus.progress, size.x >= size.y)

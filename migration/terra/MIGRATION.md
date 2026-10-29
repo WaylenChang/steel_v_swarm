@@ -366,6 +366,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   native scroll containers, including half-pixel, pause, gap, limit and replay
   cases. Declared geometry isolates scrolling; it does not qualify narrative
   layout, complete frame ordering, camera-target delivery or hardware DPI behavior.
+  The crawl viewport retains the source landscape/portrait padding, including the
+  portrait rule for square viewports. Section focus and deferred chapter jumps
+  include its top inset; the bottom inset contributes to scroll clamping.
+  `node tools/campaign_crawl_insets_capture.mjs`,
+  `node --test tests/campaign_crawl_insets.test.mjs` and real-driver
+  `tests/campaign_crawl_insets.tscn` compare original padded geometry, focus,
+  camera targets, chapter jumps and native GUI wheel/touch propagation. Controlled
+  section sizes do not qualify source typography, scrollbar pixels or hardware input.
   Camera-target delivery follows the original frame branch: paused or saturated
   automatic scrolling does not reevaluate focus solely because section geometry
   changed. Explicit scroll/resize producers retain their own focus updates.

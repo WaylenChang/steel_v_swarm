@@ -224,7 +224,7 @@ func _play_intro(deploy_after: bool) -> void:
 	cinematic.finished.connect(func():
 		if deploy_after:
 			_emit_deployment(), CONNECT_ONE_SHOT)
-	cinematic.play(scenes, Content.label("story_deploy" if deploy_after else "story_back_brief"))
+	cinematic.play(scenes, Content.label("story_deploy") if deploy_after else "")
 
 func _play_prologue() -> void:
 	_clear_finished_handlers()

@@ -354,8 +354,8 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   tools/campaign_section_geometry_capture.mjs`,
   `node --test tests/campaign_section_geometry.test.mjs` and real-driver
   `tests/campaign_section_geometry.tscn` compare controlled scroll bounds, section
-  offsets and focus progress in both orientations and a square viewport. The
-  Original dashed-border coverage is captured by
+  offsets and focus progress in both orientations and a square viewport. Original
+  dashed-border coverage is captured by
   `node tools/campaign_section_border_capture.mjs`,
   `node --test tests/campaign_section_border.test.mjs` and real-driver
   `tests/campaign_section_border.tscn`. The border remains undrawn pending the
@@ -402,6 +402,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_crawl_insets.tscn` compare original padded geometry, focus,
   camera targets, chapter jumps and native GUI wheel/touch propagation. Controlled
   section sizes do not qualify source typography, scrollbar pixels or hardware input.
+  `node tools/campaign_scrollbar_capture.mjs`,
+  `node --test tests/campaign_scrollbar.test.mjs` and real-driver
+  `tests/campaign_scrollbar.tscn` retain original classic-scrollbar dimensions,
+  controlled thumb rasters and scroll positions with the separate edge mask
+  disabled. Keep the strict width and pixel failures and shared adapter contract
+  below; these cases do not qualify overlay scrollbars, hardware DPI or input.
   `node tools/campaign_crawl_mask_capture.mjs`,
   `node --test tests/campaign_crawl_mask.test.mjs` and real-driver
   `tests/campaign_crawl_mask.tscn` retain original edge-mask pixels and unmasked
@@ -841,6 +847,30 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   background and portrait paths remain reusable without corrupting cached art.
 
 ### Shared renderer contracts
+
+- **Opus — source scrollbar geometry and input:** agree a shared native binding
+  in `scripts/source_scrollbar.gd`, with a material under `shaders/` if needed,
+  before Terra replaces the default scrollbar in `scripts/campaign_cinematic.gd`.
+  The captured classic browser scrollbar has a 4 px transparent track and a
+  2 px radius thumb in `rgba(95,208,242,0.25)`; native currently reserves 8 px.
+  At 320×100 with overflow, source content is 316 px wide and native is 312 px.
+  All captured scroll offsets and the no-overflow control pass, but the 16
+  overflowing cases in `tests/campaign_scrollbar.tscn` retain 32 strict width
+  and raster failures. A 4 px native-style diagnostic fixes width and matches
+  both ends of the 320×100/400 px case, but differs at its midpoint by 14 pixels;
+  in the 96×24/400 px case, the source thumb covers 17 rows and the diagnostic
+  covers two, differing in 68 pixels at the unchanged two-byte gate. At (94,16),
+  source RGBA is `[37,94,125,255]` and the diagnostic is `[20,60,90,255]`.
+  Browser PNGs and sampled thumb bounds are in
+  `tests/fixtures/campaign_scrollbar.json`; current and diagnostic images are in
+  `artifacts/terra/campaign-scrollbar-probe-154cd6b2/`. The capture enables
+  Chromium's classic scrollbar and disables only the separate viewport mask.
+  Preserve source visibility, reserved width, minimum thumb, integer placement,
+  color and rounded coverage, plus native scroll values, wheel/touch, thumb drag,
+  track interaction and lifecycle. Acceptance: all seventeen original cases and
+  additional fractional-size, DPI and actual input programs pass without wider
+  tolerance or per-case baked images. Terra then binds the accepted adapter and
+  checks the edge mask, populated narrative, scrolling and complete composition.
 
 - **Opus — cinematic section dashed border:** agree a native material or
   rendering binding under `shaders/campaign_section_border.gdshader` for

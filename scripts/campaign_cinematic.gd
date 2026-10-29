@@ -16,7 +16,8 @@ var sections: Array[Control] = []
 var art_host: Control
 var art_layers: Array[Control] = []
 var shade: ColorRect
-var card: PanelContainer
+var card: Control
+var card_panel: PanelContainer
 var heading: Label
 var tag: Label
 var finish_button: Button
@@ -24,6 +25,7 @@ var caption: Label
 var hold_indicator: Control
 var presentation_group: CanvasGroup
 var transition_rules: Dictionary
+var card_rules: Dictionary
 var fade_opacity := 1.0:
 	set(value):
 		fade_opacity = value
@@ -46,6 +48,7 @@ var buffer_status: Label
 var buffer_rules: Dictionary
 var buffer_warning := false
 var buffer_warning_timers: Array[Timer] = []
+var hud_layout_queued := false
 
 func _now_msec() -> float:
 	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
@@ -55,6 +58,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	transition_rules = Content.read_json("res://data/campaign_transition.json").rules
+	card_rules = Content.read_json("res://data/campaign_card.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
@@ -68,32 +72,48 @@ func _ready() -> void:
 	art_host.clip_contents = true
 	art_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	presentation_group.add_child(art_host)
-	card = NativeUi.panel(Vector2(560, 340))
+	card = Control.new()
+	card.clip_contents = true
 	presentation_group.add_child(card)
+	card_panel = NativeUi.panel(Vector2.ZERO)
+	card_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	var panel_style := card_panel.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
+	panel_style.content_margin_left = card_rules.border
+	panel_style.content_margin_right = card_rules.border
+	panel_style.content_margin_top = card_rules.border
+	panel_style.content_margin_bottom = card_rules.border
+	card_panel.add_theme_stylebox_override("panel", panel_style)
+	card.add_child(card_panel)
 	var body := VBoxContainer.new()
-	card.add_child(body)
+	body.add_theme_constant_override("separation", 0)
+	card_panel.add_child(body)
 	tag = NativeUi.label("", 14)
-	body.add_child(tag)
+	tag.clip_text = true
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	presentation_group.add_child(tag)
 	heading = NativeUi.label("", 23)
-	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	heading.clip_text = true
+	heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	body.add_child(heading)
 	scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.get_v_scroll_bar().step = 1
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.custom_minimum_size.y = 180
 	body.add_child(scroll)
 	column = VBoxContainer.new()
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_theme_constant_override("separation", 38)
 	scroll.add_child(column)
 	caption = NativeUi.label(Content.label("story_skip_hint"), 14)
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buffer_status = NativeUi.label("", 14)
 	buffer_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buffer_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buffer_status.hide()
-	body.add_child(buffer_status)
-	body.add_child(caption)
+	presentation_group.add_child(buffer_status)
+	presentation_group.add_child(caption)
+	caption.resized.connect(_queue_hud_layout)
+	buffer_status.resized.connect(_queue_hud_layout)
 	scroll.get_v_scroll_bar().value_changed.connect(func(value):
 		if not writing_scroll:
 			scroll_offset = value
@@ -172,15 +192,54 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 func _layout() -> void:
 	if not is_instance_valid(card):
 		return
-	var landscape := size.x >= size.y
+	var landscape := size.x > size.y
 	shade.size = size
 	art_host.size = size
 	for layer: Control in art_layers:
 		layer.layout_art(size)
-	card.size = Vector2(minf(560, size.x - 32), minf(360, size.y * (0.46 if landscape else 0.40)))
-	card.position = Vector2(28 if landscape else (size.x - card.size.x) / 2, size.y - card.size.y - 32)
-	card.custom_minimum_size = Vector2.ZERO
+	var rule: Dictionary = card_rules.landscape if landscape else card_rules.portrait
+	var units := float(card_rules.layoutUnits)
+	var width := minf(float(rule.maxWidth), size.x * float(rule.widthRatio) if landscape else size.x - float(rule.widthMargin))
+	var height := minf(float(rule.maxHeight), size.y * float(rule.heightRatio))
+	var minimum := float(card_rules.border) * 2
+	width = maxf(minimum, floor(width * units) / units)
+	height = maxf(minimum, floor(height * units) / units)
+	var safe := NativeUi.safe_area(self)
+	var safe_bottom := maxf(0, size.y - safe.end.y)
+	card.size = Vector2(width, height)
+	card.position = Vector2((size.x - width) / 2, size.y - height - float(rule.bottom) - safe_bottom)
+	card_panel.size = card.size
+	_layout_hud(safe, landscape)
 	_update_scene()
+
+func _layout_hud(safe: Rect2, landscape: bool) -> void:
+	var rule: Dictionary = card_rules.chrome.landscape if landscape else card_rules.chrome.portrait
+	var top := float(rule.top) + maxf(0, safe.position.y)
+	var bottom := float(rule.bottom) + maxf(0, size.y - safe.end.y)
+	var top_side := float(rule.topHorizontal)
+	var bottom_side := float(rule.bottomHorizontal)
+	tag.position = Vector2(top_side, top)
+	tag.size = Vector2(maxf(0, size.x - top_side * 2), tag.get_combined_minimum_size().y)
+	var available := maxf(0, size.x - bottom_side * 2)
+	caption.size.x = available / 2 if landscape else available
+	buffer_status.size.x = available / 2 if landscape else available
+	var caption_height := caption.get_combined_minimum_size().y
+	var status_height := buffer_status.get_combined_minimum_size().y
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if landscape else HORIZONTAL_ALIGNMENT_LEFT
+	caption.size = Vector2(available / 2 if landscape else available, caption_height)
+	caption.position = Vector2(size.x - bottom_side - caption.size.x if landscape else bottom_side, size.y - bottom - caption_height)
+	buffer_status.size = Vector2(available / 2 if landscape else available, status_height)
+	buffer_status.position = Vector2(bottom_side, size.y - bottom - status_height if landscape else caption.position.y - float(rule.gap) - status_height)
+
+func _queue_hud_layout() -> void:
+	if not hud_layout_queued:
+		hud_layout_queued = true
+		call_deferred("_refresh_hud")
+
+func _refresh_hud() -> void:
+	hud_layout_queued = false
+	if is_inside_tree() and is_instance_valid(caption) and is_instance_valid(buffer_status):
+		_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func _process(_delta: float) -> void:
 	if not playing or closing:
@@ -294,6 +353,7 @@ func _render_buffer() -> void:
 		return
 	buffer_status.text = buffer_rules.ready if buffer_loader.complete else String(buffer_rules.pending).replace("{percent}", str(buffer_loader.percent))
 	caption.text = buffer_rules.readyHint if buffer_loader.complete else buffer_rules.pendingHint
+	_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func _try_skip() -> void:
 	if not playing or closing or not is_inside_tree() or is_queued_for_deletion():
@@ -303,6 +363,7 @@ func _try_skip() -> void:
 		return
 	buffer_warning = true
 	buffer_status.text = String(buffer_rules.warning).replace("{percent}", str(buffer_loader.percent))
+	_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 	var timer := Timer.new()
 	timer.one_shot = true
 	timer.ignore_time_scale = true
@@ -341,6 +402,7 @@ func _retire_buffer() -> void:
 	if is_instance_valid(buffer_status):
 		buffer_status.hide()
 		caption.text = Content.label("story_skip_hint")
+		_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func finish() -> void:
 	if not playing or closing:

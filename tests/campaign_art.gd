@@ -27,8 +27,17 @@ func _run() -> void:
 	if failures > 0:
 		_finish_art()
 		return
-	var output := "res://build/campaign_art"
-	_check(DirAccess.make_dir_recursive_absolute(output) == OK, "Create cinematic art evidence directory")
+	var output := ""
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("--evidence-dir="):
+			output = argument.trim_prefix("--evidence-dir=")
+	if not output.is_empty():
+		var absolute := ProjectSettings.globalize_path(output)
+		_check(not DirAccess.dir_exists_absolute(absolute), "Preserve existing cinematic art evidence")
+		if failures > 0:
+			_finish_art()
+			return
+		_check(DirAccess.make_dir_recursive_absolute(absolute) == OK, "Create cinematic art evidence directory")
 	var report: Array = []
 	for program_index in range(capture.programs.size()):
 		var program: Dictionary = capture.programs[program_index]
@@ -46,6 +55,9 @@ func _run() -> void:
 		_pause_art(view)
 		await get_tree().process_frame
 		view.card.hide()
+		view.tag.hide()
+		view.buffer_status.hide()
+		view.caption.hide()
 		view.hold_indicator.hide()
 		var identities: Array = []
 		for index in range(view.art_layers.size()):
@@ -87,8 +99,9 @@ func _run() -> void:
 					report.append({"program": program_index, "frame": frame_index, "pixels": result.pixels, "maximum": result.maximum,
 						"opaqueBytes": preload("res://tests/opaque_canvas_witness.gd").compare(actual, expected)})
 					_check(result.pixels == 0, "Original layered art transition: frame=%d pixels=%d maximum=%f" % [frame_index, result.pixels, result.maximum])
-					Raster.diagnostic(actual).save_png(output + "/native_%d.png" % frame_index)
-					expected.save_png(output + "/source_%d.png" % frame_index)
+					if not output.is_empty():
+						Raster.diagnostic(actual).save_png(output + "/native_%d.png" % frame_index)
+						expected.save_png(output + "/source_%d.png" % frame_index)
 		var retired := view.art_layers.duplicate()
 		view.dispose()
 		_check(view.art_layers.is_empty() and view.art_host.get_child_count() == 0, "Cinematic replacement releases every retained art layer")
@@ -96,10 +109,11 @@ func _run() -> void:
 			_check(layer.tween == null or not layer.tween.is_valid(), "Retired art cannot continue a pending opacity transition")
 			_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED, "Retired art stops its isolated render target")
 		viewport.free()
-	var file := FileAccess.open(output + "/report.json", FileAccess.WRITE)
-	if file != null:
-		file.store_string(JSON.stringify(report, "  "))
-		file.close()
+	if not output.is_empty():
+		var file := FileAccess.open(output + "/report.json", FileAccess.WRITE)
+		if file != null:
+			file.store_string(JSON.stringify(report, "  "))
+			file.close()
 	_finish_art()
 
 func _pause_art(view: CampaignCinematic) -> void:

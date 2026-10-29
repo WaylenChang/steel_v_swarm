@@ -355,7 +355,11 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node --test tests/campaign_section_geometry.test.mjs` and real-driver
   `tests/campaign_section_geometry.tscn` compare controlled scroll bounds, section
   offsets and focus progress in both orientations and a square viewport. The
-  original dashed border is not yet drawn, and actual text layout remains open.
+  Original dashed-border coverage is captured by
+  `node tools/campaign_section_border_capture.mjs`,
+  `node --test tests/campaign_section_border.test.mjs` and real-driver
+  `tests/campaign_section_border.tscn`. The border remains undrawn pending the
+  shared renderer contract below; actual text layout remains open.
   The crawl ending retains the source divider and distinct prologue/chapter notes.
   Prologue uses its original terminal button even when a caller supplies another
   label; a chapter uses its supplied label or the source fallback when empty.
@@ -832,6 +836,24 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   background and portrait paths remain reusable without corrupting cached art.
 
 ### Shared renderer contracts
+
+- **Opus — cinematic section dashed border:** agree a native material or
+  rendering binding under `shaders/campaign_section_border.gdshader` for
+  `scripts/campaign_crawl_section.gd`. The original one-pixel border is dashed
+  `rgba(122,158,178,0.16)`; its dash positions and edge coverage vary with the
+  section width. At the unchanged two-byte gate, the currently undrawn border
+  differs in 76/81/248/248/501 pixels at widths 96/101/320/319/641. A native
+  `draw_dashed_line` diagnostic using the captured initial three-pixel dash still
+  differs in 63/66/211/208/430 pixels, with maximum channel difference 27 bytes.
+  Original PNGs are in `tests/fixtures/campaign_section_border.json`; source,
+  current and diagnostic images are in
+  `artifacts/terra/campaign-section-border-probe-62fc93b4/`. Preserve the
+  width-dependent dash placement, fractional coverage, source color and alpha,
+  and place the line within the section's isolated opacity group before scroll
+  clipping and the outer presentation fade. Acceptance: Opus validates all five
+  original rasters and further fractional-width and DPI cases without wider
+  tolerance or per-size baked images. Terra then binds the agreed renderer and
+  checks `tests/campaign_section_border.tscn`, scrolling and full composition.
 
 - **Opus — cinematic crawl edge mask:** publish an accepted binding in
   `shaders/campaign_crawl_mask.gdshader` for the scroll viewport consumed by

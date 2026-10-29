@@ -306,6 +306,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   reachability. Native font advances determine the current bar's flex allocation;
   these checks do not qualify source text wrapping, the card's typography,
   gradient, blur, clipped corners, hardware safe areas or complete cinematic pixels.
+  Scene selection updates the original date, badge and title as distinct fields;
+  the badge and title share a horizontal header and the title can truncate.
+  `node tools/campaign_heading_capture.mjs`,
+  `node --test tests/campaign_heading.test.mjs` and real-driver
+  `tests/campaign_heading.tscn` retain original scene changes, repeated and invalid
+  indices, imported text and usable portrait/landscape header geometry. Native
+  font metrics and header styling still require their separate visual contracts.
   Foreground transforms retain the original 0.25 s cubic-bezier(0.1,0.8,0.3,1),
   whole-transform reversal shortening and unchanged-target behavior. Serialize
   source camera targets through `CssDecimal` before comparison; keep interpolation

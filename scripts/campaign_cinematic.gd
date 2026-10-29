@@ -18,6 +18,7 @@ var art_layers: Array[Control] = []
 var shade: ColorRect
 var card: Control
 var card_panel: PanelContainer
+var badge_label: Label
 var heading: Label
 var system_bar: Control
 var system_bar_content: HBoxContainer
@@ -108,10 +109,17 @@ func _ready() -> void:
 	system_bar_content.add_child(tag)
 	archive_label.resized.connect(_queue_hud_layout)
 	tag.resized.connect(_queue_hud_layout)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 0)
+	body.add_child(header)
+	badge_label = NativeUi.label("", 14)
+	header.add_child(badge_label)
 	heading = NativeUi.label("", 23)
 	heading.clip_text = true
 	heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	body.add_child(heading)
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	header.add_child(heading)
 	scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.get_v_scroll_bar().step = 1
@@ -372,7 +380,8 @@ func _set_scene(index: int) -> void:
 	var scene: Dictionary = scenes[index]
 	for layer_index in range(art_layers.size()):
 		art_layers[layer_index].select(layer_index == index)
-	heading.text = scene.badge + " · " + scene.title
+	badge_label.text = scene.badge
+	heading.text = scene.title
 	tag.text = scene.tag
 	_queue_hud_layout()
 

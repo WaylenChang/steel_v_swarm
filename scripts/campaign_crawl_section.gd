@@ -2,10 +2,12 @@ extends Container
 
 var scene: Dictionary = {}
 var marker_rules: Dictionary = {}
+var marker_geometry_rules: Dictionary = {}
 var geometry_rules: Dictionary = {}
 var opacity_rules: Dictionary = {}
 var layer: Sprite2D
 var content: VBoxContainer
+var marker_panel: PanelContainer
 var marker: HBoxContainer
 var paragraphs: VBoxContainer
 var selected := false
@@ -23,11 +25,24 @@ func _ready() -> void:
 	add_child(layer)
 	content = VBoxContainer.new()
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override("separation", int(marker_geometry_rules.marginBottom))
 	layer.content.add_child(content)
 	content.minimum_size_changed.connect(_content_changed)
+	marker_panel = PanelContainer.new()
+	var marker_style := StyleBoxFlat.new()
+	var border: Array = marker_geometry_rules.borderColor
+	marker_style.bg_color = Color.TRANSPARENT
+	marker_style.border_color = Color(border[0], border[1], border[2], border[3])
+	marker_style.border_width_bottom = int(marker_geometry_rules.borderWidth)
+	marker_style.content_margin_left = 0
+	marker_style.content_margin_right = 0
+	marker_style.content_margin_top = 0
+	marker_style.content_margin_bottom = float(marker_geometry_rules.bottomPadding) + float(marker_geometry_rules.borderWidth)
+	marker_panel.add_theme_stylebox_override("panel", marker_style)
+	content.add_child(marker_panel)
 	marker = HBoxContainer.new()
 	marker.add_theme_constant_override("separation", int(marker_rules.gap))
-	content.add_child(marker)
+	marker_panel.add_child(marker)
 	marker.add_child(NativeUi.label(scene.badge, 19))
 	var title := NativeUi.label(String(marker_rules.prefix) + String(scene.title), 19)
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

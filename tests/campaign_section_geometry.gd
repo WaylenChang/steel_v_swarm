@@ -36,7 +36,7 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 	view.scroll.size = Vector2(320, 100)
 	for index in range(view.sections.size()):
 		var section = view.sections[index]
-		section.marker.hide()
+		section.marker_panel.hide()
 		for child in section.paragraphs.get_children():
 			section.paragraphs.remove_child(child)
 			child.queue_free()

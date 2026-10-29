@@ -325,6 +325,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_section_marker.tscn` compare the prologue and both first-chapter
   perspectives and check the marker controls at portrait/landscape sizes. The
   checks do not qualify source typography or complete section styling.
+  The marker row retains the source bottom padding, solid border and margin to
+  its paragraphs. `node tools/campaign_marker_geometry_capture.mjs`,
+  `node --test tests/campaign_marker_geometry.test.mjs` and real-driver
+  `tests/campaign_marker_geometry.tscn` check source border values, controlled
+  section sizes including empty paragraphs, scroll bounds and focus progress. They
+  do not qualify native text metrics, fractional border coverage or complete pixels.
   Crawl paragraphs remain separate, preserve original text and use the captured
   orientation-dependent inter-paragraph margin. `node
   tools/campaign_paragraph_capture.mjs`, `node --test tests/campaign_paragraph.test.mjs`

@@ -46,6 +46,7 @@ func _run() -> void:
 
 func _check_programs(capture: Dictionary, output: String) -> void:
 	var marker_rules: Dictionary = Content.read_json("res://data/campaign_section_marker.json").rules
+	var marker_geometry_rules: Dictionary = Content.read_json("res://data/campaign_marker_geometry.json").rules
 	var geometry_rules: Dictionary = Content.read_json("res://data/campaign_section_geometry.json").rules
 	for program_index in range(capture.programs.size()):
 		var viewport := SubViewport.new()
@@ -65,6 +66,7 @@ func _check_programs(capture: Dictionary, output: String) -> void:
 			var section := Section.new()
 			section.scene = capture.scenes[index]
 			section.marker_rules = marker_rules
+			section.marker_geometry_rules = marker_geometry_rules
 			section.geometry_rules = geometry_rules
 			section.opacity_rules = capture.rules
 			group.add_child(section)

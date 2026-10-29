@@ -39,6 +39,7 @@ var card_rules: Dictionary
 var header_rules: Dictionary
 var ending_rules: Dictionary
 var section_marker_rules: Dictionary
+var marker_geometry_rules: Dictionary
 var section_geometry_rules: Dictionary
 var paragraph_rules: Dictionary
 var section_opacity_rules: Dictionary
@@ -80,6 +81,7 @@ func _ready() -> void:
 	header_rules = Content.read_json("res://data/campaign_header.json").rules
 	ending_rules = Content.read_json("res://data/campaign_ending.json").rules
 	section_marker_rules = Content.read_json("res://data/campaign_section_marker.json").rules
+	marker_geometry_rules = Content.read_json("res://data/campaign_marker_geometry.json").rules
 	section_geometry_rules = Content.read_json("res://data/campaign_section_geometry.json").rules
 	paragraph_rules = Content.read_json("res://data/campaign_paragraph.json").rules
 	section_opacity_rules = Content.read_json("res://data/campaign_section_opacity.json").rules
@@ -212,6 +214,7 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		var section := CrawlSection.new()
 		section.scene = scene
 		section.marker_rules = section_marker_rules
+		section.marker_geometry_rules = marker_geometry_rules
 		section.geometry_rules = section_geometry_rules
 		section.opacity_rules = section_opacity_rules
 		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -29,9 +29,12 @@ var radio_layout_mode := ""
 var clock_msec := Callable()
 
 func _current(token: int) -> bool:
-	if token != generation or not is_inside_tree():
+	return token == generation and _node_live(self)
+
+static func _node_live(node: Node) -> bool:
+	if not is_instance_valid(node) or not node.is_inside_tree():
 		return false
-	var owner: Node = self
+	var owner := node
 	while owner != null:
 		if owner.is_queued_for_deletion():
 			return false
@@ -375,22 +378,24 @@ func _step() -> void:
 	_after(CampaignRules.line_seconds(line.t), _step)
 
 func transcript(host: VBoxContainer, scene: Dictionary) -> void:
-	if not _current(generation) or not is_instance_valid(host) or not host.is_inside_tree() or host.is_queued_for_deletion() or scene.get("lines", []).is_empty():
+	if not _current(generation) or not _node_live(host) or scene.get("lines", []).is_empty():
 		return
 	var token := generation
 	host.add_child(NativeUi.label(scene.title, 24))
-	if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+	if not _current(token) or not _node_live(host):
 		return
 	host.add_child(NativeUi.prose(scene.note, 16))
-	if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+	if not _current(token) or not _node_live(host):
 		return
 	var body = preload("res://scripts/dialogue_transcript_body.gd").new()
 	host.add_child(body)
-	if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+	if not _current(token) or not _node_live(host):
 		return
 	var leaders := CampaignRules.leaders(scene.lines, side, true)
 	for index in range(leaders.size()):
 		body.add_portrait(Content.campaign_art(leaders[index], "portrait", art_mode), index > 0)
+		if not _current(token) or not _node_live(host):
+			return
 	var delay := float(Content.campaign.presentation.transcript.delay) * 1000
 	var interval := float(Content.campaign.presentation.transcript.step) * 1000
 	for index in range(scene.lines.size()):
@@ -398,7 +403,7 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		var hero: Dictionary = Content.heroes[line.ch]
 		var row = preload("res://scripts/dialogue_transcript_row.gd").new()
 		body.rows.add_child(row)
-		if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+		if not _current(token) or not _node_live(host):
 			return
 		var portrait := TextureRect.new()
 		portrait.texture = Content.campaign_art(line.ch, "avatar", art_mode)
@@ -411,15 +416,15 @@ func transcript(host: VBoxContainer, scene: Dictionary) -> void:
 		column.add_child(NativeUi.prose(line.t))
 		var foe := "SWARM" if side == "STEEL" else "STEEL"
 		row.content.add_child(column if hero.side == foe else portrait)
-		if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+		if not _current(token) or not _node_live(host):
 			# The second child has not been admitted yet.
 			(portrait if hero.side == foe else column).free()
 			return
 		row.content.add_child(portrait if hero.side == foe else column)
-		if not _current(token) or not host.is_inside_tree() or host.is_queued_for_deletion():
+		if not _current(token) or not _node_live(host):
 			return
 		_after_msec(delay + index * interval, func():
-			if is_instance_valid(host) and host.is_inside_tree() and not host.is_queued_for_deletion() and is_instance_valid(row) and row.is_inside_tree() and not row.is_queued_for_deletion():
+			if _node_live(host) and _node_live(row):
 				row.reveal())
 		if not _current(token):
 			return

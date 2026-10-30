@@ -25,6 +25,7 @@ func _run() -> void:
 		_layer_visibility()
 		await _native_lifetimes()
 		await _queued_ancestors()
+		await _queued_transcript_hosts()
 	print("DIALOGUE_OWNER_RETIREMENT assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -299,3 +300,60 @@ func _queued_ancestors() -> void:
 				_check(group.viewport.size == previous_size and view.radio_layout_mode.is_empty(),
 					"Queued owner rejects immediate and deferred radio layout")
 		await get_tree().process_frame
+
+func _queued_transcript_hosts() -> void:
+	var scene := {"title": "", "note": "", "lines": [{"ch": "t06", "t": ""}, {"ch": "s01", "t": ""}]}
+	for phase in ["initial", "admission", "portrait", "row", "deadline", "row deadline", "control"]:
+		var clock := {"now": 0.0}
+		var view := _view(clock)
+		var scroll := ScrollContainer.new()
+		scroll.size = Vector2(200, 100)
+		add_child(scroll)
+		var ancestor := Control.new()
+		ancestor.custom_minimum_size = Vector2(160, 800)
+		scroll.add_child(ancestor)
+		var host := VBoxContainer.new()
+		host.position.y = 450
+		ancestor.add_child(host)
+		var interrupted := {"done": false}
+		var interrupt := func(node: Node):
+			if interrupted.done or not host.is_ancestor_of(node):
+				return
+			if (phase == "portrait" and node is TextureRect and node.get_parent().get_script() == preload("res://scripts/dialogue_transcript_body.gd")) \
+					or (phase == "row" and node.get_script() == preload("res://scripts/dialogue_transcript_row.gd")):
+				interrupted.done = true
+				ancestor.queue_free()
+		if phase == "initial":
+			ancestor.queue_free()
+		elif phase == "admission":
+			host.child_entered_tree.connect(func(_child: Node): ancestor.queue_free(), CONNECT_ONE_SHOT)
+		elif phase in ["portrait", "row"]:
+			get_tree().node_added.connect(interrupt)
+		view.transcript(host, scene)
+		if phase in ["portrait", "row"]:
+			get_tree().node_added.disconnect(interrupt)
+		if phase == "initial":
+			_check(host.get_child_count() == 0 and view.timers.is_empty(), "A queued host ancestor rejects new transcript playback")
+		elif phase == "admission":
+			_check(host.get_child_count() == 1 and view.timers.is_empty(), "Host ancestor retirement stops transcript admission")
+		elif phase in ["portrait", "row"]:
+			_check(interrupted.done and view.timers.is_empty(), "Host ancestor retirement stops " + phase + " construction")
+		else:
+			var row: Control = host.get_child(2).rows.get_child(0)
+			var pending: Timer = view.timers[0]
+			await get_tree().process_frame
+			scroll.scroll_vertical = 0
+			if phase == "deadline":
+				ancestor.queue_free()
+			elif phase == "row deadline":
+				row.get_parent().queue_free()
+			clock.now = 1000.0
+			pending.timeout.emit()
+			if phase in ["deadline", "row deadline"]:
+				_check(not row.revealed and view.timers.size() == 1 and scroll.scroll_vertical == 0,
+					"A retiring transcript ancestor cannot reveal a row or scroll its surviving parent")
+			else:
+				_check(row.revealed and scroll.scroll_vertical > 0,
+					"A live transcript reveals and scrolls the same parent")
+		view.free()
+		scroll.free()

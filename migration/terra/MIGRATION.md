@@ -743,7 +743,8 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   animations; reattachment requires fresh playback. Seal old radio references
   before visibility callbacks, and cancel superseded construction or clock
   continuations before admitting nodes or timers. A queued/detached transcript
-  host must not reveal or scroll from a pending deadline. Queuing any dialogue
+  host or its ancestor must not construct, reveal or scroll from a pending
+  deadline; a queued row ancestor also rejects the reveal. Queuing any dialogue
   owner ancestor rejects new commands, pending deadlines and unfinished native
   admission or layout work. Preserve replacement state during clear/dispose/
   expiry callbacks and release unadmitted portraits.

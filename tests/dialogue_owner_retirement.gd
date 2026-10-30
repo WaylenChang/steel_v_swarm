@@ -24,6 +24,7 @@ func _run() -> void:
 		_replay(capture.programs)
 		_layer_visibility()
 		await _native_lifetimes()
+		await _queued_ancestors()
 	print("DIALOGUE_OWNER_RETIREMENT assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -241,3 +242,60 @@ func _native_lifetimes() -> void:
 	view.track(0)
 	_check(view.timers.is_empty() and not view.track_label.visible, "Queued owner rejects late timer and stage commands")
 	await get_tree().process_frame
+
+func _queued_ancestors() -> void:
+	var scene := {"title": "", "note": "", "lines": [{"ch": "t06", "t": ""}]}
+	for phase in ["commands", "deadline", "timer admission", "radio admission", "stage visibility", "layout"]:
+		var ancestor := Control.new()
+		var parent := Control.new()
+		var view := CampaignDialogue.new()
+		var clock := {"now": 0.0}
+		var calls: Array = []
+		view.clock_msec = func(): return clock.now
+		add_child(ancestor)
+		ancestor.add_child(parent)
+		parent.add_child(view)
+		match phase:
+			"commands":
+				ancestor.queue_free()
+				view.track(0)
+				view._after_msec(1, func(): calls.append("late"))
+				view.radio(scene)
+				_check(not view.track_label.visible and view.timers.is_empty() and view.radio_group == null,
+					"Queued ancestor rejects new stage, timer and radio commands")
+			"deadline":
+				view._after_msec(1, func(): calls.append("old"))
+				var timer: Timer = view.timers[0]
+				ancestor.queue_free()
+				clock.now = 2.0
+				timer.timeout.emit()
+				_check(calls.is_empty(), "A queued ancestor rejects an already scheduled deadline")
+			"timer admission":
+				view.child_entered_tree.connect(func(child: Node):
+					if child is Timer:
+						ancestor.queue_free(), CONNECT_ONE_SHOT)
+				view._after_msec(1, func(): calls.append("admitted"))
+				_check(view.timers.size() == 1 and view.timers[0].is_stopped(),
+					"A timer cannot start after its ancestor is queued during admission")
+			"radio admission":
+				view.child_entered_tree.connect(func(child: Node):
+					if child.get_script() == preload("res://scripts/dialogue_radio_layer.gd"):
+						ancestor.queue_free(), CONNECT_ONE_SHOT)
+				view.radio(scene)
+				_check(view.bar == null and view.timers.is_empty(),
+					"Radio construction stops when its ancestor is queued during admission")
+			"stage visibility":
+				view.track_label.visibility_changed.connect(func(): ancestor.queue_free(), CONNECT_ONE_SHOT)
+				view.track(0)
+				_check(view.track_label.text.is_empty(), "A retiring stage overlay cannot continue updating its text")
+			"layout":
+				var group := _seed(view)
+				view.radio_row = HBoxContainer.new()
+				view.bar.add_child(view.radio_row)
+				var previous_size: Vector2i = group.viewport.size
+				ancestor.queue_free()
+				view._layout_radio()
+				view._apply_radio_layout()
+				_check(group.viewport.size == previous_size and view.radio_layout_mode.is_empty(),
+					"Queued owner rejects immediate and deferred radio layout")
+		await get_tree().process_frame

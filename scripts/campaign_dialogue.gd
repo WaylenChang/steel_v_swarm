@@ -29,7 +29,14 @@ var radio_layout_mode := ""
 var clock_msec := Callable()
 
 func _current(token: int) -> bool:
-	return token == generation and is_inside_tree() and not is_queued_for_deletion()
+	if token != generation or not is_inside_tree():
+		return false
+	var owner: Node = self
+	while owner != null:
+		if owner.is_queued_for_deletion():
+			return false
+		owner = owner.get_parent()
+	return true
 
 func _now_msec() -> float:
 	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
@@ -52,18 +59,20 @@ func _ready() -> void:
 	resized.connect(_layout_radio)
 
 func _layout_radio() -> void:
+	if not _current(generation):
+		return
 	if is_instance_valid(radio_group):
 		radio_group.layout_radio(size)
 	_schedule_radio_layout()
 
 func _schedule_radio_layout() -> void:
-	if not radio_layout_pending and is_inside_tree() and is_instance_valid(bar):
+	if not radio_layout_pending and _current(generation) and is_instance_valid(bar):
 		radio_layout_pending = true
 		_apply_radio_layout.call_deferred()
 
 func _apply_radio_layout() -> void:
 	radio_layout_pending = false
-	if not is_inside_tree() or not is_instance_valid(bar) or not is_instance_valid(radio_row):
+	if not _current(generation) or not is_instance_valid(bar) or not is_instance_valid(radio_row):
 		return
 	var token := generation
 	var viewport_width := get_viewport_rect().size.x
@@ -101,8 +110,9 @@ func _apply_radio_layout() -> void:
 func track(stage: int = -1) -> void:
 	if not _current(generation):
 		return
+	var token := generation
 	track_label.visible = stage >= 0
-	if stage < 0:
+	if stage < 0 or not _current(token):
 		return
 	var names: Array = Content.constants.SIEGE.NAMES
 	var parts := PackedStringArray()

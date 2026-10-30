@@ -610,7 +610,9 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Mouse double-click skips or warns only after the second left-button release,
   matching browser `dblclick` ordering. An intervening mouse-button press cancels
   that pending double-click; wheel input does not. Replacement, finish and tree
-  removal discard a pending press. `node tools/campaign_double_click_capture.mjs`,
+  removal discard a pending press. Synchronous hold feedback callbacks must not
+  deliver a retired long press, touch release, mouse press or finishing signal to
+  a replacement, or consume its touch ownership. `node tools/campaign_double_click_capture.mjs`,
   `node --test tests/campaign_double_click.test.mjs` and real-driver
   `tests/campaign_double_click.tscn` retain actual Chromium mouse sequences and
   controlled native dispatch for ready, buffering and interrupted gestures.

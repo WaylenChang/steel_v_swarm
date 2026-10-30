@@ -4,6 +4,20 @@ const ProbeView = preload("res://tests/campaign_chapter_status.gd").ProbeView
 
 class ReentrantHold extends CampaignHold:
 	var callback := Callable()
+	var begin_callback := Callable()
+	var advance_callback := Callable()
+	func begin(point: Vector2, viewport_size: Vector2) -> void:
+		super.begin(point, viewport_size)
+		if begin_callback.is_valid():
+			var action := begin_callback
+			begin_callback = Callable()
+			action.call()
+	func advance(progress: float) -> void:
+		super.advance(progress)
+		if advance_callback.is_valid():
+			var action := advance_callback
+			advance_callback = Callable()
+			action.call()
 	func cancel() -> void:
 		super.cancel()
 		if callback.is_valid():
@@ -26,6 +40,7 @@ func _run() -> void:
 	if failures == 0:
 		await _check_programs(capture.programs)
 		await _check_replacement()
+		await _check_hold_replacement()
 	print("CAMPAIGN_DOUBLE_CLICK assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -114,3 +129,63 @@ func _check_replacement() -> void:
 		"A double-click finish callback cannot overwrite a replacement cinematic")
 	view.dispose()
 	view.free()
+
+func _touch(pressed: bool, cancelled: bool = false) -> InputEventScreenTouch:
+	var event := InputEventScreenTouch.new()
+	event.index = 42
+	event.position = Vector2(4, 4)
+	event.pressed = pressed
+	event.canceled = cancelled
+	return event
+
+func _check_hold_replacement() -> void:
+	for phase in ["long press", "advance", "touch release", "touch cancel", "mouse press", "finish"]:
+		var clock := {"now": 1000.0}
+		var view := ProbeView.new()
+		view.clock_msec = func(): return clock.now
+		add_child(view)
+		var old_hold: Control = view.hold_indicator
+		view.presentation_group.remove_child(old_hold)
+		old_hold.free()
+		var hold := ReentrantHold.new()
+		view.presentation_group.add_child(hold)
+		view.hold_indicator = hold
+		view.play([Content.campaign.prologue[0]], "Continue")
+		view.set_process(false)
+		await get_tree().process_frame
+		var finishing := {"count": 0}
+		view.finishing.connect(func(): finishing.count += 1)
+		if phase == "touch release" or phase == "touch cancel":
+			view._input(_touch(true))
+		elif phase == "long press" or phase == "advance":
+			view._input(_mouse(true))
+		var replace := func():
+			view.play([Content.campaign.prologue[1]], "Continue")
+			view.set_process(false)
+			if phase in ["touch release", "touch cancel", "finish"]:
+				view._input(_touch(true))
+		if phase == "mouse press":
+			hold.begin_callback = replace
+			view._input(_mouse(true, true))
+		elif phase == "advance":
+			hold.advance_callback = replace
+			clock.now += 50
+			view._process(0)
+		else:
+			hold.callback = replace
+			match phase:
+				"long press":
+					clock.now += float(Content.campaign.presentation.skip.hold) * 1000
+					view._process(0)
+				"touch release": view._input(_touch(false))
+				"touch cancel": view._input(_touch(false, true))
+				"finish": view.finish()
+		_check(view.playing and not view.closing and view.scenes[0].id == Content.campaign.prologue[1].id,
+			"Hold " + phase + " cannot skip or retire a replacement")
+		_check(not view.mouse_double_pending and finishing.count == 0,
+			"Hold " + phase + " cannot deliver stale mouse or finishing signals")
+		if phase in ["touch release", "touch cancel", "finish"]:
+			_check(view.finish_touches.has(42) and view.last_tap == 0,
+				"Hold " + phase + " cannot consume replacement touch ownership")
+		view.dispose()
+		view.free()

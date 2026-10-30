@@ -499,16 +499,22 @@ func _refresh_hud() -> void:
 func _process(_delta: float) -> void:
 	if not _live() or not playing or closing:
 		return
+	var token := generation
 	var now := _now_msec()
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	var rules: Dictionary = Content.campaign.presentation.crawl
 	var delta := minf((now - last_frame_at) / 1000, float(rules.maximumFrame))
 	last_frame_at = now
 	if held_at >= 0:
 		hold_indicator.advance((now - held_at) / (float(Content.campaign.presentation.skip.hold) * 1000))
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+			return
 	if held_at >= 0 and now - held_at >= float(Content.campaign.presentation.skip.hold) * 1000:
 		held_at = -1
 		hold_indicator.cancel()
-		var token := generation
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+			return
 		_try_skip()
 		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
@@ -539,7 +545,10 @@ func _finish_target(point: Vector2) -> bool:
 func _input(event: InputEvent) -> void:
 	if not _live() or not playing or closing:
 		return
+	var token := generation
 	var now := _now_msec()
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	if event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT,
 			MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]:
 		var mouse_buttons := MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT | MOUSE_BUTTON_MASK_MIDDLE \
@@ -552,10 +561,11 @@ func _input(event: InputEvent) -> void:
 			if (event.button_mask & mouse_buttons & ~button_mask) == 0:
 				held_at = now
 				hold_indicator.begin(event.position, get_viewport_rect().size)
+				if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+					return
 			if event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
 				mouse_double_pending = true
 		else:
-			var token := generation
 			var skip_double: bool = event.button_index == MOUSE_BUTTON_LEFT and mouse_double_pending
 			if event.button_index == MOUSE_BUTTON_LEFT:
 				mouse_double_pending = false
@@ -570,6 +580,8 @@ func _input(event: InputEvent) -> void:
 		if event.canceled:
 			held_at = -1
 			hold_indicator.cancel()
+			if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+				return
 			finish_touches.erase(event.index)
 			return
 		if event.pressed:
@@ -581,16 +593,17 @@ func _input(event: InputEvent) -> void:
 		else:
 			held_at = -1
 			hold_indicator.cancel()
+			if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+				return
 			if not finish_touches.has(event.index):
 				return
 			var button_target: bool = finish_touches[event.index]
 			finish_touches.erase(event.index)
 			if button_target:
 				return
-			var token := generation
 			if now - last_tap < float(Content.campaign.presentation.skip.doubleTap) * 1000:
 				_try_skip()
-			if token == generation:
+			if is_instance_valid(self) and _live() and token == generation:
 				last_tap = now
 
 func _update_scene() -> void:
@@ -729,6 +742,8 @@ func finish() -> void:
 	held_at = -1
 	mouse_double_pending = false
 	hold_indicator.cancel()
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or not closing:
+		return
 	finish_touches.clear()
 	finishing.emit()
 	if not is_instance_valid(self) or not _live() or token != generation or not playing or not closing:

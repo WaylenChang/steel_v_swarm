@@ -115,7 +115,64 @@ func _run() -> void:
 	await _check_show_reentrancy(scenes)
 	_check_admission_reentrancy(scenes)
 	await _check_child_admission_reentrancy(scenes)
+	await _check_ending_reentrancy(scenes)
 	_finish_campaign()
+
+func _check_ending_reentrancy(scenes: Array) -> void:
+	for boundary in ["first_child", "note", "button", "button_theme", "last_child"]:
+		for operation in ["replace", "dispose", "ancestor"]:
+			var parent_node := Node.new()
+			add_child(parent_node)
+			var view := LifecycleView.new()
+			parent_node.add_child(view)
+			view.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+			view.size = Vector2(640, 360)
+			var observed := {"installed": false, "called": false, "children": 0}
+			var action := func():
+				if observed.called:
+					return
+				observed.called = true
+				match operation:
+					"replace": view.play([scenes[1]], "Replacement")
+					"dispose": view.dispose()
+					"ancestor": parent_node.queue_free()
+			var on_ending := func(child: Node):
+				if observed.installed or not child is VBoxContainer:
+					return
+				observed.installed = true
+				child.child_entered_tree.connect(func(nested: Node):
+					observed.children += 1
+					if boundary == "button_theme" and nested is Button:
+						nested.theme_changed.connect(action, CONNECT_ONE_SHOT)
+					elif (boundary == "first_child" and observed.children == 1) \
+							or (boundary == "note" and observed.children == 4) \
+							or (boundary == "button" and observed.children == 6) \
+							or (boundary == "last_child" and observed.children == 7):
+						action.call())
+			view.column.child_entered_tree.connect(on_ending)
+			view.play(scenes, "Original")
+			_check(observed.called, "The ending " + boundary + " callback runs synchronously")
+			if operation == "replace":
+				_check(view.playing and view.scenes.size() == 1 and view.scenes[0].id == scenes[1].id
+					and view.sections.size() == 1 and view.art_layers.size() == 1
+					and view.finish_button.text == "Replacement",
+					"The retired ending cannot overwrite replacement state at " + boundary)
+			elif operation == "dispose":
+				_check(not view.playing and view.scenes.is_empty() and view.sections.is_empty() and view.art_layers.is_empty(),
+					"Disposal during ending construction cannot resume at " + boundary)
+			else:
+				_check(parent_node.is_queued_for_deletion() and not view.playing,
+					"Queued ancestor during ending construction cannot start playback at " + boundary)
+			await get_tree().process_frame
+			if operation == "replace":
+				_check(view.column.get_child_count() == 2 and view.art_host.get_child_count() == 1,
+					"Replacement releases the old ending at " + boundary)
+				view.dispose()
+				parent_node.free()
+			elif operation == "dispose":
+				_check(view.column.get_child_count() == 0 and view.art_host.get_child_count() == 0,
+					"Disposal releases the old ending at " + boundary)
+				parent_node.free()
 
 func _check_child_admission_reentrancy(scenes: Array) -> void:
 	for boundary in ["art", "section", "ending"]:

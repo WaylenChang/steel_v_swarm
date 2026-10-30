@@ -356,7 +356,9 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Art-layer, crawl-section and ending-block admission callbacks may also replace,
   dispose or queue the owner or an ancestor. Retire only the unadmitted child
   after its native entry finishes; removing a child during its entry corrupts
-  Godot's container bookkeeping and section `_ready` lifecycle.
+  Godot's container bookkeeping and section `_ready` lifecycle. Ending descendants
+  and finish-button theme callbacks keep that same admission guard until the
+  complete ending is built, so retired work cannot mutate a replacement button.
   Empty sequence replacement disposes the previous scene before completing.
   `tests/campaign_lifecycle.tscn` covers these lifecycle contracts independently
   of the unresolved native story-art import and complete visual composition.

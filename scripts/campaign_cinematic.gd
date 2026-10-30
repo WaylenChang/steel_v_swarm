@@ -278,49 +278,67 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		if is_instance_valid(ending_box):
 			ending_box.queue_free()
 		return
-	admitting_crawl_children.erase(ending_box)
-	if not _live() or token != generation:
-		if is_instance_valid(ending_box):
-			ending_box.queue_free()
+	if not _ending_current(ending_box, token):
 		return
 	var top_space := Control.new()
 	top_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_space.custom_minimum_size.y = float(ending_geometry_rules.padding.top)
-	ending_box.add_child(top_space)
+	if not _append_ending_child(ending_box, top_space, token):
+		return
 	end_divider = NativeUi.label(ending_rules.divider, 14)
 	end_divider.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ending_box.add_child(end_divider)
+	if not _append_ending_child(ending_box, end_divider, token):
+		return
 	var divider_space := Control.new()
 	divider_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	divider_space.custom_minimum_size.y = float(ending_geometry_rules.dividerGap)
-	ending_box.add_child(divider_space)
+	if not _append_ending_child(ending_box, divider_space, token):
+		return
 	end_note = NativeUi.label(ending.note, 11)
 	end_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	end_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ending_box.add_child(end_note)
+	if not _append_ending_child(ending_box, end_note, token):
+		return
 	var note_space := Control.new()
 	note_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	note_space.custom_minimum_size.y = float(ending_geometry_rules.noteGap)
-	ending_box.add_child(note_space)
+	if not _append_ending_child(ending_box, note_space, token):
+		return
 	var button_text := String(ending.button) if is_prologue or finish_text.is_empty() else finish_text
-	finish_button = NativeUi.button(button_text, finish)
-	finish_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	ending_box.add_child(finish_button)
-	finish_button.add_theme_font_size_override("font_size", int(finish_button_rules.fontSize))
+	var button := NativeUi.button(button_text, finish)
+	finish_button = button
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	if not _append_ending_child(ending_box, button, token):
+		return
+	button.add_theme_font_size_override("font_size", int(finish_button_rules.fontSize))
+	if not is_instance_valid(self):
+		if is_instance_valid(ending_box):
+			ending_box.queue_free()
+		return
+	if not _ending_current(ending_box, token):
+		return
 	if finish_button_rules.cursor == "pointer":
-		finish_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for state in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
-		if not finish_button.has_theme_stylebox(state):
+		if not button.has_theme_stylebox(state):
 			continue
-		var style := finish_button.get_theme_stylebox(state).duplicate() as StyleBox
+		var style := button.get_theme_stylebox(state).duplicate() as StyleBox
 		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 			var key: String = ["left", "top", "right", "bottom"][side]
 			style.set_content_margin(side, float(finish_button_rules.padding[key]) + float(finish_button_rules.border[key]))
-		finish_button.add_theme_stylebox_override(state, style)
+		button.add_theme_stylebox_override(state, style)
+		if not is_instance_valid(self):
+			if is_instance_valid(ending_box):
+				ending_box.queue_free()
+			return
+		if not _ending_current(ending_box, token):
+			return
 	var bottom_space := Control.new()
 	bottom_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bottom_space.custom_minimum_size.y = float(ending_geometry_rules.padding.bottom)
-	ending_box.add_child(bottom_space)
+	if not _append_ending_child(ending_box, bottom_space, token):
+		return
+	admitting_crawl_children.erase(ending_box)
 	closing = false
 	modulate.a = 1.0
 	fade_opacity = 1.0
@@ -373,6 +391,24 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 		_set_scene(start_index)
+
+func _append_ending_child(ending_box: Control, child: Control, token: int) -> bool:
+	ending_box.add_child(child)
+	if not is_instance_valid(self):
+		if is_instance_valid(ending_box):
+			ending_box.queue_free()
+		return false
+	return _ending_current(ending_box, token)
+
+func _ending_current(ending_box: Control, token: int) -> bool:
+	if is_instance_valid(self) and _live() and token == generation and is_instance_valid(ending_box) \
+			and ending_box.is_inside_tree() and not ending_box.is_queued_for_deletion():
+		return true
+	if is_instance_valid(self):
+		admitting_crawl_children.erase(ending_box)
+	if is_instance_valid(ending_box):
+		ending_box.queue_free()
+	return false
 
 func _layout() -> void:
 	if not is_instance_valid(card):

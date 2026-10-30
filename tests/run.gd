@@ -114,6 +114,14 @@ func _check(condition: bool, description: String) -> void:
 func _near(actual: float, expected: float, description: String) -> void:
 	_check(absf(actual - expected) < 0.000001, description + " actual=" + str(actual) + " expected=" + str(expected))
 
+func _ground_point(simulation: BattleSimulation, x: float, y: float, z: float) -> Vector3:
+	# Source captures stub flat ground at y=0; rebase their heights onto the authored terrain.
+	return Vector3(x, simulation.world.ground_height(x, z) + y, z)
+
+func _missile_point(simulation: BattleSimulation, point: Vector3) -> Vector3:
+	# Authority missiles keep the source frame: height above the local ground.
+	return Vector3(point.x, point.y - simulation.world.ground_height(point.x, point.z), point.z)
+
 func _require_prepared_match(simulation: BattleSimulation, label: String) -> bool:
 	var ready := simulation.setup_complete and simulation.match_initialized
 	_check(ready, label + ": authored match preparation required: " + simulation.setup_error)
@@ -397,7 +405,7 @@ func _missile_reference_tests(fixtures: Dictionary) -> void:
 		return
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[701]
-	actor.position = Vector3(0, 1, 0)
+	actor.position = _ground_point(sim, 0, 1, 0)
 	for fixture: Dictionary in fixtures.missileDamage:
 		actor.character = fixture.character
 		actor.input_state = {"aim": fixture.get("aiming", true)}
@@ -459,7 +467,7 @@ func _base_target_tests(fixtures: Array) -> void:
 		unit.side = "STEEL"
 		if unit.kind == "base":
 			base = unit
-	base.position = Vector3.ZERO
+	base.position = _ground_point(sim, 0, 0, 0)
 	for fixture: Dictionary in fixtures:
 		var targets := {}
 		for spec: Dictionary in fixture.targets:
@@ -469,7 +477,7 @@ func _base_target_tests(fixtures: Array) -> void:
 					if Content.heroes[id].kind == spec.kind:
 						character = id
 						break
-			targets[int(spec.id)] = sim.spawn({"kind": spec.kind, "character": character, "side": "SWARM", "position": Vector3(spec.x, spec.y, -spec.z)})
+			targets[int(spec.id)] = sim.spawn({"kind": spec.kind, "character": character, "side": "SWARM", "position": _ground_point(sim, spec.x, spec.y, -spec.z)})
 		await get_tree().physics_frame
 		var found := sim._acquire_base_target(base, Content.constants.UNITS.base.guns.range)
 		_check(found == targets.get(int(fixture.result)), "Original base planar acquisition, hero bias and air ceiling: " + str(fixture.targets))
@@ -495,12 +503,12 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	for unit: BattleUnit in sim.units.values():
 		if unit.kind == "base" and unit.side == "STEEL":
 			base = unit
-	base.position = Vector3(0, 0, 0)
+	base.position = _ground_point(sim, 0, 0, 0)
 	for unit: BattleUnit in sim.units.values():
 		if unit != target:
 			unit.side = "STEEL"
-	actor.position = Vector3(300, 1, 0)
-	target.position = Vector3(0, 20, -100)
+	actor.position = _ground_point(sim, 300, 1, 0)
+	target.position = _ground_point(sim, 0, 20, -100)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	var health := target.hp
@@ -521,14 +529,14 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	_near(target.hp, health, "Base launches never deal immediate direct damage")
 	for missile: Dictionary in sim.missiles.duplicate():
 		sim._remove_missile(int(missile.id))
-	actor.position = Vector3(0, 20, 0)
+	actor.position = _ground_point(sim, 0, 20, 0)
 	actor.yaw = 0
 	actor.pitch = 0
 	actor.input_state = {"aim": false, "slot": "light"}
-	target.position = Vector3(0, 20, -100)
+	target.position = _ground_point(sim, 0, 20, -100)
 	target.side = "SWARM"
 	target.shield = 0
-	var incoming := actor.view_origin() + Vector3.FORWARD * 60
+	var incoming := _missile_point(sim, actor.view_origin() + Vector3.FORWARD * 60)
 	var missile := {"actor": base.entity_id, "side": "SWARM", "target": actor.entity_id,
 		"position": incoming, "origin": incoming,
 		"speed": Content.constants.BASE_MISSILE.SPEED, "dmg": Content.constants.UNITS.base.guns.dmg,
@@ -577,7 +585,7 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	missile.side = "SWARM"
 	missile.hp = 1.0
 	actor.ensure_weapon_pose()
-	missile.position = actor.weapon_pose.muzzle(actor.aim_transform(), "light", actor.flying, true, false) + Vector3(0, -0.03, -30)
+	missile.position = _missile_point(sim, actor.weapon_pose.muzzle(actor.aim_transform(), "light", actor.flying, true, false) + Vector3(0, -0.03, -30))
 	sim._launch_missile(missile)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -598,7 +606,7 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	actor.fire_at.clear()
 	missile = missile.duplicate(true)
 	missile.hp = 1.0
-	var tower := sim.spawn({"kind": "tower", "side": "SWARM", "position": Vector3(0, 0, -15)})
+	var tower := sim.spawn({"kind": "tower", "side": "SWARM", "position": _ground_point(sim, 0, 0, -15)})
 	var tower_health := tower.hp
 	sim._launch_missile(missile)
 	await get_tree().physics_frame
@@ -616,15 +624,17 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	actor.shield = 0
 	var platform := StaticBody3D.new()
 	platform.collision_layer = 1 | 16
-	platform.position = Vector3(10, 99.5, 0)
+	var lift := sim.world.ground_height(10, 0)
+	platform.position = Vector3(10, lift + 99.5, 0)
 	var support := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(8, 1, 8)
 	support.shape = box
 	platform.add_child(support)
 	sim.world.add_child(platform)
-	sim.world.layers.configure([[10.0, 3.0, 10.0, -3.0, 4.0, 1, 0]], [{"x1": 10.0, "z1": -3.0, "y1": 100.0, "x2": 10.0, "z2": 3.0, "y2": 100.0, "hw": 4.0}])
-	target.position = Vector3(10, 100 + actor.position.y, 0)
+	sim.world.layers.configure([[10.0, 3.0, 10.0, -3.0, 4.0, 1, 0]], [{"x1": 10.0, "z1": -3.0, "y1": lift + 100.0, "x2": 10.0, "z2": 3.0, "y2": lift + 100.0, "hw": 4.0}])
+	var altitude := actor.position.y - sim.world.ground_height(actor.position.x, actor.position.z)
+	target.position = Vector3(10, lift + 100 + altitude, 0)
 	target.shield = 0
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -632,7 +642,7 @@ func _missile_authority_tests(fixtures: Array) -> void:
 	target_health = target.hp
 	missile = missile.duplicate(true)
 	missile.hp = Content.constants.BASE_MISSILE.HP
-	missile.position = Vector3(0, actor.position.y, -8)
+	missile.position = Vector3(0, altitude, -8)
 	sim._launch_missile(missile)
 	sim._tick_missiles(0.05)
 	_check(sim.missiles.is_empty() and actor.hp < actor_health and target.hp < target_health, "Base missile blast retains source relative body bands across standing surfaces after launcher death")
@@ -683,8 +693,8 @@ func _targeting_settlement_tests() -> void:
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[501]
 	var target: BattleUnit = sim.pilots[502]
-	actor.position = Vector3(0, 1, 0)
-	target.position = Vector3(7, 1, -100)
+	actor.position = _ground_point(sim, 0, 1, 0)
+	target.position = _ground_point(sim, 7, 1, -100)
 	actor.yaw = 0
 	actor.pitch = 0
 	actor.input_state = {"aim": true, "slot": "heavy"}
@@ -725,7 +735,7 @@ func _targeting_settlement_tests() -> void:
 	_check(sim._aim_target(actor, 150) == null, "Failed lob fire control prohibits exact and cone fallback")
 	sim.fire_controls.clear()
 	var wall := StaticBody3D.new()
-	wall.position = Vector3(0, 5, -50)
+	wall.position = _ground_point(sim, 0, 5, -50)
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(20, 10, 0.1)
 	var collision := CollisionShape3D.new()
@@ -740,7 +750,7 @@ func _targeting_settlement_tests() -> void:
 	_near(actor.lock_at, confirmed, "Authority LOS independently rejects a blocked lock")
 	wall.queue_free()
 	await get_tree().physics_frame
-	actor.position.y = 80
+	actor.position.y = sim.world.ground_height(actor.position.x, actor.position.z) + 80
 	var direction := target.eye() - actor.eye()
 	actor.yaw = atan2(-direction.x, -direction.z)
 	actor.pitch = atan2(direction.y, Vector2(direction.x, direction.z).length())
@@ -760,7 +770,7 @@ func _targeting_settlement_tests() -> void:
 	sim.fire(actor, "light")
 	_check(sim.projectiles.size() == 1, "Native flat gun launches with target-derived altitude envelope")
 	_near(sim.projectiles[0].range, sim._launch_range(actor, Content.weapon(actor.character, "light"), target), "Flat round captures launch envelope")
-	actor.position = Vector3(0, 1, 0)
+	actor.position = _ground_point(sim, 0, 1, 0)
 	actor.yaw = 0
 	actor.pitch = 0
 	actor.character = "s03"
@@ -789,21 +799,23 @@ func _lock_confirmation_tests(fixtures: Array) -> void:
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[601]
 	var target: BattleUnit = sim.pilots[602]
-	var observer := sim.spawn({"kind": "soldier", "side": "STEEL", "position": Vector3(0, 1, -100)})
+	# Source compares absolute hero eyes on flat ground, so both heroes share one terrain offset.
+	var floor_y := sim.world.ground_height(0, 0)
+	# Source stubs team sight; keep native LOS but grant the shooter side shared vision.
+	sim.vision_until["STEEL"] = INF
 	for fixture in fixtures:
 		actor.character = fixture.character
 		actor.kind = Content.heroes[fixture.character].kind
 		actor.height = Content.heroes[fixture.character].height
 		actor.upgrades.lw = int(fixture.level) - 1
 		actor.upgrades.hw = int(fixture.level) - 1
-		actor.position = Vector3(0, 1, 0)
+		actor.position = Vector3(0, floor_y + 1, 0)
 		actor.hp = 0 if fixture.dead else actor.max_hp
 		actor.status.blind_until = 11.0 if fixture.get("blind", false) else 0.0
 		actor.input_state = {"aim": fixture.aiming}
 		target.special.neutral = fixture.get("neutral", false)
 		target.special.garrison = fixture.get("garrison", false)
-		target.position = Vector3(0, 1, -fixture.distance)
-		observer.position = target.position + Vector3.RIGHT * 10
+		target.position = Vector3(0, floor_y + 1, -fixture.distance)
 		sim.clock = 10
 		actor.lock_target = target.entity_id if int(fixture.previous) == 2 else -1 if int(fixture.previous) == 3 else 0
 		actor.lock_at = sim.clock - fixture.lockAge
@@ -927,8 +939,8 @@ func _lob_settlement_tests(fixtures: Array) -> void:
 			actor.free()
 	var actor: BattleUnit = sim.pilots[1]
 	var target: BattleUnit = sim.pilots[2]
-	actor.position = Vector3(0, 0.1, 0)
-	target.position = Vector3(0, 0.1, -80)
+	actor.position = _ground_point(sim, 0, 0.1, 0)
+	target.position = _ground_point(sim, 0, 0.1, -80)
 	target.shield = 0
 	var direction := target.eye() - actor.eye()
 	actor.yaw = atan2(-direction.x, -direction.z)
@@ -965,9 +977,9 @@ func _lob_settlement_tests(fixtures: Array) -> void:
 		sim.clock += 1.0 / 60
 		sim._tick_projectiles(1.0 / 60)
 	_check(sim.projectiles.is_empty() and target.hp < health, "Ground shell settles damage only after native flight and collision")
-	actor.position = Vector3(0, 0.1, 0)
+	actor.position = _ground_point(sim, 0, 0.1, 0)
 	var close_distance: float = def.r * Content.constants.BALLISTIC.LOB_MIN_F * 0.5
-	var floor_point := Vector3(0, 0, -close_distance)
+	var floor_point := _ground_point(sim, 0, 0, -close_distance)
 	direction = floor_point - actor.eye()
 	actor.yaw = 0
 	actor.pitch = atan2(direction.y, Vector2(direction.x, direction.z).length())
@@ -977,7 +989,7 @@ func _lob_settlement_tests(fixtures: Array) -> void:
 	actor.reload_at.clear()
 	actor.shield = 0
 	actor.hp = actor.max_hp
-	var ally := sim.spawn({"kind": "soldier", "side": actor.side, "position": Vector3(0, 0.1, -close_distance)})
+	var ally := sim.spawn({"kind": "soldier", "side": actor.side, "position": _ground_point(sim, 0, 0.1, -close_distance)})
 	ally.hp = 10000
 	ally.armor = 0
 	var own_health := actor.hp
@@ -999,7 +1011,7 @@ func _lob_settlement_tests(fixtures: Array) -> void:
 	_near(actor.money, funds, "Friendly lethal damage cannot award a bounty")
 	_near(actor.score, score, "Friendly lethal damage cannot award score")
 	# A flying target must be directly under the crosshair to enable the AA solver.
-	var aircraft := sim.spawn({"kind": "heli", "side": "SWARM", "position": Vector3(0, 25, -80)})
+	var aircraft := sim.spawn({"kind": "heli", "side": "SWARM", "position": _ground_point(sim, 0, 25, -80)})
 	direction = aircraft.position + Vector3.UP * aircraft.height / 2 - actor.eye()
 	actor.pitch = atan2(direction.y, Vector2(direction.x, direction.z).length())
 	await get_tree().physics_frame
@@ -1325,8 +1337,8 @@ func _projectile_settlement_tests() -> void:
 	sim.set_physics_process(false)
 	var actor: BattleUnit = sim.pilots[1]
 	var target: BattleUnit = sim.pilots[2]
-	actor.position = Vector3(0, 80, 0)
-	target.position = Vector3(0, 80, -100)
+	actor.position = _ground_point(sim, 0, 80, 0)
+	target.position = _ground_point(sim, 0, 80, -100)
 	target.shield = 0
 	var direction := target.eye() - actor.eye()
 	actor.yaw = atan2(-direction.x, -direction.z)
@@ -1349,7 +1361,7 @@ func _projectile_settlement_tests() -> void:
 	_check(sim.projectiles.size() == 1, "Duplicate launch respects the fire-rate budget")
 	for frame in range(16):
 		sim._tick_projectiles(0.05)
-	var observer := sim.spawn({"kind": "soldier", "side": actor.side, "position": Vector3(0, 80, -200)})
+	var observer := sim.spawn({"kind": "soldier", "side": actor.side, "position": _ground_point(sim, 0, 80, -200)})
 	actor.input_state = {}
 	actor.position.x = 300
 	actor.upgrades.hw = 3
@@ -1370,8 +1382,8 @@ func _projectile_settlement_tests() -> void:
 	sim._tick_projectiles(0.05)
 	_near(target.hp, settled, "Removed warhead cannot duplicate damage")
 	# Losing team sight must not give the authority missile omniscient target updates.
-	actor.position = Vector3(0, 80, 0)
-	target.position = Vector3(0, 80, -100)
+	actor.position = _ground_point(sim, 0, 80, 0)
+	target.position = _ground_point(sim, 0, 80, -100)
 	actor.yaw = 0
 	actor.pitch = 0
 	actor.input_state = {"aim": true}
@@ -1393,7 +1405,7 @@ func _projectile_settlement_tests() -> void:
 	sim.projectiles.clear()
 	# A guided launcher freezes a point, independently of later aim or target movement.
 	actor = sim.pilots[2]
-	actor.position = Vector3(0, 80, 0)
+	actor.position = _ground_point(sim, 0, 80, 0)
 	actor.yaw = 0
 	actor.pitch = 0
 	actor.input_state = {"aim": true}
@@ -1407,9 +1419,9 @@ func _projectile_settlement_tests() -> void:
 	sim._tick_projectiles(0.05)
 	_check(sim.projectiles[0].guide_point == frozen and sim.projectiles[0].target == 0, "Laser target point is frozen at launch")
 	sim.projectiles.clear()
-	actor.position = Vector3(0, 80, 0)
+	actor.position = _ground_point(sim, 0, 80, 0)
 	target = sim.pilots[1]
-	target.position = Vector3(0, 80, -60)
+	target.position = _ground_point(sim, 0, 80, -60)
 	direction = target.eye() - actor.eye()
 	actor.yaw = 0
 	actor.pitch = atan2(direction.y, Vector2(direction.x, direction.z).length())
@@ -1422,7 +1434,7 @@ func _projectile_settlement_tests() -> void:
 	sim.fire(actor, "heavy")
 	_near(sim.projectiles[0].definition.projectile.speed, Content.weapon(actor.character, "heavy").projectile.antiAirSpeed, "Laser-guided launchers share source crosshair AA speed selection")
 	sim.projectiles.clear()
-	actor.position = Vector3(0, 80, 0)
+	actor.position = _ground_point(sim, 0, 80, 0)
 	actor.yaw = 0
 	actor.pitch = 0
 	actor.ammo.heavy = Content.weapon(actor.character, "heavy").mag
@@ -1430,11 +1442,11 @@ func _projectile_settlement_tests() -> void:
 	actor.reload_at.clear()
 	actor.power = actor.max_power
 	target = sim.pilots[1]
-	target.position = Vector3(0, 80, -50)
+	target.position = _ground_point(sim, 0, 80, -50)
 	target.shield = 0
 	var wall := StaticBody3D.new()
 	sim.add_child(wall)
-	wall.position = Vector3(0, 80, -10)
+	wall.position = _ground_point(sim, 0, 80, -10)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(20, 20, 1)
@@ -1554,12 +1566,13 @@ func _combat_visibility_tests() -> void:
 		if actor != player:
 			sim.units.erase(actor.entity_id)
 			actor.free()
-	player.position = Vector3(0, 0.1, 0)
+	# A drone hero cannot settle below the authority hover floor on real terrain.
+	player.position = _ground_point(sim, 0, Content.constants.FLIGHT.HOVER_M, 0)
 	player.yaw = 0
 	player.pitch = 0
 	player.input_state = {"received": sim.clock}
-	var near := sim.spawn({"kind": "tower", "side": "STEEL", "position": Vector3(0, 0.1, -35)})
-	var rear := sim.spawn({"kind": "tower", "side": "STEEL", "position": Vector3(0, 0.1, -70)})
+	var near := sim.spawn({"kind": "tower", "side": "STEEL", "position": _ground_point(sim, 0, 0.1, -35)})
+	var rear := sim.spawn({"kind": "tower", "side": "STEEL", "position": _ground_point(sim, 0, 0.1, -70)})
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	var near_hp := near.hp
@@ -1569,7 +1582,7 @@ func _combat_visibility_tests() -> void:
 	_near(rear.hp, rear_hp, "Front target screens the rear target even after building hit cap")
 	var wall := StaticBody3D.new()
 	sim.add_child(wall)
-	wall.position = Vector3(0, 20, -15)
+	wall.position = _ground_point(sim, 0, 20, -15)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(30, 40, 4)
@@ -1585,7 +1598,7 @@ func _combat_visibility_tests() -> void:
 	sim.blast(player, {"dmg": 10, "r": 5, "vsSp": 1, "vsHp": 1}, near.eye())
 	_check(near.hp < near_hp, "Blast retains deliberate coverage through LOS blockers")
 	wall.free()
-	var enemy := sim.spawn({"kind": "soldier", "side": "STEEL", "position": Vector3(0, 0.1, -40)})
+	var enemy := sim.spawn({"kind": "soldier", "side": "STEEL", "position": _ground_point(sim, 0, 0.1, -40)})
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_check(sim.visible_to_side(enemy, player.side), "Enemy is visible inside shared team sight")
@@ -1597,7 +1610,7 @@ func _combat_visibility_tests() -> void:
 	_check(not enemy.visible, "Host hides an enemy leaving team sight")
 	sim._physics_process(0.01)
 	_check(not enemy.visible and sim.units.has(enemy.entity_id), "Authority physics preserves hidden presentation and live actor")
-	enemy.position = Vector3(0, 0.1, -40)
+	enemy.position = _ground_point(sim, 0, 0.1, -40)
 	sim.apply_presentation_view(sim.snapshot(1))
 	_check(enemy.visible, "Enemy entering sight reappears without respawning")
 	player.hp = 0
@@ -1637,7 +1650,7 @@ func _settlement_tests() -> void:
 	_near(player.score, 0, "Purchase does not spend battle score")
 	player.money = 10000
 	player.score = 100
-	player.position = Vector3.ZERO
+	player.position = _ground_point(sim, 0, 0.1, 0)
 	_check(sim.buy(player, "hp"), "Source upgrade purchases remain available away from the base")
 	_check(not sim.buy(player, "forged_item"), "Unknown upgrade rejected")
 	sim.submit_input(1, {"move": Vector2(1000, -1000), "yaw": 0.0, "pitch": 100.0})
@@ -1668,8 +1681,8 @@ func _settlement_tests() -> void:
 	_near(player.ammo.light, magazine - 1, "Reload refills lazily before firing")
 	sim.fire(player, "light")
 	_near(player.ammo.light, magazine - 1, "Fire rate rejects same-frame duplicate")
-	player.position = Vector3(0, 0.1, 0)
-	enemy.position = Vector3(0, 0.1, -10)
+	player.position = _ground_point(sim, 0, 0.1, 0)
+	enemy.position = _ground_point(sim, 0, 0.1, -10)
 	var direction := enemy.eye() - player.eye()
 	player.yaw = atan2(-direction.x, -direction.z)
 	player.pitch = atan2(direction.y, Vector2(direction.x, direction.z).length())

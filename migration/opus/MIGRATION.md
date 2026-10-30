@@ -139,6 +139,9 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Positive populated-match acceptance still requires complete authored seasonal
   resources. Certify valid prebuild consumption, structure anchors and exactly-once
   population after all seats load; rejection coverage alone cannot establish this.
+  One `-LobControl` ENet run whose world failed to build kept ticking
+  `spawn_wave` (`scripts/simulation.gd`) on a null world until timeout; a failed
+  build must stop the authority tick. Reproduce before fixing (season is random).
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role
@@ -200,8 +203,11 @@ runtime acceptance remain incomplete. Component results do not certify the build
   section plan and exact numeric tapes, preserving source order and tolerances.
   Populated core fixtures in `tests/run.gd` and layered blast/bridge/tunnel cases
   in `tests/structure_suite.gd` require the selected authored world;
-  missing preparation is an explicit failed acceptance case. Rerun all retained
-  combat assertions on real geometry once the seasonal resources are available.
+  missing preparation is an explicit failed acceptance case. Core cases rebase
+  source flat-ground heights onto the prepared ground (one shared offset where
+  the source compares absolute hero eyes; missiles stay in the altitude frame).
+  A case that aborts before freeing its match leaks that world into later cases.
+  Rerun the structure cases on real geometry once Sol's MultiMesh fix lands.
   Campaign deployment still requires authored chapter terrain. Isolated climb
   failures are in `scripts/climb_presentation.gd` MultiMesh buffers/matrices;
   isolated field failures are in `scripts/skill_field_presentation.gd` fog

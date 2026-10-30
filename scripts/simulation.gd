@@ -2458,8 +2458,10 @@ func _fire_once(unit: BattleUnit, slot: String, def: Dictionary) -> void:
 	var control := {}
 	if def.trajectory == "lob":
 		control = fire_controls.get(unit.entity_id, {})
-		if control.is_empty() or control.clock != clock or control.camera != unit.aim_transform() or control.pose_clock != unit.weapon_pose.clock or control.direction != unit.aim_direction() or control.level != unit.combat_level("heavy") or control.origin != start:
-			control = lob_control(unit, def, start)
+		# Source launches this frame's preview solution, solved from the current muzzle, from the next emission port.
+		var preview_origin := _advisory_origin(unit, "heavy")
+		if control.is_empty() or control.clock != clock or control.camera != unit.aim_transform() or control.pose_clock != unit.weapon_pose.clock or control.direction != unit.aim_direction() or control.level != unit.combat_level("heavy") or control.origin != preview_origin:
+			control = lob_control(unit, def, preview_origin)
 			fire_controls[unit.entity_id] = control
 		if control.is_empty():
 			message.emit(unit.peer_id, "unavailable_surface")

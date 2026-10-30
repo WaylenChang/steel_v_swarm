@@ -200,6 +200,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   outlines, inherited widths, rotated arrows, clipping and overlaps. Keep the
   strict four-byte raster failures until the shared marker-coverage contract
   below is accepted; these probes do not qualify the full populated map.
+  `node tools/minimap_label_capture.mjs`, `node --test tests/minimap_label.test.mjs`
+  and real-driver `tests/minimap_label.tscn` retain the original Canvas label
+  callback, measured advances and six opaque browser rasters. All six strict
+  four-byte comparisons fail pending the shared font/raster contract below;
+  the captured scale-1 desktop font environment does not qualify other DPI or
+  populated minimap composition.
   `node tools/minimap_lane_raster_capture.mjs`,
   `node --test tests/minimap_lane_raster.test.mjs` and real-driver
   `tests/minimap_lane_raster.tscn` compare the original lane callback, segmented
@@ -1055,6 +1061,26 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   clipped and zoomed paths pass without wider tolerance or per-path baked
   images, then validate actual map lanes and complete minimap composition.
   Terra binds the accepted renderer in a separate change.
+
+- **Opus — minimap label font and raster:** agree a source-faithful Canvas text
+  binding for `scripts/minimap.gd::_draw_label`, using the shared
+  `scripts/source_font_metrics.gd` contract and a material under `shaders/` if
+  needed. The source uses `10px monospace`, browser fallback glyphs,
+  `textBaseline = bottom` and a backdrop sized from `measureText`; native uses
+  a `SystemFont` and its own descent. In `tests/minimap_label.tscn`, source and
+  native advances for `周遭 140m` are 45 and 50 px, and the original two-CJK
+  `全部` advance is 20 px in both but still differs in 155 pixels. The six
+  original rasters differ in 155/308/301/396/404/496 pixels at the unchanged
+  four-byte gate; at `(7,206)` in `周遭 140m` source RGB is `[14,27,41]` and
+  native is `[98,132,77]`. The original and native images and width report are
+  in `artifacts/terra/minimap-label-a7c21/`. Explicit Consolas, Courier New and
+  Lucida Console probes do not pass; retain their evidence directories alongside
+  the default probe. Preserve source font and fallback selection, fractional
+  advances, baseline, text coverage, label color and backdrop geometry. Acceptance:
+  all six captured cases and additional Latin/CJK, fractional-size and DPI cases
+  pass without widened tolerance or pre-rendered per-label images, followed by
+  the full minimap composition and populated lifecycle checks. Terra binds the
+  accepted renderer separately.
 
 - **Opus — minimap marker coverage:** agree native bindings under
   `shaders/minimap_marker*.gdshader` before Terra replaces the marker drawing in

@@ -27,6 +27,8 @@ var retained_token := ""
 var retained_count := 0
 var offline_seen := false
 var disconnects := 0
+# Server-side disconnects stay zero on the client; count its own transport recoveries.
+var recoveries := 0
 var private_notices := 0
 var begins := 0
 var retained_name := ""
@@ -78,7 +80,7 @@ func _physics_process(delta: float) -> void:
 	if not ready_for_probe:
 		return
 	if retained_player != Session.player_id() or retained_token != Session.resume_token or retained_pilot != pilot or retained_battle != simulation or begins != 1 or Session.local_member().get("name", "") != retained_name:
-		_fail("NETWORK_ROOM_REBUILT_OR_CHANGED_IDENTITY stage=%d disconnects=%d player=%s token=%s pilot=%s battle=%s begins=%d name=%s" % [stage, disconnects, retained_player == Session.player_id(), retained_token == Session.resume_token, retained_pilot == pilot, retained_battle == simulation, begins, Session.local_member().get("name", "") == retained_name])
+		_fail("NETWORK_ROOM_REBUILT_OR_CHANGED_IDENTITY stage=%d disconnects=%d recoveries=%d player=%s token=%s pilot=%s battle=%s begins=%d name=%s" % [stage, disconnects, recoveries, retained_player == Session.player_id(), retained_token == Session.resume_token, retained_pilot == pilot, retained_battle == simulation, begins, Session.local_member().get("name", "") == retained_name])
 		return
 	var heading := float(stage + 1) * 0.25
 	var mode: String = Controls.rules.modeKeys[stage % Controls.rules.modeKeys.size()]
@@ -164,6 +166,8 @@ func _probe_result(request: int, player: int, count: int) -> void:
 func _status(key: String) -> void:
 	if key == "waiting" and not Session.dedicated:
 		private_notices += 1
+	if key == "connecting" and Session.reconnecting and not Session.dedicated:
+		recoveries += 1
 	super._status(key)
 
 func _room_cleared() -> void:

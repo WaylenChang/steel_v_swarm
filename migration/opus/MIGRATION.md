@@ -142,9 +142,13 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Positive populated-match acceptance still requires complete authored seasonal
   resources. Certify valid prebuild consumption, structure anchors and exactly-once
   population after all seats load; rejection coverage alone cannot establish this.
-  `-Rooms` on ENet reports `begins=2` at stage 0 with no disconnect: the client
-  emits `battle_started` twice before its first probe. Find the second `_begin`
-  (`scripts/session.gd`) before relaxing `tests/room_network.gd`.
+  `-Rooms` on ENet reported `begins=2` at stage 0; its `disconnects` value is
+  server-only. A recovering client parks an `OfflineMultiplayerPeer` (unique
+  ID 1), so a world finished during an ENet timeout took the authority branch,
+  cleared its room and began again on reattach. `Session.is_authority()` now
+  excludes recovery; `tests/room_loading_suite.gd` covers the detached load.
+  Rerun `tests/run.tscn` and `-Rooms` on both transports; the client failure
+  line reports `recoveries`. If it is zero, the second `_begin` has another source.
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role

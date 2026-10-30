@@ -464,15 +464,20 @@ func _input(event: InputEvent) -> void:
 	if not _live() or not playing or closing:
 		return
 	var now := _now_msec()
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT,
+			MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]:
+		var mouse_buttons := MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT | MOUSE_BUTTON_MASK_MIDDLE \
+			| (1 << (MOUSE_BUTTON_XBUTTON1 - 1)) | (1 << (MOUSE_BUTTON_XBUTTON2 - 1))
+		var button_mask := 1 << (int(event.button_index) - 1)
 		if event.pressed:
 			if _finish_target(event.position):
 				return
-			held_at = now
-			hold_indicator.begin(event.position, get_viewport_rect().size)
-			if event.double_click:
+			if (event.button_mask & mouse_buttons & ~button_mask) == 0:
+				held_at = now
+				hold_indicator.begin(event.position, get_viewport_rect().size)
+			if event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
 				_try_skip()
-		else:
+		elif (event.button_mask & mouse_buttons) == 0:
 			held_at = -1
 			hold_indicator.cancel()
 	elif event is InputEventScreenTouch:

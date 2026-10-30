@@ -530,6 +530,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   replacement callbacks. Event-target doubles and direct native input dispatch
   do not qualify hardware touch bundling, GUI button activation, source image
   buffering, crawl/art pixels or complete campaign/transport acceptance.
+  Mouse long-press follows the source pointer lifetime: the first physical
+  button starts the hold, additional buttons and wheel movement do not restart
+  it, and the last physical button release cancels it. `node
+  tools/campaign_mouse_buttons_capture.mjs`,
+  `node --test tests/campaign_mouse_buttons.test.mjs` and real-driver
+  `tests/campaign_mouse_buttons.tscn` compare Chromium's actual right, middle,
+  side-button, wheel and overlapping left/right event sequences with native
+  dispatch. These controlled events do not qualify hardware input or touch emulation.
   A completed long press cancels and resets its feedback before checking the
   buffer, including repeated blocked attempts and a later successful skip.
   `node tools/campaign_hold_warning_capture.mjs`,

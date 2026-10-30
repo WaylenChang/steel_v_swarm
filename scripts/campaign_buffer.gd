@@ -90,7 +90,14 @@ func _settle(name: String, value: Resource, success: bool) -> void:
 	progress.emit(completed.size(), total, percent, name, complete)
 
 func _active() -> bool:
-	return not retired and is_inside_tree() and not is_queued_for_deletion()
+	if retired or not is_inside_tree():
+		return false
+	var owner: Node = self
+	while owner != null:
+		if owner.is_queued_for_deletion():
+			return false
+		owner = owner.get_parent()
+	return true
 
 func retire() -> void:
 	if retired:

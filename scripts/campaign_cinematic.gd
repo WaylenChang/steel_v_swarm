@@ -74,6 +74,16 @@ var hud_layout_queued := false
 func _now_msec() -> float:
 	return float(clock_msec.call()) if clock_msec.is_valid() else float(Time.get_ticks_usec()) / 1000.0
 
+func _live() -> bool:
+	if not is_inside_tree():
+		return false
+	var owner: Node = self
+	while owner != null:
+		if owner.is_queued_for_deletion():
+			return false
+		owner = owner.get_parent()
+	return true
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -200,12 +210,20 @@ func _make_buffer() -> Buffer:
 	return Buffer.new()
 
 func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
+	if not _live():
+		return
 	if sequence.is_empty():
 		if playing or closing:
+			var previous := generation
 			dispose()
+			if not is_instance_valid(self) or not _live() or generation != previous + 1:
+				return
 		finished.emit()
 		return
+	var previous := generation
 	dispose()
+	if not is_instance_valid(self) or not _live() or generation != previous + 1:
+		return
 	_write_scroll()
 	var token := generation
 	var is_prologue := is_same(sequence, Content.campaign.get("prologue", []))
@@ -273,33 +291,39 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 	modulate.a = 1.0
 	fade_opacity = 1.0
 	show()
+	if not is_instance_valid(self) or not _live() or token != generation:
+		return
 	set_process(true)
 	set_process_input(true)
 	_layout()
+	if not is_instance_valid(self) or not _live() or token != generation:
+		return
 	playing = true
 	_set_scene(start_index)
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	if is_prologue:
 		var loader := _make_buffer()
 		buffer_loader = loader
 		loader.progress.connect(_buffer_progress.bind(token))
 		add_child(loader)
-		if token != generation or not playing or closing or is_queued_for_deletion() or buffer_loader != loader:
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing or buffer_loader != loader:
 			return
 		buffer_status.show()
-		if not is_instance_valid(self) or is_queued_for_deletion() or not is_inside_tree() or token != generation or not playing or closing:
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 		_render_buffer()
 		loader.begin(buffer_rules)
-		if token != generation or not playing or closing or is_queued_for_deletion():
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 	else:
 		_render_buffer()
 		buffer_status.show()
-		if not is_instance_valid(self) or is_queued_for_deletion() or not is_inside_tree() or token != generation or not playing or closing:
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 	last_frame_at = _now_msec()
 	await get_tree().process_frame
-	if token != generation or not playing or closing:
+	if not _live() or token != generation or not playing or closing:
 		return
 	if start_index > 0:
 		var section: Control = sections[start_index]
@@ -378,11 +402,11 @@ func _queue_hud_layout() -> void:
 
 func _refresh_hud() -> void:
 	hud_layout_queued = false
-	if is_inside_tree() and is_instance_valid(caption) and is_instance_valid(buffer_status):
+	if _live() and is_instance_valid(caption) and is_instance_valid(buffer_status):
 		_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func _process(_delta: float) -> void:
-	if not playing or closing:
+	if not _live() or not playing or closing:
 		return
 	var now := _now_msec()
 	var rules: Dictionary = Content.campaign.presentation.crawl
@@ -395,7 +419,7 @@ func _process(_delta: float) -> void:
 		hold_indicator.cancel()
 		var token := generation
 		_try_skip()
-		if token != generation or not playing or closing:
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 	if now > paused_until:
 		var maximum := maxf(0, scroll.get_v_scroll_bar().max_value - scroll.get_v_scroll_bar().page)
@@ -411,6 +435,8 @@ func _write_scroll() -> void:
 	writing_scroll = false
 
 func _scroll_input(event: InputEvent) -> void:
+	if not _live():
+		return
 	if (event is InputEventScreenTouch and event.pressed and not event.canceled) or event is InputEventScreenDrag \
 			or (event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]):
 		paused_until = _now_msec() + float(Content.campaign.presentation.crawl.pause) * 1000
@@ -420,7 +446,7 @@ func _finish_target(point: Vector2) -> bool:
 		and scroll.get_global_rect().has_point(point) and finish_button.get_global_rect().has_point(point)
 
 func _input(event: InputEvent) -> void:
-	if not playing or closing:
+	if not _live() or not playing or closing:
 		return
 	var now := _now_msec()
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -491,7 +517,7 @@ func _set_scene(index: int) -> void:
 	_queue_hud_layout()
 
 func _buffer_progress(_loaded: int, _total: int, _percent: int, _name: String, _ready: bool, token: int) -> void:
-	if token == generation and playing and not closing and is_inside_tree() and not is_queued_for_deletion():
+	if _live() and token == generation and playing and not closing:
 		_render_buffer()
 
 func _render_buffer() -> void:
@@ -501,7 +527,7 @@ func _render_buffer() -> void:
 	_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func _try_skip() -> void:
-	if not playing or closing or not is_inside_tree() or is_queued_for_deletion():
+	if not _live() or not playing or closing:
 		return
 	if buffer_loader == null or buffer_loader.complete:
 		finish()
@@ -516,14 +542,14 @@ func _try_skip() -> void:
 	buffer_warning_timers.append(timer)
 	var token := generation
 	add_child(timer)
-	if token != generation or not playing or closing or not buffer_warning_timers.has(timer):
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing or not buffer_warning_timers.has(timer):
 		return
 	var deadline := _now_msec() + float(buffer_rules.warningMsec)
 	timer.timeout.connect(_buffer_warning_timeout.bind(timer, deadline, generation))
 	timer.start(float(buffer_rules.warningMsec) / 1000)
 
 func _buffer_warning_timeout(timer: Timer, deadline: float, token: int) -> void:
-	if token != generation or not playing or not buffer_warning_timers.has(timer):
+	if not _live() or token != generation or not playing or not buffer_warning_timers.has(timer):
 		return
 	var remaining := deadline - _now_msec()
 	if remaining > 0:
@@ -545,12 +571,15 @@ func _retire_buffer() -> void:
 	buffer_warning_timers.clear()
 	buffer_warning = false
 	if is_instance_valid(buffer_status):
+		var token := generation
 		buffer_status.hide()
+		if not is_instance_valid(self) or token != generation:
+			return
 		caption.text = Content.label("story_skip_hint")
 		_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func finish() -> void:
-	if not playing or closing:
+	if not _live() or not playing or closing:
 		return
 	var token := generation
 	closing = true
@@ -558,7 +587,7 @@ func finish() -> void:
 	hold_indicator.cancel()
 	finish_touches.clear()
 	finishing.emit()
-	if not is_instance_valid(self) or is_queued_for_deletion() or not is_inside_tree() or token != generation or not playing or not closing:
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or not closing:
 		return
 	set_process(false)
 	set_process_input(false)
@@ -570,17 +599,26 @@ func finish() -> void:
 	exit_timer.ignore_time_scale = true
 	exit_timer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(exit_timer)
+	if not is_instance_valid(self):
+		return
+	if token != generation or not playing or not closing:
+		return
+	if not _live():
+		_cancel_transitions()
+		return
 	exit_timer.timeout.connect(_complete_exit.bind(token))
 	exit_timer.start(float(Content.campaign.presentation.skip.fade))
 
 func _complete_exit(token: int) -> void:
-	if token != generation or not playing or not closing or not is_inside_tree() or is_queued_for_deletion():
+	if not _live() or token != generation or not playing or not closing:
 		return
 	var remaining := exit_deadline - _now_msec()
 	if remaining > 0:
 		exit_timer.start(remaining / 1000)
 		return
 	dispose()
+	if not is_instance_valid(self) or not _live() or generation != token + 1:
+		return
 	finished.emit()
 
 func _exit_curve(value: float) -> float:
@@ -589,7 +627,10 @@ func _exit_curve(value: float) -> float:
 
 func dispose() -> void:
 	generation += 1
+	var token := generation
 	_retire_buffer()
+	if not is_instance_valid(self) or token != generation:
+		return
 	playing = false
 	held_at = -1
 	hold_indicator.reset()

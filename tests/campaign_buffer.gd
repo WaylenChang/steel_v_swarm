@@ -141,6 +141,7 @@ func _reentrant() -> void:
 	view.play(Content.campaign.prologue, "Continue")
 	_check(not view.playing and view.buffer_loader == null, "Reentrant loader admission cannot restart a disposed cinematic")
 	view.free()
+
 	view = _view()
 	view.immediate = true
 	var clock := {"now": 1000.0}
@@ -165,6 +166,96 @@ func _reentrant() -> void:
 	view._try_skip()
 	_check(not view.playing and view.buffer_warning_timers.is_empty(), "Warning timer admission cannot schedule work after reentrant disposal")
 	view.free()
+
+func _queued_owners() -> void:
+	for queued in ["buffer", "parent", "ancestor"]:
+		var ancestor := Node.new()
+		add_child(ancestor)
+		var parent := Node.new()
+		ancestor.add_child(parent)
+		var buffer := ControlledBuffer.new()
+		parent.add_child(buffer)
+		var events: Array = []
+		buffer.progress.connect(func(loaded, _total, _percent, _name, _ready): events.append(loaded))
+		buffer.begin(reference.rules)
+		var retiring: Node = buffer if queued == "buffer" else parent if queued == "parent" else ancestor
+		retiring.queue_free()
+		buffer._settle(reference.rules.assets[0], null, true)
+		_check(events.is_empty() and buffer.completed.is_empty(),
+			"A queued " + queued + " cannot publish a cache completion")
+		ancestor.free()
+	for queued in ["parent", "ancestor"]:
+		var ancestor := Node.new()
+		add_child(ancestor)
+		var parent := Node.new()
+		ancestor.add_child(parent)
+		var buffer := ControlledBuffer.new()
+		parent.add_child(buffer)
+		var retiring: Node = parent if queued == "parent" else ancestor
+		retiring.queue_free()
+		buffer.begin(reference.rules)
+		_check(not buffer.started and buffer.paths.is_empty(),
+			"A queued " + queued + " cannot start cache requests")
+		ancestor.free()
+	var ancestor := Node.new()
+	add_child(ancestor)
+	var parent := Node.new()
+	ancestor.add_child(parent)
+	var buffer := ControlledBuffer.new()
+	buffer.immediate = true
+	parent.add_child(buffer)
+	var events: Array = []
+	buffer.progress.connect(func(loaded, _total, _percent, _name, _ready):
+		events.append(loaded)
+		ancestor.queue_free())
+	buffer.begin(reference.rules)
+	_check(events == [1] and buffer.completed.size() == 1,
+		"A synchronous progress callback that queues an ancestor stops later cache jobs")
+	ancestor.free()
+
+func _queued_view_callbacks() -> void:
+	for queued in ["parent", "ancestor"]:
+		var ancestor := Node.new()
+		add_child(ancestor)
+		var parent := Node.new()
+		ancestor.add_child(parent)
+		var view := BufferView.new()
+		var clock := {"now": 1000.0}
+		view.clock_msec = func(): return clock.now
+		parent.add_child(view)
+		view.play(Content.campaign.prologue, "Continue")
+		view.set_process(false)
+		view._try_skip()
+		var timer: Timer = view.buffer_warning_timers[0]
+		var token := view.generation
+		var retiring: Node = parent if queued == "parent" else ancestor
+		retiring.queue_free()
+		var text := view.buffer_status.text
+		clock.now += float(reference.rules.warningMsec)
+		timer.timeout.emit()
+		view._try_skip()
+		view._buffer_progress(1, 1, 100, "models", true, token)
+		_check(view.buffer_warning and view.buffer_warning_timers.size() == 1
+			and view.buffer_status.text == text,
+			"A queued " + queued + " rejects warning and cache callbacks")
+		ancestor.free()
+	for queued in ["parent", "ancestor"]:
+		var ancestor := Node.new()
+		add_child(ancestor)
+		var parent := Node.new()
+		ancestor.add_child(parent)
+		var view := BufferView.new()
+		parent.add_child(view)
+		view.play(Content.campaign.prologue, "Continue")
+		view.set_process(false)
+		var retiring: Node = parent if queued == "parent" else ancestor
+		view.child_entered_tree.connect(func(child: Node):
+			if child is Timer:
+				retiring.queue_free(), CONNECT_ONE_SHOT)
+		view._try_skip()
+		_check(view.buffer_warning_timers.size() == 1 and view.buffer_warning_timers[0].is_stopped(),
+			"A queued " + queued + " during warning admission cannot start its timer")
+		ancestor.free()
 
 func _native_requests() -> void:
 	var buffer := Buffer.new()
@@ -234,6 +325,8 @@ func _run() -> void:
 		_programs()
 		_gestures()
 		_reentrant()
+		_queued_owners()
+		_queued_view_callbacks()
 		await _native_requests()
 		await _paused_warning()
 	await get_tree().process_frame

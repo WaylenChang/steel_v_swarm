@@ -272,6 +272,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   authority stage/progress eligibility remain explicit external contracts.
   Retain generation checks across synchronous `finishing` listeners; cancelled,
   replaced, detached or retiring cinematics must not schedule old completion work.
+  Status visibility callbacks during retirement can replace or queue the owner;
+  old disposal, empty-play and completion continuations must not affect that
+  replacement or emit its predecessor's completion.
+  Queued owner ancestors also reject new playback, finish and pending warning or
+  completion callbacks; a queue during timer admission cannot start that timer.
+  Synchronous visibility, initial layout or scene-selection callbacks may replace,
+  dispose or retire playback; old construction cannot restart or overwrite it.
   Empty sequence replacement disposes the previous scene before completing.
   `tests/campaign_lifecycle.tscn` covers these lifecycle contracts independently
   of the unresolved native story-art import and complete visual composition.
@@ -502,8 +509,10 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   These checks do not certify status icon, color or flash pixels. Failed attempts
   count toward progress, not asset availability. Preserve independent 1800 ms
   warning deadlines, generation checks and decoder drains across replacement/exit,
-  including pause and zero gameplay speed. Original model
-  warming currently has an empty base manifest; reject nonempty/custom manifests
+  including pause and zero gameplay speed.
+  Cache jobs stop admitting or publishing results as soon as their loader or an
+  owner ancestor is queued for deletion, including during a progress callback.
+  Original model warming currently has an empty base manifest; reject nonempty/custom manifests
   until their native preload contract is published. Keep retained successful
   resource-cache entries separate from cancelled owners and private scene state.
   `node tools/campaign_buffer_capture.mjs` and real-driver

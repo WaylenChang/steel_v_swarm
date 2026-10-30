@@ -359,6 +359,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   the native card border retains the captured source color, opacity and width,
   and the date label retains its source color and font size. Archive bold styling,
   source font metrics and actual text pixels remain unresolved.
+  `node tools/campaign_sysbar_capture.mjs`,
+  `node --test tests/campaign_sysbar.test.mjs` and real-driver
+  `tests/campaign_sysbar.tscn` retain isolated source system-bar gradients and
+  bottom borders at three controlled sizes. The native bar still lacks both;
+  all three strict raster cases fail. A native gradient and border experiment
+  also fails after the test freezes the bar size; the shared group-composition
+  contract below retains the isolated alpha witness. These frames do not qualify
+  the outer HUD gradient, typography or populated composition.
   These checks do not qualify source text wrapping, the card's typography,
   gradient, blur, clipped corners, hardware safe areas or complete cinematic pixels.
   Scene selection updates the original date, badge and title as distinct fields;
@@ -1043,6 +1051,23 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   transforms. Acceptance: all six captured rasters plus additional fractional
   frame positions pass without wider tolerance or per-size baked images, then
   recheck original art, shadows, DPI and populated cinematic composition.
+
+- **Opus — cinematic system-bar group alpha:** agree a native binding for the
+  source system-bar gradient and bottom border within the complete presentation
+  opacity group consumed by `scripts/campaign_cinematic.gd`. With an opaque
+  `[66,100,130]` backdrop, source border `[122,158,178]` at alpha 0.18 must remain
+  visible. On the real Compatibility renderer, the controlled direct native
+  rectangle yields `[76,110,139]`, while the same rectangle inside `CanvasGroup`
+  yields unchanged `[66,100,130]`. At alpha 0.5, direct and grouped results are
+  `[94,129,154]` and `[105,146,172]`, respectively. The isolated probe is
+  `artifacts/terra/campaign-sysbar/group_probe.tscn`. Native gradient plus border
+  still differs in 358/4,545/21,920 pixels at the unchanged two-byte gate for
+  16×24, 101×50 and 320×75; source fixtures and controls are in
+  `tests/campaign_sysbar.tscn`. Preserve source gradient/border layering,
+  premultiplied alpha and the outer cinematic exit fade. Acceptance: all three
+  source rasters and additional opacity, fractional-size and nested presentation
+  cases pass without color retuning, per-size images or wider tolerance. Terra
+  binds the accepted renderer and validates text and the complete HUD separately.
 
 - **Opus — minimap lane raster:** agree source-faithful Canvas stroke bindings
   under `shaders/minimap_lane*.gdshader` for `scripts/minimap_lanes.gd`. The

@@ -609,7 +609,7 @@ func _try_skip() -> void:
 	timer.start(float(buffer_rules.warningMsec) / 1000)
 
 func _buffer_warning_timeout(timer: Timer, deadline: float, token: int) -> void:
-	if not _live() or token != generation or not playing or not buffer_warning_timers.has(timer):
+	if not _live() or token != generation or not playing or closing or not buffer_warning_timers.has(timer):
 		return
 	var remaining := deadline - _now_msec()
 	if remaining > 0:
@@ -629,7 +629,7 @@ func _retire_buffer() -> void:
 		timer.stop()
 		timer.queue_free()
 	buffer_warning_timers.clear()
-	buffer_warning = false
+	# The source keeps the status element's warning class after its owner finishes.
 	if is_instance_valid(buffer_status):
 		var token := generation
 		buffer_status.retire()

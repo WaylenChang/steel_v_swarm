@@ -605,9 +605,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node --test tests/campaign_status_color.test.mjs` and real-driver
   `tests/campaign_status_color.tscn` compare browser color samples, repeated
   warnings, reversal timing, paused wall time and replacement callbacks. The
+  original status element retains its warning class across finished playback;
+  a retired warning timer cannot clear it during the exit fade or a later scene.
+  `node tools/campaign_status_persistence_capture.mjs`,
+  `node --test tests/campaign_status_persistence.test.mjs` and real-driver
+  `tests/campaign_status_persistence.tscn` compare five original DOM/controller
+  lifecycles through chapter playback and prologue replay. These probes reuse a
+  single native presentation owner; they do not qualify host recreation. The
   independently colored ready check, status spinner, flash animation, text
-  metrics, CSS class persistence across finished playback and complete status
-  pixels remain unqualified. Failed attempts
+  metrics and complete status pixels remain unqualified. Failed attempts
   count toward progress, not asset availability. Preserve independent 1800 ms
   warning deadlines, generation checks and decoder drains across replacement/exit,
   including pause and zero gameplay speed.

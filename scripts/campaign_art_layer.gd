@@ -7,6 +7,7 @@ var content: Control
 var background: TextureRect
 var frame: Control
 var foreground_clip: Control
+var fallback_image: TextureRect
 var image: TextureRect
 var frame_edges: Array[ColorRect] = []
 var scene: Dictionary = {}
@@ -76,6 +77,8 @@ func _ready() -> void:
 	foreground_clip.clip_contents = true
 	foreground_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_child(foreground_clip)
+	fallback_image = _image()
+	foreground_clip.add_child(fallback_image)
 	image = _image()
 	foreground_clip.add_child(image)
 	var edge_color: Array = frame_rules.borderColor
@@ -102,11 +105,12 @@ func _load_art() -> void:
 	if loaded:
 		return
 	loaded = true
-	var path: String = scene.img
-	if _texture(path) == null:
-		path = scene.get("fallbackImg", "")
-	image.texture = _texture(path)
-	background.texture = _texture(path, true)
+	var primary_path: String = scene.img
+	var fallback_path: String = scene.get("fallbackImg", "")
+	image.texture = _texture(primary_path)
+	fallback_image.texture = _texture(fallback_path) if not fallback_path.is_empty() else null
+	var backdrop_path := primary_path if image.texture != null else fallback_path if fallback_image.texture != null else ""
+	background.texture = _texture(backdrop_path, true) if not backdrop_path.is_empty() else null
 	var style: Dictionary = Content.campaign.presentation.art
 	background.material.set_shader_parameter("brightness", style.brightness)
 	background.material.set_shader_parameter("saturation", style.saturation)
@@ -190,11 +194,12 @@ func _apply_pose() -> void:
 	var units := float(frame_rules.layoutUnits)
 	var inset_x := floorf(float(foreground_clip.size.x) * inset * units) / units
 	var inset_y := floorf(float(foreground_clip.size.y) * inset * units) / units
-	image.size = Vector2(float(foreground_clip.size.x) + inset_x * 2, float(foreground_clip.size.y) + inset_y * 2)
-	image.pivot_offset = image.size / 2
-	image.scale = Vector2.ONE * float(pose.scale)
-	image.position = Vector2(-inset_x + float(image.size.x) * float(pose.x) / 100,
-		-inset_y + float(image.size.y) * float(pose.y) / 100)
+	for target: TextureRect in [fallback_image, image]:
+		target.size = Vector2(float(foreground_clip.size.x) + inset_x * 2, float(foreground_clip.size.y) + inset_y * 2)
+		target.pivot_offset = target.size / 2
+		target.scale = Vector2.ONE * float(pose.scale)
+		target.position = Vector2(-inset_x + float(target.size.x) * float(pose.x) / 100,
+			-inset_y + float(target.size.y) * float(pose.y) / 100)
 
 func cancel() -> void:
 	if tween != null and tween.is_valid():

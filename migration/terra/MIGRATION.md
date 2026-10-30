@@ -331,6 +331,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   transparent render targets. Preserve the strict frame-7 comparator failure
   and byte witness below. Declared colors do not qualify actual art decoding,
   fallback pixels, blur, framing, populated transitions or performance.
+  The foreground keeps the original primary and fallback images as ordered,
+  independently covered layers, including when they name the same image; both
+  share the camera transform. `node tools/campaign_fallback_capture.mjs`,
+  `node --test tests/campaign_fallback.test.mjs` and real-driver
+  `tests/campaign_fallback.tscn` retain twelve controlled browser compositions.
+  All unscaled cases and missing-image controls match; four scaled transparent
+  cases remain strict failures pending the shared sampling contract below.
+  The backdrop still selects a single image, and actual story art remains
+  blocked on native encoding; these probes do not qualify the complete scene.
   The static backdrop expands by the original CSS inset before its centered
   scale; foreground motion does not move it. `node tools/campaign_backdrop_capture.mjs`,
   `node --test tests/campaign_backdrop.test.mjs` and real-driver
@@ -972,6 +981,24 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   background and portrait paths remain reusable without corrupting cached art.
 
 ### Shared renderer contracts
+
+- **Opus — cinematic fallback image composition:** provide source-faithful
+  foreground image sampling and a backdrop binding under `shaders/` for
+  `scripts/campaign_art_layer.gd`. Original CSS stacks primary and fallback
+  images separately before applying the backdrop blur/brightness/saturation;
+  the native backdrop still samples only one image. Foreground layers now keep
+  both images, but linear filtering of transparent pixels differs from Chromium
+  at the unchanged two-byte gate. In `tests/campaign_fallback.tscn`, the four
+  32-to-64 px transparent cases each differ at 256 pixels; with both images at
+  x=31 the browser RGBA is `[95,121,143,255]` and native is `[73,118,142,255]`.
+  Six unscaled cases and both scaled missing-primary controls pass. Preserve
+  premultiplied filtering, independent cover geometry, image order, camera pose,
+  the shared group opacity and immutable source textures. Acceptance: all twelve
+  strict original rasters plus fractional scaling, mismatched aspect ratios,
+  alpha edges and independently loaded images pass without wider tolerances or
+  case-specific images; then validate both layers before backdrop filtering,
+  decoded story art and full cinematic composition. Terra binds the accepted
+  renderer in a separate change.
 
 - **Opus — source scrollbar geometry and input:** agree a shared native binding
   in `scripts/source_scrollbar.gd`, with a material under `shaders/` if needed,

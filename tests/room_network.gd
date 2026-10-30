@@ -78,7 +78,7 @@ func _physics_process(delta: float) -> void:
 	if not ready_for_probe:
 		return
 	if retained_player != Session.player_id() or retained_token != Session.resume_token or retained_pilot != pilot or retained_battle != simulation or begins != 1 or Session.local_member().get("name", "") != retained_name:
-		_fail("NETWORK_ROOM_REBUILT_OR_CHANGED_IDENTITY")
+		_fail("NETWORK_ROOM_REBUILT_OR_CHANGED_IDENTITY stage=%d disconnects=%d player=%s token=%s pilot=%s battle=%s begins=%d name=%s" % [stage, disconnects, retained_player == Session.player_id(), retained_token == Session.resume_token, retained_pilot == pilot, retained_battle == simulation, begins, Session.local_member().get("name", "") == retained_name])
 		return
 	var heading := float(stage + 1) * 0.25
 	var mode: String = Controls.rules.modeKeys[stage % Controls.rules.modeKeys.size()]

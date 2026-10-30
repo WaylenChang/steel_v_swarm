@@ -27,7 +27,8 @@ func _create_simulation() -> BattleSimulation:
 	return FeedbackSimulation.new()
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 18:
 		_fail("NETWORK_BLAST_TIMEOUT phase=%d" % phase)
 		return
@@ -69,7 +70,7 @@ func _physics_process(delta: float) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _start_fixture() -> void:
-	if not Session.dedicated or fixture_peer == 0 or multiplayer.get_remote_sender_id() != fixture_peer:
+	if not Session.dedicated or fixture_peer == 0 or Session.seats.player_for(multiplayer.get_remote_sender_id()) != fixture_peer:
 		return
 	_emit_fixture()
 
@@ -94,7 +95,7 @@ func _emit_fixture() -> void:
 	var expected: Dictionary = reference.steps[1]
 	expected_velocity = Vector3(expected.velocity[0], expected.velocity[1] if pilot.flying else expected.lift, expected.velocity[2])
 	expected_impulse = Vector2.ZERO if pilot.flying else Vector2(expected.velocity[0], expected.velocity[2])
-	_expect_fixture.rpc_id(fixture_peer, reference, local, global)
+	_expect_fixture.rpc_id(Session.seats.transport_for(fixture_peer), reference, local, global)
 
 @rpc("authority", "call_remote", "reliable")
 func _expect_fixture(source: Dictionary, local: Dictionary, global: Dictionary) -> void:
@@ -105,7 +106,7 @@ func _expect_fixture(source: Dictionary, local: Dictionary, global: Dictionary) 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _verify_fixture() -> void:
-	if not Session.dedicated or fixture_peer == 0 or multiplayer.get_remote_sender_id() != fixture_peer:
+	if not Session.dedicated or fixture_peer == 0 or Session.seats.player_for(multiplayer.get_remote_sender_id()) != fixture_peer:
 		return
 	var pilot: BattleUnit = simulation.pilots[fixture_peer]
 	if _resources(pilot) != frozen_resources or pilot.velocity.distance_to(expected_velocity) > .0002 or pilot.impulse_velocity.distance_to(expected_impulse) > .0002:
@@ -115,7 +116,7 @@ func _verify_fixture() -> void:
 		phase = 1
 		_emit_fixture()
 	else:
-		_finish_fixture.rpc_id(fixture_peer)
+		_finish_fixture.rpc_id(Session.seats.transport_for(fixture_peer))
 
 @rpc("authority", "call_remote", "reliable")
 func _finish_fixture() -> void:

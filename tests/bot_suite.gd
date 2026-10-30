@@ -95,6 +95,9 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 				var direction := BotRules.blood_direction(uv, item.halfH, item.halfV)
 				h._check(uv.distance_to(Vector2(item.uv[0], item.uv[1])) < 0.000001, "Original blood-screen edge projection")
 				h._check(direction.distance_to(Vector2(item.direction[0], item.direction[1])) < 0.000001, "Original elite alert direction inversion")
+	h._near(BotRules.packed_reach({}), 15, "Source packed-target reach defaults a heavy without a blast radius")
+	h._near(BotRules.packed_reach({"r": 0}), 15, "Source packed-target reach treats a zero radius as absent")
+	h._near(BotRules.packed_reach({"r": 4}), 6, "Source packed-target reach scales an authored blast radius")
 	for item: Dictionary in fixtures.botOperations:
 		var simulation := context(h)
 		var brain := BotBrain.new()

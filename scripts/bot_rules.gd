@@ -19,6 +19,9 @@ static func fov_half(kind: String, vertical: bool = false) -> float:
 	var half := deg_to_rad(float(Content.constants.UNITS.get(kind, {}).get("fov", 68))) / 2
 	return half if vertical else atan(tan(half) * float(Content.constants.BOT_VIEW.ASPECT))
 
+static func packed_reach(heavy: Dictionary) -> float:
+	return float(heavy.r if heavy.get("r") else 10) * 1.5
+
 static func threat_decay(age: float, tactics: Dictionary) -> float:
 	return maxf(0, 1 - maxf(0, age) / float(tactics.THREAT_S))
 

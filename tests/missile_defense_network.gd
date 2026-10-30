@@ -12,7 +12,8 @@ var reflect_seen := false
 var harmless_seen := false
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 16:
 		push_error("NETWORK_MISSILE_DEFENSE_TIMEOUT decoy=%s phase=%s reflect=%s harmless=%s" % [decoy_seen, phase_seen, reflect_seen, harmless_seen])
 		get_tree().quit(1)

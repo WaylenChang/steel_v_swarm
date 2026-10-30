@@ -11,7 +11,8 @@ var bar_seen := false
 var stages_seen := false
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 16:
 		push_error("NETWORK_BOSS_TIMEOUT segments=%s bar=%s stages=%s" % [segments_seen.keys(), bar_seen, stages_seen])
 		get_tree().quit(1)
@@ -69,6 +70,15 @@ func _physics_process(delta: float) -> void:
 		Session.stop()
 		get_tree().quit()
 
+# Snapshot levels are integers while the JSON-decoded reference holds floats.
+func _upgrades_match(actual: Dictionary, expected: Dictionary) -> bool:
+	if actual.size() != expected.size():
+		return false
+	for key: String in expected:
+		if not actual.has(key) or float(actual[key]) != float(expected[key]):
+			return false
+	return true
+
 func _receive_state(state: Dictionary) -> void:
 	super._receive_state(state)
 	if Session.dedicated or simulation == null:
@@ -86,8 +96,8 @@ func _receive_state(state: Dictionary) -> void:
 		var segment: int = int(input.special.boss_segment)
 		var expected: Dictionary = reference.steps[segment].result
 		# The first trace input stays in segment zero; subsequent inputs break one segment each.
-		if absf(float(input.max_hp) - float(expected.max_hp)) > 0.001 or input.upgrades != expected.upgrades or absf(float(input.shield) - float(expected.shield)) > 0.001:
-			push_error("NETWORK_BOSS_SOURCE_STATE_MISMATCH segment=" + str(segment))
+		if absf(float(input.max_hp) - float(expected.max_hp)) > 0.001 or not _upgrades_match(input.upgrades, expected.upgrades) or absf(float(input.shield) - float(expected.shield)) > 0.001:
+			push_error("NETWORK_BOSS_SOURCE_STATE_MISMATCH segment=%d actual=%s expected=%s" % [segment, [input.max_hp, input.upgrades, input.shield], expected])
 			get_tree().quit(1)
 			return
 		var unit: BattleUnit = simulation.units[int(input.id)]

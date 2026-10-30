@@ -27,6 +27,7 @@ var opacity := 0.0:
 			viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE if group.visible else SubViewport.UPDATE_DISABLED
 var tween: Tween
 var transition: Dictionary = {}
+var selection_generation := 0
 var pose := {"scale": 1.0, "x": 0.0, "y": 0.0}
 var pose_rules: Dictionary
 var pose_target := {"scale": 1.0, "x": 0.0, "y": 0.0}
@@ -117,16 +118,32 @@ func _load_art() -> void:
 	background.material.set_shader_parameter("mip_level", log(float(style.blur)) / log(2.0))
 
 func select(value: bool) -> void:
-	if selected == value:
+	if not _live() or selected == value:
 		return
+	selection_generation += 1
+	var token := selection_generation
 	selected = value
 	if value:
 		_load_art()
+		if not is_instance_valid(self) or not _live() or token != selection_generation:
+			return
 	group.visible = selected or opacity > 0
+	if not is_instance_valid(self) or not _live() or token != selection_generation:
+		return
 	viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE if group.visible else SubViewport.UPDATE_DISABLED
 	tween = preload("res://scripts/css_transition.gd").start(self, "opacity", float(value), rules.duration, tween, transition, _curve)
 	if tween != null:
 		tween.set_ignore_time_scale(true)
+
+func _live() -> bool:
+	if not is_inside_tree():
+		return false
+	var owner: Node = self
+	while owner != null:
+		if owner.is_queued_for_deletion():
+			return false
+		owner = owner.get_parent()
+	return true
 
 func _curve(value: float) -> float:
 	var curve: Array = rules.curve
@@ -202,6 +219,7 @@ func _apply_pose() -> void:
 			-inset_y + float(target.size.y) * float(pose.y) / 100)
 
 func cancel() -> void:
+	selection_generation += 1
 	if tween != null and tween.is_valid():
 		tween.kill()
 	transition.clear()

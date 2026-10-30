@@ -16,6 +16,7 @@ var scroll: ScrollContainer
 var crawl_margin: MarginContainer
 var column: VBoxContainer
 var sections: Array[Control] = []
+var admitting_crawl_children: Array[Control] = []
 var art_host: Control
 var art_layers: Array[Control] = []
 var shade: ColorRect
@@ -242,6 +243,10 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		var layer := _make_art_layer()
 		layer.name = "prologueSceneItem-%d" % art_layers.size()
 		art_host.add_child(layer)
+		if not is_instance_valid(self) or not _live() or token != generation:
+			if is_instance_valid(layer):
+				layer.queue_free()
+			return
 		layer.scene = scene
 		art_layers.append(layer)
 		var section := CrawlSection.new()
@@ -251,13 +256,33 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		section.geometry_rules = section_geometry_rules
 		section.opacity_rules = section_opacity_rules
 		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		admitting_crawl_children.append(section)
 		column.add_child(section)
+		if not is_instance_valid(self):
+			if is_instance_valid(section):
+				section.queue_free()
+			return
+		admitting_crawl_children.erase(section)
+		if not _live() or token != generation:
+			if is_instance_valid(section):
+				section.queue_free()
+			return
 		sections.append(section)
 	var ending: Dictionary = ending_rules.prologue if is_prologue else ending_rules.chapter
 	var ending_box := VBoxContainer.new()
 	ending_box.mouse_filter = Control.MOUSE_FILTER_PASS
 	ending_box.add_theme_constant_override("separation", 0)
+	admitting_crawl_children.append(ending_box)
 	column.add_child(ending_box)
+	if not is_instance_valid(self):
+		if is_instance_valid(ending_box):
+			ending_box.queue_free()
+		return
+	admitting_crawl_children.erase(ending_box)
+	if not _live() or token != generation:
+		if is_instance_valid(ending_box):
+			ending_box.queue_free()
+		return
 	var top_space := Control.new()
 	top_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_space.custom_minimum_size.y = float(ending_geometry_rules.padding.top)
@@ -342,7 +367,11 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		var section: Control = sections[start_index]
 		scroll_offset = maxf(0, section.position.y + crawl_top + section.size.y * float(Content.campaign.presentation.crawl.start) - scroll.size.y * float(Content.campaign.presentation.crawl.focus))
 		_write_scroll()
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+			return
 		_update_scene()
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+			return
 		_set_scene(start_index)
 
 func _layout() -> void:
@@ -529,33 +558,50 @@ func _input(event: InputEvent) -> void:
 				last_tap = now
 
 func _update_scene() -> void:
-	if not playing or scenes.is_empty() or sections.is_empty():
+	if not _live() or not playing or closing or scenes.is_empty() or sections.is_empty():
 		return
+	var token := generation
 	var positions: Array = []
 	for section: Control in sections:
 		positions.append({"top": section.position.y + crawl_top, "height": section.size.y})
 	var focus := CampaignRules.focus_section(scroll.scroll_vertical, scroll.size.y, positions, active)
 	_set_scene(int(focus.index))
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	var pose := CampaignRules.camera_pose(scenes[active].camera, focus.progress, size.x >= size.y)
 	if pose.is_empty():
 		return
 	art_layers[active].set_pose(pose)
 
 func _set_scene(index: int) -> void:
-	if index == active or index < 0 or index >= scenes.size():
+	if not _live() or not playing or closing or index == active or index < 0 or index >= scenes.size():
 		return
+	var token := generation
 	var initial := active < 0
 	active = index
 	var scene: Dictionary = scenes[index]
 	for layer_index in range(art_layers.size()):
 		art_layers[layer_index].select(layer_index == index)
+		if not is_instance_valid(self) or not _scene_current(token, index):
+			return
 	for section_index in range(sections.size()):
 		if sections[section_index] is CrawlSection:
 			sections[section_index].select(section_index == index, initial)
+			if not is_instance_valid(self) or not _scene_current(token, index):
+				return
 	badge_label.text = scene.badge
+	if not is_instance_valid(self) or not _scene_current(token, index):
+		return
 	heading.text = scene.title
+	if not is_instance_valid(self) or not _scene_current(token, index):
+		return
 	tag.text = scene.tag
+	if not is_instance_valid(self) or not _scene_current(token, index):
+		return
 	_queue_hud_layout()
+
+func _scene_current(token: int, index: int) -> bool:
+	return _live() and playing and not closing and token == generation and active == index
 
 func _buffer_progress(_loaded: int, _total: int, _percent: int, _name: String, _ready: bool, token: int) -> void:
 	if _live() and token == generation and playing and not closing:
@@ -707,6 +753,8 @@ func dispose() -> void:
 	set_process_input(false)
 	_cancel_transitions()
 	for child in column.get_children():
+		if child in admitting_crawl_children:
+			continue
 		column.remove_child(child)
 		child.queue_free()
 	sections.clear()

@@ -114,7 +114,54 @@ func _run() -> void:
 	await _check_queued_ancestors(scenes)
 	await _check_show_reentrancy(scenes)
 	_check_admission_reentrancy(scenes)
+	await _check_child_admission_reentrancy(scenes)
 	_finish_campaign()
+
+func _check_child_admission_reentrancy(scenes: Array) -> void:
+	for boundary in ["art", "section", "ending"]:
+		for operation in ["replace", "dispose", "queue", "ancestor"]:
+			var parent_node := Node.new()
+			add_child(parent_node)
+			var view := LifecycleView.new()
+			parent_node.add_child(view)
+			view.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+			view.size = Vector2(640, 360)
+			var parent: Node = view.art_host if boundary == "art" else view.column
+			var invoked := {"value": false}
+			var on_child := func(child: Node):
+				if invoked.value or (boundary == "ending" and not child is VBoxContainer):
+					return
+				invoked.value = true
+				match operation:
+					"replace": view.play([scenes[1]], "")
+					"dispose": view.dispose()
+					"queue": view.queue_free()
+					"ancestor": parent_node.queue_free()
+			parent.child_entered_tree.connect(on_child)
+			view.play(scenes, "")
+			_check(invoked.value, "The " + boundary + " admission callback runs synchronously")
+			if operation == "replace":
+				_check(view.playing and view.scenes.size() == 1 and view.scenes[0].id == scenes[1].id
+					and view.art_layers.size() == 1 and view.sections.size() == 1,
+					"Replacement during " + boundary + " admission keeps only the replacement scene")
+			elif operation == "dispose":
+				_check(not view.playing and view.scenes.is_empty() and view.art_layers.is_empty() and view.sections.is_empty(),
+					"Disposal during " + boundary + " admission cannot resume old construction")
+			else:
+				_check((view.is_queued_for_deletion() or parent_node.is_queued_for_deletion()) and not view.playing,
+					"Retirement during " + boundary + " admission cannot start playback")
+			await get_tree().process_frame
+			if operation == "replace":
+				_check(view.art_host.get_child_count() == 1 and view.column.get_child_count() == 2,
+					"Replacement during " + boundary + " admission releases unadmitted children")
+				view.dispose()
+				parent_node.free()
+			elif operation == "dispose":
+				_check(view.art_host.get_child_count() == 0 and view.column.get_child_count() == 0,
+					"Disposal during " + boundary + " admission releases unadmitted children")
+				parent_node.free()
+			elif operation == "queue":
+				parent_node.free()
 
 func _check_admission_reentrancy(scenes: Array) -> void:
 	for boundary in ["layout", "selection"]:

@@ -50,6 +50,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Unknown remote magazines and movement resources remain null. These checks do
   not qualify populated ray queries, actor pixels, recipient publication or the
   shared main-to-camera angle transfer contract below.
+  Followed-player HUD defaults retain the source's nullish power and truthy
+  cooldown/resource rules, including empty upgrade dictionaries and `NaN`
+  cooldowns; unknown magazines remain null. `node
+  tools/spectator_hud_defaults_capture.mjs`,
+  `node --test tests/spectator_hud_defaults.test.mjs` and
+  `tests/spectator_hud_defaults.tscn` execute the original Chromium HUD method
+  with controlled imported level-one definitions and compare missing, null,
+  zero, negative and partially supplied data. These probes do not qualify real
+  snapshot schema, populated transport or complete authored HUD rendering.
   The spectator roster preserves input order for equal side/player keys, including
   when nearest selection encounters equal-distance duplicate entries.
   `node tools/spectator_roster_capture.mjs`,
@@ -143,6 +152,30 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   traces; its strict gate also remains open pending the authority contract below.
   Neither controlled fixture qualifies upstream precision, populated surfaces,
   clipping, ring placement, transport or rendered body/camera poses.
+  The original death page also renders a frontline inset after the death
+  sequence. `PipDeathState.source` retains its stable nearest-live-allied-tower
+  selection, first allied base fallback even if dead, and null for the elevated
+  death-position fallback. It compares scalar double squared distances before
+  native vector conversion. `node tools/pip_death_selection_capture.mjs`,
+  `node --test tests/pip_death_selection.test.mjs` and
+  `tests/pip_death_selection.tscn` execute the original Chromium method and
+  check controlled native-representable coordinates, equal and near ties,
+  hidden/missing models and source visibility restoration. A missing native
+  model-availability flag cannot admit a source. `PipDeathState.eye_position`
+  retains the source's measured-top/zero/NaN fallback and ground-height eye
+  offsets before native vector storage. `node tools/pip_death_pose_capture.mjs`,
+  `node --test tests/pip_death_pose.test.mjs` and `tests/pip_death_pose.tscn`
+  compare 48 original Chromium eye positions using controlled native-representable
+  inputs and supplied ground heights. `PipDeathState.can_prepare` retains the
+  original death/transition/game-over/side/config/frame gates, and its `viewport`
+  keeps CSS-space scissor coordinates as scalar doubles through the strict
+  minimum-size check. `node tools/pip_death_gate_capture.mjs`,
+  `node --test tests/pip_death_gate.test.mjs` and `tests/pip_death_gate.tscn`
+  retain 13 Chromium programs, including exact and sub-boundary sizes. Source
+  camera preparation occurs before the separate size gate. These cases do not
+  implement a native inset: view direction and camera matrix, actual terrain
+  queries, frame-to-renderer conversion, death-page lifecycle, populated snapshot
+  delivery and pixels remain open.
 - [ ] **S13 — Minimap:** certify full/vicinity windows, warmup/draw deadlines,
   original baked pixels, lane grades/dash/miter rules, labels, remembered bunkers,
   neutral exclusions and public entity markers. Finish persistent exploration,
@@ -320,6 +353,10 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   completion callbacks; a queue during timer admission cannot start that timer.
   Synchronous visibility, initial layout or scene-selection callbacks may replace,
   dispose or retire playback; old construction cannot restart or overwrite it.
+  Art-layer, crawl-section and ending-block admission callbacks may also replace,
+  dispose or queue the owner or an ancestor. Retire only the unadmitted child
+  after its native entry finishes; removing a child during its entry corrupts
+  Godot's container bookkeeping and section `_ready` lifecycle.
   Empty sequence replacement disposes the previous scene before completing.
   `tests/campaign_lifecycle.tscn` covers these lifecycle contracts independently
   of the unresolved native story-art import and complete visual composition.
@@ -521,6 +558,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Camera-target delivery follows the original frame branch: paused or saturated
   automatic scrolling does not reevaluate focus solely because section geometry
   changed. Explicit scroll/resize producers retain their own focus updates.
+  If scene selection synchronously replaces, disposes or retires playback, its
+  old scroll update cannot deliver a camera target to the replacement. The
+  deferred chapter jump also stops before selecting a scene in a replacement.
+  Art-layer visibility callbacks may also replace or retire playback or select
+  another scene synchronously; the superseded selection cannot continue its
+  layer loop, overwrite the heading or create an obsolete opacity tween.
   `node tools/campaign_delivery_capture.mjs` and real-driver
   `tests/campaign_delivery.tscn` connect actual scroll controls to original
   nearest-section/camera functions, including gaps, ties, zero heights and
@@ -597,7 +640,16 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node --test tests/campaign_hint_style.test.mjs` and real-driver
   `tests/campaign_hint_style.tscn` compare three viewport sizes, prologue/chapter
   transitions and replacement from a synchronous hint theme callback. Source
-  letter spacing, font metrics and the ready hint's key badges remain unqualified.
+  letter spacing and font metrics remain unqualified. The ready hint still lacks
+  its two separate styled key badges. `node tools/campaign_hint_badges_capture.mjs`
+  and `node --test tests/campaign_hint_badges.test.mjs` retain the original
+  pending/ready/repeated-switch DOM and CSS, including a constrained-width flex
+  case: the two badge boxes wrap internally and reach 27.5 by 32 px inside a
+  120 px hint, rather than remaining fixed-size icons. Preserve their source text,
+  padding, border, radius, flex gap and inherited letter spacing. Native layout
+  and pixels still need the shared font contract and fractional coverage checks;
+  these browser measurements use the captured local font environment and do not
+  qualify native text or complete HUD pixels.
   Status text retains the original pending/ready/warning inherited colors and
   0.3 s ease transition, including shortened repeated reversals. Warning text is
   immediately red; later buffer progress restores inherited color without
@@ -762,6 +814,27 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   the shared advance contract below is accepted for the relevant text consumer.
 
 ## Integration and handoffs
+
+- **Flash — death-page inset host:** expose an actual death-page frame and its
+  effective visibility through `scripts/native_ui.gd` for a future Terra-owned
+  frontline inset. Preserve the original `#deadCam` bounds, 16:9 aspect, 2 px
+  border, desktop/touch width rules, caption, overlay stacking and the existing
+  countdown/respawn lifecycle. Acceptance: original browser geometry and native
+  frame agree across desktop, portrait and touch sizes; show, hide, detach and
+  respawn immediately retire the inset without intercepting gameplay input.
+  Do not display a generic or empty replacement while its camera is unavailable.
+- **Opus — frontline inset publication:** define the recipient-view contract in
+  `scripts/main.gd`, `scripts/simulation.gd` and, if needed,
+  `scripts/actor_snapshot.gd` for the Terra death-view consumer. Publish the
+  original enemy-base world coordinates, snapshot-ordered actor identity, kind,
+  side, death state, model availability/position and measured top height, plus
+  death-sequence/game-over/respawn gates and the death position/terrain query.
+  Preserve recipient visibility, prior-snapshot lifetime and combat authority;
+  do not substitute live authority-only entities. Acceptance: original tower,
+  base and no-source fallbacks plus death, respawn and game-over transitions
+  agree offline and over ENet/WebSocket before binding `PipDeathState.source`
+  and a Terra-owned camera/render consumer. The exact browser distance and
+  camera orientation contracts below still apply to its pose.
 
 - **Flash — cinematic chapter return label:** tracked in
   [F2](../flash/MIGRATION.md#ready-for-bounded-implementation). Terra retains
@@ -1041,6 +1114,17 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   source corpus, Latin/CJK/punctuation, both weights and all recorded sizes,
   without arbitrary spacing corrections, tolerance widening or a baked table of
   whole-string widths. Terra owns subsequent Label/row layout and pixel binding.
+- **Opus — cinematic hint font metrics:** extend the accepted
+  `scripts/source_font_metrics.gd` contract to the skip hint consumed by
+  `scripts/campaign_cinematic.gd`. The source requests 12 px `Consolas`,
+  `SF Mono`, `ui-monospace`, `monospace` with browser CJK fallback and 1.5 px
+  letter spacing. Preserve fallback selection, shaping and fractional advances
+  for individual flex items, including their internal wrapping. Acceptance:
+  the pending and ready strings and both badge labels in
+  `tests/fixtures/campaign_hint_badges.json` match source measurements at the
+  three captured widths plus fractional widths and DPI cases without spacing
+  retuning or whole-string lookup tables. Terra then implements and verifies the
+  two badge controls, reentrant status changes and full hint composition.
 - **Opus — transcript portrait matte and avatar frames:** agree accepted native
   bindings under `shaders/` for original `.dlg-art` and `.dlg-av` pixels before
   full transcript composition is accepted. Background portraits retain 150 px

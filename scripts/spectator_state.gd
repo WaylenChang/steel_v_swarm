@@ -186,36 +186,53 @@ func hud(actors: Array, side: String = "") -> Variant:
 		return {"spec": true, "follow": false, "who": rules.ui.hudFree.get(mode, rules.ui.hudFree.god), "hp": 0, "max": 1}
 	var character := str(actor.get("ch", ""))
 	var display: Dictionary = rules.display.get(character, {})
-	var ab: Dictionary = actor.get("ab", {})
-	var power: float = actor.get("mp", 0)
+	var raw_abilities: Variant = actor.get("ab")
+	var ab: Dictionary = {}
+	if ControlPreferences.truthy(raw_abilities):
+		if not raw_abilities is Dictionary:
+			push_error("Spectator ability levels must be a dictionary")
+			return null
+		ab = raw_abilities
+	var raw_power: Variant = actor.get("mp")
+	if raw_power != null and not raw_power is float and not raw_power is int:
+		push_error("Spectator power must be numeric or null")
+		return null
+	var power := 0.0 if raw_power == null else float(raw_power)
+	var raw_cooldowns: Variant = _source_or(actor.get("cds"), [])
 	var result := {"spec": true, "follow": true,
 		"who": str(rules.ui.hudFollow["unknown" if display.is_empty() else "character"]).replace("{name}", target_name(actor)).replace("{machine}", str(display.get("machine", ""))).replace("{view}", view_name),
-		"ch": character, "hp": actor.hp, "max": actor.max, "dead": actor.get("dead", false), "rs": actor.get("rs", 0),
-		"upg": actor.get("up"), "money": actor.get("money", 0), "kn": actor.get("kn", 0), "atBase": false, "aiming": false,
-		"sp": actor.get("sp", 0), "msp": actor.get("maxSp", 1) if actor.get("maxSp", 0) else 1,
-		"mp": power, "mm": actor.get("mm", 1) if actor.get("mm", 0) else 1,
-		"lift": null, "mobil": null, "morph": null, "emp": actor.get("emp", 0), "stealth": 0}
+		"ch": character, "hp": actor.hp, "max": actor.max, "dead": ControlPreferences.truthy(actor.get("dead")), "rs": _source_or(actor.get("rs"), 0),
+		"upg": _source_or(actor.get("up"), null), "money": _source_or(actor.get("money"), 0), "kn": _source_or(actor.get("kn"), 0), "atBase": false, "aiming": false,
+		"sp": _source_or(actor.get("sp"), 0), "msp": _source_or(actor.get("maxSp"), 1),
+		"mp": power, "mm": _source_or(actor.get("mm"), 1),
+		"lift": null, "mobil": null, "morph": null, "emp": _source_or(actor.get("emp"), 0), "stealth": 0}
 	if not display.is_empty():
 		result.code = display.code
 		result.machine = display.machine
 	for slot: String in ["light", "heavy"]:
-		var level: float = ab.get(slot, 1) if ab.get(slot, 0) else 1
+		var level: float = _source_or(ab.get(slot), 1)
 		var weapon: Dictionary = Content.local_weapon(character, slot, level) if Content.heroes.has(character) else {}
 		result[slot] = {"name": weapon.get("name", rules.unknownName), "lvl": level if not weapon.is_empty() else 0,
 			"ammo": null, "mag": weapon.get("mag", 0), "reload": 0, "reloadMax": weapon.get("reload", 0)}
 	for slot: String in ["def", "atk"]:
-		var level: float = ab.get(slot, 1) if ab.get(slot, 0) else 1
+		var level: float = _source_or(ab.get(slot), 1)
 		var ability: Dictionary = Content.local_ability(character, slot, level) if Content.heroes.has(character) else {}
 		if ability.is_empty():
 			result[slot] = {"name": rules.unknownName, "lvl": 0, "cd": 0, "cdMax": 0, "mp": 0, "ready": false}
 			continue
+		if not raw_cooldowns is Array:
+			push_error("Spectator cooldowns must be an array")
+			return null
+		var cooldowns: Array = raw_cooldowns
 		var index := 0 if slot == "def" else 1
-		var cooldowns: Array = actor.get("cds", [])
-		var cooldown: float = cooldowns[index] if cooldowns.size() > index else 0.0
+		var cooldown: float = _source_or(cooldowns[index], 0) if cooldowns.size() > index else 0.0
 		var cost := floorf(float(ability.mp) + 0.5)
 		result[slot] = {"name": ability.name, "lvl": level, "cd": cooldown,
 			"cdMax": ability.cd if ability.get("cd", 0) else rules.abilityFallbackCd, "mp": cost, "ready": cooldown <= 0 and power >= cost}
 	return result
+
+static func _source_or(value: Variant, fallback: Variant) -> Variant:
+	return value if ControlPreferences.truthy(value) else fallback
 
 # Actors are presentation rows with interpolated positions, not authority units.
 # Visibility commands retain the prior row until its FPV body has been restored.

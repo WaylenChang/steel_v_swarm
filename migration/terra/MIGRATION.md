@@ -905,6 +905,22 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   composition without changing blocker-query semantics or raster tolerances.
 ### Shared-owner contracts required for presentation
 
+- **Opus — fire-fog membership distance:** update
+  `scripts/main.gd::_advance_view` to compare scalar-double planar distances with
+  the original browser `Math.hypot` semantics, using the accepted shared numeric
+  contract rather than rounding the difference through `Vector2`. The source
+  `_updateEnvFog` excludes a pilot at native-representable `(12, 0.0010000000475)`
+  from a radius-12 fire: Chromium measures `12.0000000416667`, while native
+  `Vector2.length()` rounds to 12 and counts the pilot inside. From a 2.5 s dwell
+  and 0.1 s step, source dwell/fog become 2.3/0 while native becomes 2.6/0.01818.
+  `artifacts/terra/fire-fog-boundary/source.mjs` executes the original method in
+  Chromium; `artifacts/terra/fire-fog-boundary/native.tscn` retains the strict
+  native comparison. Eight of twelve controlled cases disagree across all four
+  fire kinds. Preserve source `<=` boundaries, airborne exemptions, recovery,
+  death reset and snapshot positions; acceptance requires all twelve cases plus
+  translated centers, scaled radii and populated gameplay to agree. The related
+  shared two-argument `Math.hypot` adapter request remains above.
+
 - **Opus — spectator, minimap, PiP, scope and dialogue provenance:** reconcile the original
   `public/js/rng.js` dependency through `tools/import_source.mjs` and
   `data/provenance.json` before full spectator, minimap, dialogue, scope and PiP qualification.
@@ -956,7 +972,7 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   contract under `shaders/` for the original `.dlg-row .dlg-av` grayscale filter.
   Source inactive portraits use opacity 0.35 and grayscale 0.75; `.on` uses opacity
   1 and no filter, with both channels transitioning for 0.18s ease-out. Native
-  `CampaignDialogue` currently uses instantaneous alpha 0.5/1 and no grayscale.
+  `CampaignDialogue` now retains the source opacity transition but has no grayscale.
   Preserve original portrait pixels/alpha and shared texture immutability; Terra
   binds the accepted material and complete transitions in a separate change.
   Acceptance: original CSS/native portraits at both endpoints, transition and

@@ -256,6 +256,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   power changes. The real pre-draw test also checks controlled raster composition
   and world retirement. These cases do not qualify actual model pixels, populated
   transport, full frame ordering or performance.
+  `node tools/pip_squad_order_capture.mjs`,
+  `node --test tests/pip_squad_order.test.mjs` and `tests/pip_squad_order.tscn`
+  compare source index sorting, stable ties and power limits with the selector
+  and actual view. The selector matches all seven controlled programs when given
+  indices; the view has five failures because its producer exposes no squad index
+  and the consumer currently supplies zero for every actor. The source currently
+  defaults to one squad member; these synthetic multiple-member cases do not
+  establish support for populated multi-member gameplay.
   `node tools/pip_publication_capture.mjs`, `node --test tests/pip_publication.test.mjs`
   and `tests/pip_publication.tscn` compare the original selector on controlled
   snapshot membership with the native authority presentation. Keep the five
@@ -750,6 +758,16 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   pass all eleven original selection steps and existing PiP lifecycle/composition
   tests, then verify offline, ENet and WebSocket with populated carriers. The
   controlled snapshot program alone does not qualify delivery or real model pixels.
+  Also publish the original per-entity squad index (`e.si || 0`) through
+  `scripts/actor_snapshot.gd`, `scripts/unit.gd` and the recipient presentation
+  boundary, preserving received insertion order and distinguishing squad index
+  from player `spawn_slot`. `scripts/pip_view.gd` currently hardcodes every index
+  to zero: `tests/pip_squad_order.tscn` retains five failures when controlled
+  source rows have distinct indices, although `PipViewState.sources` sorts them
+  correctly. After the producer contract is agreed, Terra must feed the test's
+  captured indices through that real publication path and bind the view to it.
+  Acceptance includes all seven source order cases, default zero, equal-index
+  stability, low-power limits and snapshot replacement before populated delivery.
 
 - **Opus — responsive root window:** establish a shared full-client-area and
   pixel-ratio contract in `project.godot` and `scripts/main.gd::_build_ui` before

@@ -106,9 +106,14 @@ runtime acceptance remain incomplete. Component results do not certify the build
   turns and action priorities with traversal, BOSS/SUPER and full frame order.
   Preserve original evasion inputs, history retention/backdating, every-third
   light report and resource settlement. Compare seeded complete matches.
-  `-Bots` still times out on authored worlds: the fixture bot stays in `PUSH`
-  and never fires at the soldier placed at (0, -30) in `tests/bot_network.gd`.
-  Establish whether LOS/acquisition or the fixture placement is wrong.
+  `-Bots` timed out on authored worlds because of fixture placement, not
+  acquisition: at progress 0 the STEEL push foot is its own base, the first
+  full-power tick spends the operation gap on aiming, and two 0.625 rad turns
+  put the soldier at (0, -30) outside the 0.876 rad half-FOV before the first
+  scan. `tests/bot_network.gd` now starts mid-lane with lane progress and places
+  the target 30 m down the push direction. This change has not been run yet:
+  rerun `-Bots` on both transports. If it still times out, check terrain/building
+  LOS between the lane points next.
 - [ ] **O15 — Balance initialization:** certify source preference normalization,
   constructor-time building DPS redistribution, cached range/mobility midpoints,
   first-use reach/curvature/history/role caches and ordinary offline versus

@@ -12,7 +12,8 @@ var hidden_clear_seen := false
 var incoming_seen := false
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 16:
 		push_error("NETWORK_AIMING_TIMEOUT lock=%s skill=%s castClear=%s hidden=%s" % [lock_seen, skill_seen, independent_clear_seen, hidden_clear_seen])
 		get_tree().quit(1)

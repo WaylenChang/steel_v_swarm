@@ -37,16 +37,27 @@ func _physics_process(delta: float) -> void:
 					unit.hp = 0
 					unit.refresh_collision()
 			viewer.position = Vector3(20, simulation.world.ground_height(20, 0) + 0.1, 0)
-			fixture_bot = simulation.spawn({"character": "t04", "kind": Content.heroes.t04.kind,
-				"peer": -3001, "side": "STEEL", "bot": true, "position": Vector3(0, simulation.world.ground_height(0, 0) + 0.1, 0)})
+			# A full-power bot spends its first operation gap on aiming, so its first scan
+			# follows two PUSH turns toward the lane look point. Start mid-lane and put the
+			# target straight down the STEEL push direction so that turn keeps it in view.
+			var points: Array = simulation.world.lane_points[0]
+			var distances: Array = simulation.world.lane_distances[0]
+			var middle := float(distances[-1]) / 2
+			var foot := WaveRules.point_at(points, distances, middle)
+			var look := WaveRules.point_at(points, distances, middle - float(Content.balance.bot.pushLook))
+			var forward := Vector2(float(look.x) - float(foot.x), float(look.z) - float(foot.z)).normalized()
+			var aim := Vector2(foot.x, foot.z) + forward * 30
+			fixture_bot = simulation.spawn({"character": "t04", "kind": Content.heroes.t04.kind, "lane": 0,
+				"peer": -3001, "side": "STEEL", "bot": true, "position": Vector3(foot.x, simulation.world.ground_height(foot.x, foot.z) + 0.1, foot.z)})
 			fixture_target = simulation.spawn({"kind": "soldier", "side": "SWARM",
-				"position": Vector3(0, simulation.world.ground_height(0, -30) + 0.1, -30)})
+				"position": Vector3(aim.x, simulation.world.ground_height(aim.x, aim.y) + 0.1, aim.y)})
 			fixture_target.hp = 1000000
 			fixture_target.max_hp = fixture_target.hp
 			fixture_target.shield = 0
-			fixture_bot.yaw = 0
+			fixture_bot.yaw = atan2(-forward.x, -forward.y)
 			fixture_brain = BotBrain.new()
 			fixture_brain.configure(simulation, fixture_bot, "high")
+			fixture_brain.progress = fixture_brain.progress_at()
 		simulation.clock += delta
 		bot_elapsed += delta
 		var tick: float = Content.constants.GAME.TICK_MS / 1000.0

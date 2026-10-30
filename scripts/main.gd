@@ -991,9 +991,9 @@ func _begin_battle(settings: Dictionary, players: Array) -> void:
 	loading_battle.failure_reported.connect(func(reason):
 		if simulation == loading_battle and Session.seats == loading_seats and Session.round_id == loading_round:
 			Session.fail_battle(reason))
-	loading_battle.balance_profile = Content.local_balance if not Session.multiplayer.is_server() or Session.multiplayer.multiplayer_peer is OfflineMultiplayerPeer else null
+	loading_battle.balance_profile = Content.local_balance if not Session.is_authority() or Session.multiplayer.multiplayer_peer is OfflineMultiplayerPeer else null
 	loading_battle.client_weapons.profile = Content.local_balance
-	await loading_battle.setup(map_data, players, settings.env, Session.multiplayer.is_server(), true, prepared_world)
+	await loading_battle.setup(map_data, players, settings.env, Session.is_authority(), true, prepared_world)
 	if not is_instance_valid(loading_battle) or simulation != loading_battle or not Session.active or Session.leaving or Session.seats != loading_seats or Session.round_id != loading_round:
 		return
 	if not Session.failure_reason.is_empty():
@@ -1896,7 +1896,7 @@ func _receive_state(state: Dictionary) -> void:
 				campaign_dialogue.radio(CampaignRules.talk(int(Session.config.campaign.index), Session.config.campaign.side, int(event.stage)))
 	minimap.accept_snapshot(state)
 	simulation.world.sync_projectile_view(state.get("projectile_view", []), float(state.clock))
-	if Session.multiplayer.is_server():
+	if Session.is_authority():
 		simulation.apply_presentation_view(state)
 		simulation.receive_body_events(state.events, simulation.presentation_time())
 		simulation.present_world_events(state.events)
@@ -2290,7 +2290,7 @@ func _fatal_poll() -> void:
 		_show_fatal(Content.label(reason))
 
 func _solo_session() -> bool:
-	return Session.active and not Session.dedicated and Session.multiplayer.is_server() and Session.multiplayer.multiplayer_peer is OfflineMultiplayerPeer
+	return Session.active and not Session.dedicated and Session.is_authority() and Session.multiplayer.multiplayer_peer is OfflineMultiplayerPeer
 
 func _battle_failed(detail: String) -> void:
 	if simulation != null:

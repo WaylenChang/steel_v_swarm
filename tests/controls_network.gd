@@ -27,7 +27,8 @@ func _create_simulation() -> BattleSimulation:
 	return ControlsSimulation.new()
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 18:
 		push_error("NETWORK_CONTROLS_TIMEOUT mode=%s cast=%s pulse=%s view=%s" % [mode_seen, cast_seen, pulse_seen, view_seen])
 		get_tree().quit(1)

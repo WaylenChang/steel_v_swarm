@@ -10,7 +10,8 @@ var measured_centre_seen := false
 var target_id := 0
 
 func _physics_process(delta: float) -> void:
-	fixture_elapsed += delta
+	if Session.launch_announced:
+		fixture_elapsed += delta
 	if fixture_elapsed > 15:
 		push_error("NETWORK_REACHABILITY_TIMEOUT active=%s started=%s fixture=%s state=%s clear=%s warning=%s" %
 			[Session.active, Session.started, fixture_pilot != null, smoke_state_seen, clear_seen, warning_seen])

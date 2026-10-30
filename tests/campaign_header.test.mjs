@@ -26,5 +26,16 @@ test('original cinematic header retains responsive padding and border',async()=>
   assert.equal(capture.rules.borderWidth,1);
   assert.deepEqual(capture.rules.background,[6/255,10/255,16/255,.25]);
   assert.deepEqual(capture.rules.border,[122/255,158/255,178/255,.15]);
-  assert.equal(capture.cases.length,4);
+  assert.deepEqual(capture.rules.colours,{badge:[165/255,230/255,251/255,1],title:[1,1,1,1],
+    sectionBadge:[165/255,230/255,251/255,1],sectionTitle:[1,1,1,1]});
+  assert.deepEqual(capture.rules.fonts,{badge:{min:10,vmin:1,offset:5,max:12},title:{min:14,vmin:1.2,offset:7,max:19},section:{min:10,vmin:1,offset:5,max:12}});
+  assert.equal(capture.cases.length,8);
+  for(const sample of capture.cases){
+    for(const name of ['badge','title','section']){
+      const rule=capture.rules.fonts[name];
+      const expected=Math.min(rule.max,Math.max(rule.min,Math.min(...sample.size)*rule.vmin/100+rule.offset));
+      assert.ok(Math.abs(sample.fontSizes[name]-expected)<0.0001,`${name} ${sample.size}`);
+    }
+    assert.equal(sample.fontSizes.sectionTitle,sample.fontSizes.section);
+  }
 });

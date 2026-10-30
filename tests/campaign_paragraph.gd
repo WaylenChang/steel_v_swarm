@@ -21,11 +21,11 @@ func _run() -> void:
 		for path: String in capture.source.sourceInputs:
 			_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Original paragraph input: " + path)
 	if failures == 0:
-		await _check_programs(capture.programs, data.rules)
+		await _check_programs(capture.programs, data.rules, capture.cases)
 	print("CAMPAIGN_PARAGRAPH assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
-func _check_programs(programs: Array, rules: Dictionary) -> void:
+func _check_programs(programs: Array, rules: Dictionary, cases: Array) -> void:
 	var view := ProbeView.new()
 	add_child(view)
 	view.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
@@ -48,7 +48,8 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 				for paragraph in range(source.paragraphs.size()):
 					var label := paragraphs.get_child(paragraph) as RichTextLabel
 					_check(label != null and label.text == source.paragraphs[paragraph], "Original paragraph text remains unchanged")
-		for dimensions in [Vector2(640, 360), Vector2(320, 568), Vector2(500, 500)]:
+		for sample: Dictionary in cases:
+			var dimensions := Vector2(sample.size[0], sample.size[1])
 			view.size = dimensions
 			view._layout()
 			await get_tree().process_frame
@@ -57,6 +58,13 @@ func _check_programs(programs: Array, rules: Dictionary) -> void:
 			var expected := int(rules.landscapeGap) if dimensions.x > dimensions.y else int(rules.portraitGap)
 			_check(paragraphs is VBoxContainer and paragraphs.get_theme_constant("separation") == expected,
 				"Original paragraph gap at " + str(dimensions))
+			for section: Control in view.sections:
+				var section_paragraphs: VBoxContainer = section.paragraphs
+				for text: RichTextLabel in section_paragraphs.get_children():
+					var color: Array = rules.colour
+					_check(text.get_theme_font_size("normal_font_size") == int(round(float(sample.fontSize)))
+						and text.get_theme_color("default_color").is_equal_approx(Color(color[0], color[1], color[2], color[3])),
+						"Every source paragraph follows the viewport font size and color at native precision")
 			if paragraphs is VBoxContainer:
 				var content := view.sections[0].get("content") as Control
 				_check(content != null and Rect2(Vector2.ZERO, content.size).encloses(paragraphs.get_rect()),

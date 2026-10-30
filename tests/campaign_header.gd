@@ -10,7 +10,7 @@ func _run() -> void:
 	var capture: Dictionary = Content.read_json("res://tests/fixtures/campaign_header.json")
 	var data: Dictionary = Content.read_json("res://data/campaign_header.json")
 	var provenance: Dictionary = Content.read_json("res://data/provenance.json")
-	_check(capture.get("formatVersion") == 1 and capture.get("cases") is Array and capture.cases.size() == 4,
+	_check(capture.get("formatVersion") == 1 and capture.get("cases") is Array and capture.cases.size() == 8,
 		"Capture original responsive cinematic header")
 	_check(data == {"formatVersion": capture.get("formatVersion"), "source": capture.get("source"), "rules": capture.get("rules")},
 		"Native cinematic header resource retains original CSS")
@@ -44,6 +44,21 @@ func _check_cases(cases: Array) -> void:
 		view._layout()
 		await get_tree().process_frame
 		await get_tree().process_frame
+		_check(view.badge_label.get_theme_font_size("font_size") == int(round(float(sample.fontSizes.badge))),
+			"Badge font size follows the source viewport rule at native integer precision")
+		_check(view.heading.get_theme_font_size("font_size") == int(round(float(sample.fontSizes.title))),
+			"Title font size follows the source viewport rule at native integer precision")
+		_check(view.badge_label.get_theme_color("font_color").is_equal_approx(_color(sample.colours.badge))
+			and view.heading.get_theme_color("font_color").is_equal_approx(_color(sample.colours.title)),
+			"Header badge and title retain their distinct source colors")
+		for section: Control in view.sections:
+			var marker: HBoxContainer = section.marker
+			_check((marker.get_child(0) as Label).get_theme_font_size("font_size") == int(round(float(sample.fontSizes.section)))
+				and (marker.get_child(1) as Label).get_theme_font_size("font_size") == int(round(float(sample.fontSizes.sectionTitle))),
+				"Each section marker follows the source viewport rule at native integer precision")
+			_check((marker.get_child(0) as Label).get_theme_color("font_color").is_equal_approx(_color(sample.colours.sectionBadge))
+				and (marker.get_child(1) as Label).get_theme_color("font_color").is_equal_approx(_color(sample.colours.sectionTitle)),
+				"Each section marker retains distinct source badge and title colors")
 		var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
 		_check(style != null, "Native cinematic header uses a flat source-color panel")
 		if style == null:
@@ -72,3 +87,6 @@ func _check_cases(cases: Array) -> void:
 			"The padded header leaves a usable crawl viewport")
 	view.dispose()
 	view.free()
+
+func _color(channels: Array) -> Color:
+	return Color(channels[0], channels[1], channels[2], channels[3])

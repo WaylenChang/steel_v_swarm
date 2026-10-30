@@ -21,7 +21,14 @@ test('original cinematic paragraphs retain their text and responsive margins',as
     assert.equal(provenance.inputs[path],expected,path);
     if(process.env.SVS_SOURCE)assert.equal(digest(await readFile(join(resolve(process.env.SVS_SOURCE),path))),expected,path);
   }
-  assert.deepEqual(capture.rules,{landscapeGap:8,portraitGap:6});
+  assert.deepEqual(capture.rules,{landscapeGap:8,portraitGap:6,
+    font:{min:13.5,offset:6.5,vmin:1.05,max:16.5},colour:[230/255,238/255,245/255,1]});
+  assert.equal(capture.cases.length,7);
+  for(const sample of capture.cases){
+    const rule=capture.rules.font;
+    const expected=Math.min(rule.max,Math.max(rule.min,Math.min(...sample.size)*rule.vmin/100+rule.offset));
+    assert.ok(Math.abs(sample.fontSize-expected)<0.0001,`${sample.size}`);
+  }
   assert.deepEqual(capture.programs.map(program=>program.kind),['prologue','steel','swarm']);
   for(const program of capture.programs){
     assert.ok(program.sections.length>0);

@@ -346,10 +346,18 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   bottom-border values. `node tools/campaign_header_capture.mjs`,
   `node --test tests/campaign_header.test.mjs` and real-driver
   `tests/campaign_header.tscn` check those values and the remaining crawl viewport
-  in portrait, landscape and square cases. They do not qualify text baselines,
-  fractional coverage, the parent card's effects or complete header pixels.
+  in portrait, landscape and square cases. Badge and title retain their distinct
+  source colors; sizes follow the source viewport-relative clamps, rounded to the
+  integer sizes supported by Godot.
+  Fractional font sizes, source font metrics, text baselines, fractional coverage,
+  the parent card's effects and complete header pixels remain unqualified.
   Each crawl section retains the original separate badge and prefixed title,
-  including the source marker gap. `node tools/campaign_section_marker_capture.mjs`,
+  including the source marker gap. Their viewport-relative font size follows
+  the captured source clamp, rounded to native integer font sizes, and the badge
+  and title retain their distinct source colors; fractional sizes and source font
+  metrics remain open. `node tools/campaign_header_capture.mjs`
+  and `tests/campaign_header.tscn` retain both marker fields across resizes.
+  `node tools/campaign_section_marker_capture.mjs`,
   `node --test tests/campaign_section_marker.test.mjs` and real-driver
   `tests/campaign_section_marker.tscn` compare the prologue and both first-chapter
   perspectives and check the marker controls at portrait/landscape sizes. The
@@ -361,10 +369,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   section sizes including empty paragraphs, scroll bounds and focus progress. They
   do not qualify native text metrics, fractional border coverage or complete pixels.
   Crawl paragraphs remain separate, preserve original text and use the captured
-  orientation-dependent inter-paragraph margin. `node
+  orientation-dependent inter-paragraph margin, color and viewport-relative
+  font-size clamp. Font sizes round to native integers; fractional sizing and
+  source font metrics remain unresolved. `node
   tools/campaign_paragraph_capture.mjs`, `node --test tests/campaign_paragraph.test.mjs`
   and real-driver `tests/campaign_paragraph.tscn` compare browser DOM content and
-  margins with native controls for the prologue and both first-chapter perspectives.
+  margins, font sizes and color with native controls for the prologue and both
+  first-chapter perspectives.
   These checks do not qualify text indent, line height, source wrapping or pixels.
   Active and inactive crawl sections retain the original opacity, 0.4 s ease
   transition and reversal-shortened durations. The initial selection, including a

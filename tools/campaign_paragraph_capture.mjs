@@ -30,12 +30,13 @@ const markup=inputs.map(([kind,scenes])=>{
   return {kind,html:content.innerHTML};
 });
 const browser=await chromium.launch({headless:true,executablePath:chromePath()});
-const programs=[],gaps={};
+const programs=[],gaps={},cases=[];
+let font,colour;
 try{
   const page=await browser.newPage({deviceScaleFactor:1});
   for(const entry of markup){
     let sections;
-    for(const [width,height] of [[640,360],[320,568],[500,500],[1024,768]]){
+    for(const [width,height] of [[640,360],[320,568],[500,500],[800,700],[1024,768],[900,900],[1600,1200]]){
       await page.setViewportSize({width,height});
       const sample=await page.evaluate(({css,html})=>{
         document.head.innerHTML='<style></style>';document.head.firstChild.textContent=css;
@@ -45,12 +46,26 @@ try{
         const paragraphs=rows.map(row=>({id:row.id.replace(/^prologue-crawl-/,''),paragraphs:[...row.querySelectorAll('.pcs-paras > p')].map(p=>p.textContent)}));
         const nonLast=document.querySelector('.pcs-paras > p:not(:last-child)');
         const last=document.querySelector('.pcs-paras > p:last-child');
+        const style=getComputedStyle(last);
+        const fontSize=[...document.styleSheets[0].cssRules].find(rule=>rule.selectorText==='.pcs-paras p')?.style.fontSize;
+        const match=fontSize?.match(/^clamp\(([\d.]+)px,\s*([\d.]+)px \+ ([\d.]+)vmin,\s*([\d.]+)px\)$/);
+        if(!match)throw new Error('Unsupported original paragraph font rule: '+fontSize);
+        const channels=style.color.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+        if(!channels)throw new Error('Unsupported original paragraph color: '+style.color);
         return {sections:paragraphs,gap:nonLast?parseFloat(getComputedStyle(nonLast).marginBottom):null,
-          lastGap:last?parseFloat(getComputedStyle(last).marginBottom):null};
+          lastGap:last?parseFloat(style.marginBottom):null,fontSize:parseFloat(style.fontSize),
+          font:{min:Number(match[1]),offset:Number(match[2]),vmin:Number(match[3]),max:Number(match[4])},
+          colour:channels.slice(1).map(value=>Number(value)/255).concat(1)};
       },{css,html:entry.html});
       if(sections&&JSON.stringify(sections)!==JSON.stringify(sample.sections))throw new Error('Original paragraph text varies by viewport');
       sections=sample.sections;
       if(sample.lastGap!==0)throw new Error('Original last paragraph retains a bottom margin');
+      if(font&&JSON.stringify(font)!==JSON.stringify(sample.font))throw new Error('Original paragraph font rule varies');
+      if(colour&&JSON.stringify(colour)!==JSON.stringify(sample.colour))throw new Error('Original paragraph color varies');
+      font=sample.font;colour=sample.colour;
+      if(entry.kind==='prologue')cases.push({size:[width,height],fontSize:sample.fontSize});
+      else if(cases.find(row=>row.size[0]===width&&row.size[1]===height)?.fontSize!==sample.fontSize)
+        throw new Error('Original paragraph font size varies by sequence');
       if(sample.gap!==null){
         const mode=width>height?'landscape':'portrait';
         if(gaps[mode]!==undefined&&gaps[mode]!==sample.gap)throw new Error('Original paragraph margin varies within '+mode);
@@ -66,7 +81,7 @@ for(const [path,expected]of Object.entries(sourceInputs))
 const captureInputs={};
 for(const path of ['tools/campaign_paragraph_capture.mjs','tools/fixture_json.mjs'])
   captureInputs[path]=digest((await readFile(join(root,path),'utf8')).replace(/\r\n?/g,'\n'));
-const base={formatVersion:1,source:{inputs:captureInputs,sourceInputs},rules:{landscapeGap:gaps.landscape,portraitGap:gaps.portrait}};
+const base={formatVersion:1,source:{inputs:captureInputs,sourceInputs},rules:{landscapeGap:gaps.landscape,portraitGap:gaps.portrait,font,colour}};
 await writeFixtureJson(join(root,'data/campaign_paragraph.json'),base);
-await writeFixtureJson(join(root,'tests/fixtures/campaign_paragraph.json'),{...base,browser:browser.version(),programs});
+await writeFixtureJson(join(root,'tests/fixtures/campaign_paragraph.json'),{...base,browser:browser.version(),programs,cases});
 console.log('CAMPAIGN_PARAGRAPH_CAPTURE_PASS programs='+programs.length);

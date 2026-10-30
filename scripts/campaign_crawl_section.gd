@@ -75,6 +75,18 @@ func _content_changed() -> void:
 func set_paragraph_gap(gap: int) -> void:
 	paragraphs.add_theme_constant_override("separation", gap)
 
+func set_paragraph_style(font_size: int, color: Color) -> void:
+	for paragraph: Node in paragraphs.get_children():
+		if paragraph is RichTextLabel:
+			paragraph.add_theme_font_size_override("normal_font_size", font_size)
+			paragraph.add_theme_color_override("default_color", color)
+
+func set_marker_style(font_size: int, badge_color: Color, title_color: Color) -> void:
+	for label: Label in marker.get_children():
+		label.add_theme_font_size_override("font_size", font_size)
+	(marker.get_child(0) as Label).add_theme_color_override("font_color", badge_color)
+	(marker.get_child(1) as Label).add_theme_color_override("font_color", title_color)
+
 func select(value: bool, initial: bool = false) -> void:
 	if selected == value:
 		return

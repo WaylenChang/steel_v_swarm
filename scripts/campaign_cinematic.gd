@@ -161,8 +161,10 @@ func _ready() -> void:
 	header.add_theme_constant_override("separation", 0)
 	header_panel.add_child(header)
 	badge_label = NativeUi.label("", 14)
+	badge_label.add_theme_color_override("font_color", _source_color(header_rules.colours.badge))
 	header.add_child(badge_label)
 	heading = NativeUi.label("", 23)
+	heading.add_theme_color_override("font_color", _source_color(header_rules.colours.title))
 	heading.clip_text = true
 	heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -347,10 +349,19 @@ func _layout() -> void:
 	var header_padding: Dictionary = header_rules.landscape if landscape else header_rules.portrait
 	for side in ["top", "right", "bottom", "left"]:
 		header_style.set("content_margin_" + side, float(header_padding[side]) + (float(header_rules.borderWidth) if side == "bottom" else 0.0))
+	for item in [[badge_label, header_rules.fonts.badge], [heading, header_rules.fonts.title]]:
+		item[0].add_theme_font_size_override("font_size", _viewport_font_size(item[1]))
 	var paragraph_gap := int(paragraph_rules.landscapeGap) if landscape else int(paragraph_rules.portraitGap)
+	var paragraph_size := _viewport_font_size(paragraph_rules.font)
+	var text_color := _source_color(paragraph_rules.colour)
+	var marker_size := _viewport_font_size(header_rules.fonts.section)
+	var marker_badge_color := _source_color(header_rules.colours.sectionBadge)
+	var marker_title_color := _source_color(header_rules.colours.sectionTitle)
 	for section: Control in sections:
 		if section is CrawlSection:
 			section.set_paragraph_gap(paragraph_gap)
+			section.set_paragraph_style(paragraph_size, text_color)
+			section.set_marker_style(marker_size, marker_badge_color, marker_title_color)
 	var rule: Dictionary = card_rules.landscape if landscape else card_rules.portrait
 	var units := float(card_rules.layoutUnits)
 	var width := minf(float(rule.maxWidth), size.x * float(rule.widthRatio) if landscape else size.x - float(rule.widthMargin))
@@ -365,6 +376,10 @@ func _layout() -> void:
 	card_panel.size = card.size
 	_layout_hud(safe, landscape)
 	_update_scene()
+
+func _viewport_font_size(rule: Dictionary) -> int:
+	var source_size := clampf(minf(size.x, size.y) * float(rule.vmin) / 100.0 + float(rule.offset), float(rule.min), float(rule.max))
+	return int(round(source_size))
 
 static func _source_color(channels: Array) -> Color:
 	return Color(channels[0], channels[1], channels[2], channels[3])

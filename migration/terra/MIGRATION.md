@@ -212,6 +212,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   points, colors, dash patterns and ten opaque rasters. All ten strict four-byte
   raster cases fail pending the shared lane-renderer contract below; identity
   projection and controlled paths do not qualify real lane geometry or maps.
+  `node tools/minimap_cadence_clock_capture.mjs`,
+  `node --test tests/minimap_cadence_clock.test.mjs` and
+  `tests/minimap_cadence_clock.tscn` retain original fractional-millisecond
+  warmup and draw decisions, including exact double bits. The native cadence
+  agrees when supplied the original timestamps; a simulation of the current
+  integer-millisecond producers retains eight strict failures pending the shared
+  clock contract below. This does not qualify real frame scheduling or fog pixels.
   `node tools/minimap_shadow_boundary_capture.mjs`,
   `node --test tests/minimap_shadow_boundary.test.mjs` and real-driver
   `tests/minimap_shadow_boundary.tscn` retain original shadow gate and tangent
@@ -912,6 +919,23 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   binds it separately and validates this scene, ordered shadow caps and fog
   composition without changing blocker-query semantics or raster tolerances.
 ### Shared-owner contracts required for presentation
+
+- **Opus — minimap monotonic clock precision:** change the minimap draw timestamp
+  producer in `scripts/main.gd` to preserve a shared monotonic sub-millisecond
+  clock before Terra changes `scripts/minimap.gd::configure` and
+  `accept_snapshot` to use that same clock for warmup and pulse deadlines.
+  Both currently use `Time.get_ticks_msec()` divided by 1000; rounding them
+  independently would mix deadline domains. In the original browser, init at
+  100000.9 ms makes warmup end at 103000.9 ms: after a draw at 102800.1 ms,
+  a 103000.4 ms frame is still suppressed. Integer-millisecond producers
+  instead expire warmup and draw. `tests/minimap_cadence_clock.tscn` preserves
+  eight such strict decision failures across four controlled programs while
+  the same `MinimapCadence` accepts all source double timestamps exactly.
+  Acceptance: use one monotonic clock with at least microsecond resolution for
+  initialization, pulse observation, draw and fog; rewire the fixture from its
+  explicit current-producer simulation to the accepted clock boundary and pass
+  all source cases, including mode invalidation and pulse expiry, before full
+  minimap/transport verification. Do not substitute game time or loosen gates.
 
 - **Opus — fire-fog membership distance:** update
   `scripts/main.gd::_advance_view` to compare scalar-double planar distances with

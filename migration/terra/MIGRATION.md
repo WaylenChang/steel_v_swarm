@@ -612,9 +612,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_status_persistence.tscn` compare five original DOM/controller
   lifecycles through chapter playback and prologue replay. These probes reuse a
   single native presentation owner; they do not qualify host recreation. The
-  independently colored ready check, status spinner, flash animation, text
-  metrics and complete status pixels remain unqualified. Failed attempts
-  count toward progress, not asset availability. Preserve independent 1800 ms
+  warning status flashes with the original two 0.35 s ease cycles, centered scale
+  and opacity; repeated warnings and progress do not restart it, while hiding and
+  showing a retained warning does. `node tools/campaign_status_flash_capture.mjs`,
+  `node --test tests/campaign_status_flash.test.mjs` and real-driver
+  `tests/campaign_status_flash.tscn` compare browser animation values, lifecycle,
+  paused wall time and a controlled composed viewport. The independently colored
+  ready check, status spinner, text metrics and complete status pixels remain
+  unqualified. Failed attempts count toward progress, not asset availability.
+  Preserve independent 1800 ms
   warning deadlines, generation checks and decoder drains across replacement/exit,
   including pause and zero gameplay speed.
   Cache jobs stop admitting or publishing results as soon as their loader or an

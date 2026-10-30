@@ -304,7 +304,10 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   and real-driver `tests/campaign_card.tscn` compare fifteen browser sizes and
   exercise the fixed bar, wrapped HUD labels, supplied safe insets and finish-button
   reachability. Native font advances determine the current bar's flex allocation;
-  these checks do not qualify source text wrapping, the card's typography,
+  the native card border retains the captured source color, opacity and width,
+  and the date label retains its source color and font size. Archive bold styling,
+  source font metrics and actual text pixels remain unresolved.
+  These checks do not qualify source text wrapping, the card's typography,
   gradient, blur, clipped corners, hardware safe areas or complete cinematic pixels.
   Scene selection updates the original date, badge and title as distinct fields;
   the badge and title share a horizontal header and the title can truncate.

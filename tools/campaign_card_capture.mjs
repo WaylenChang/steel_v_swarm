@@ -62,21 +62,29 @@ try{
           landscape:{width:media.landscape.width,height:media.landscape.height,bottom:media.landscape.bottom},
           portrait:{width:media.portrait.width,height:media.portrait.height,bottom:media.portrait.bottom,maxWidth:media.portrait.maxWidth}}));
       const box=document.getElementById('prologueNarrativeBox'),style=getComputedStyle(box),rect=box.getBoundingClientRect();
+      const border=style.borderLeftColor.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/);
+      if(!border||['Top','Right','Bottom'].some(side=>style[`border${side}Color`]!==style.borderLeftColor
+        ||style[`border${side}Width`]!==style.borderLeftWidth))throw new Error('Unsupported original card border');
+      const borderColor=border.slice(1,4).map(value=>Number(value)/255).concat(Number(border[4]));
       const top=getComputedStyle(document.querySelector('.prologue-hud-top'));
       const bottom=getComputedStyle(document.querySelector('.prologue-hud-bottom'));
       const bar=document.querySelector('.prologue-hud-top .sysbar'),barStyle=getComputedStyle(bar),barRect=bar.getBoundingClientRect();
       if(barStyle.position!=='fixed'||barStyle.display!=='flex')throw new Error('Original cinematic system bar is not fixed flex layout');
+      const dateStyle=getComputedStyle(bar.querySelector('#prologueDateTag'));
+      const dateColor=dateStyle.color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+      if(!dateColor)throw new Error('Unsupported original cinematic date color: '+dateStyle.color);
       const systemBar={top:parseFloat(barStyle.top),left:parseFloat(barStyle.left),right:parseFloat(barStyle.right),
         paddingTop:parseFloat(barStyle.paddingTop),paddingBottom:parseFloat(barStyle.paddingBottom),
         paddingLeft:parseFloat(barStyle.paddingLeft),paddingRight:parseFloat(barStyle.paddingRight),borderBottom:parseFloat(barStyle.borderBottomWidth),
-        archive:bar.firstElementChild.textContent.trim()};
-      if(Object.entries(systemBar).some(([key,value])=>key!=='archive'&&!Number.isFinite(value)))throw new Error('Unsupported original cinematic system bar');
+        archive:bar.firstElementChild.textContent.trim(),dateSize:parseFloat(dateStyle.fontSize),
+        dateColor:dateColor.slice(1).map(value=>Number(value)/255).concat(1)};
+      if(Object.entries(systemBar).some(([key,value])=>!['archive','dateColor'].includes(key)&&!Number.isFinite(value)))throw new Error('Unsupported original cinematic system bar');
       const chromeRule={topHorizontal:parseFloat(top.paddingRight),top:parseFloat(top.paddingTop),
         bottomHorizontal:parseFloat(bottom.paddingRight),bottom:parseFloat(bottom.paddingBottom),gap:parseFloat(bottom.gap)||0};
       if(Object.values(chromeRule).some(value=>!Number.isFinite(value)))throw new Error('Unsupported original HUD padding');
       return {rules:{landscape:{maxWidth:lw[0][0],widthRatio:lw[1][0]/100,maxHeight:lh[0][0],heightRatio:lh[1][0]/100,bottom:lb[0][0]},
         portrait:{widthMargin:pw.find(x=>x[1]==='px')[0],maxWidth:pm[0][0],maxHeight:ph[0][0],heightRatio:ph[1][0]/100,bottom:pb[0][0]},
-        border:parseFloat(style.borderLeftWidth),systemBar},chrome:chromeRule,rect:[rect.x,rect.y,rect.width,rect.height],
+        border:parseFloat(style.borderLeftWidth),borderColor,systemBar},chrome:chromeRule,rect:[rect.x,rect.y,rect.width,rect.height],
         systemBarRect:[barRect.x,barRect.y,barRect.width,barRect.height]};
     },{css,html});
     if(rules&&JSON.stringify(sample.rules)!==JSON.stringify(rules))throw new Error('Card rules vary across source viewports');

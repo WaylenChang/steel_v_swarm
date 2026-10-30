@@ -33,6 +33,16 @@ func _check_cases(cases: Array) -> void:
 	view.play([Content.campaign.prologue[0], Content.campaign.prologue[1]], "Continue")
 	view.set_process(false)
 	await get_tree().process_frame
+	var border: Array = view.card_rules.borderColor
+	var style := view.card_panel.get_theme_stylebox("panel") as StyleBoxFlat
+	_check(style != null and style.border_color.is_equal_approx(Color(border[0], border[1], border[2], border[3])),
+		"The narrative card retains the original border color and opacity")
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		_check(style.get_border_width(side) == int(view.card_rules.border), "The narrative card retains the original border width")
+	var date_color: Array = view.card_rules.systemBar.dateColor
+	_check(view.tag.get_theme_font_size("font_size") == int(view.card_rules.systemBar.dateSize)
+		and view.tag.get_theme_color("font_color").is_equal_approx(Color(date_color[0], date_color[1], date_color[2], date_color[3])),
+		"The date retains the original system bar font size and color")
 	for sample: Dictionary in cases:
 		view.size = Vector2(float(sample.size[0]), float(sample.size[1]))
 		view._layout()

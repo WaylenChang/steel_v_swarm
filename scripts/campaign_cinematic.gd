@@ -109,6 +109,7 @@ func _ready() -> void:
 	card_panel = NativeUi.panel(Vector2.ZERO)
 	card_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	var panel_style := card_panel.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
+	panel_style.border_color = _source_color(card_rules.borderColor)
 	panel_style.content_margin_left = card_rules.border
 	panel_style.content_margin_right = card_rules.border
 	panel_style.content_margin_top = card_rules.border
@@ -129,7 +130,8 @@ func _ready() -> void:
 	archive_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	archive_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	system_bar_content.add_child(archive_label)
-	tag = NativeUi.label("", 12)
+	tag = NativeUi.label("", int(card_rules.systemBar.dateSize))
+	tag.add_theme_color_override("font_color", _source_color(card_rules.systemBar.dateColor))
 	tag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tag.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -339,6 +341,9 @@ func _layout() -> void:
 	card_panel.size = card.size
 	_layout_hud(safe, landscape)
 	_update_scene()
+
+static func _source_color(channels: Array) -> Color:
+	return Color(channels[0], channels[1], channels[2], channels[3])
 
 func _layout_hud(safe: Rect2, landscape: bool) -> void:
 	var rule: Dictionary = card_rules.chrome.landscape if landscape else card_rules.chrome.portrait

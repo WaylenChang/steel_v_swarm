@@ -67,6 +67,7 @@ var clock_msec := Callable()
 var buffer_loader: Buffer
 var buffer_status: Label
 var buffer_rules: Dictionary
+var hint_style_rules: Dictionary
 var buffer_warning := false
 var buffer_warning_timers: Array[Timer] = []
 var hud_layout_queued := false
@@ -101,6 +102,7 @@ func _ready() -> void:
 	section_opacity_rules = Content.read_json("res://data/campaign_section_opacity.json").rules
 	crawl_inset_rules = Content.read_json("res://data/campaign_crawl_insets.json").rules
 	buffer_rules = Content.read_json("res://data/campaign_buffer.json").rules
+	hint_style_rules = Content.read_json("res://data/campaign_hint_style.json").rules
 	presentation_group = CanvasGroup.new()
 	presentation_group.name = "Presentation"
 	add_child(presentation_group)
@@ -183,9 +185,9 @@ func _ready() -> void:
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_theme_constant_override("separation", int(section_geometry_rules.marginBottom))
 	crawl_margin.add_child(column)
-	caption = NativeUi.label(Content.label("story_skip_hint"), 14)
+	caption = NativeUi.label(Content.label("story_skip_hint"), int(hint_style_rules.hintFontSize))
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	buffer_status = NativeUi.label("", 14)
+	buffer_status = NativeUi.label("", int(hint_style_rules.statusFontSize))
 	buffer_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buffer_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buffer_status.hide()
@@ -315,11 +317,15 @@ func play(sequence: Array, finish_text: String, start_index: int = 0) -> void:
 		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 		_render_buffer()
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing or buffer_loader != loader:
+			return
 		loader.begin(buffer_rules)
 		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
 	else:
 		_render_buffer()
+		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+			return
 		buffer_status.show()
 		if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 			return
@@ -541,9 +547,18 @@ func _buffer_progress(_loaded: int, _total: int, _percent: int, _name: String, _
 		_render_buffer()
 
 func _render_buffer() -> void:
+	var token := generation
 	var complete := buffer_loader == null or buffer_loader.complete
 	buffer_status.text = buffer_rules.ready if complete else String(buffer_rules.pending).replace("{percent}", str(buffer_loader.percent))
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	caption.text = buffer_rules.readyHint if complete else buffer_rules.pendingHint
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
+	var color: Array = hint_style_rules.readyColor if complete else hint_style_rules.pendingColor
+	caption.add_theme_color_override("font_color", Color(color[0], color[1], color[2]))
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	_layout_hud(NativeUi.safe_area(self), size.x > size.y)
 
 func _try_skip() -> void:

@@ -583,6 +583,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_chapter_status.tscn` retain both original play branches, progress,
   immediate chapter skipping and replacement. Status visibility callbacks may
   retire, detach or queue the owner without starting stale buffering or clocks.
+  The status and skip hint use the original computed font size; the hint changes
+  between its original pending and ready foreground colors. `node
+  tools/campaign_hint_style_capture.mjs`,
+  `node --test tests/campaign_hint_style.test.mjs` and real-driver
+  `tests/campaign_hint_style.tscn` compare three viewport sizes, prologue/chapter
+  transitions and replacement from a synchronous hint theme callback. Source
+  letter spacing, font metrics and the ready hint's key badges remain unqualified.
   These checks do not certify status icon, color or flash pixels. Failed attempts
   count toward progress, not asset availability. Preserve independent 1800 ms
   warning deadlines, generation checks and decoder drains across replacement/exit,

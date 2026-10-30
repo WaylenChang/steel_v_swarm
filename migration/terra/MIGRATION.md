@@ -599,6 +599,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   tests also retain separate release deadlines and finish-button origins. CDP
   synthesis and direct native dispatch do not establish physical-device event
   bundling or GUI clicks.
+  `node tools/campaign_button_input_capture.mjs`,
+  `node --test tests/campaign_button_input.test.mjs` and real-driver
+  `tests/campaign_button_input.tscn` compare actual Chromium controller/button
+  events with native GUI dispatch for pending and ready clicks, cancellation and
+  drags into, out of and back into the button. Eight programs pass; two strict
+  native assertions remain open for scroll-driven pointer cancellation and the
+  resulting click suppression, as specified in the scrollbar input contract below.
+  Synthetic events on a Windows host without a touchscreen do not qualify
+  physical-device behavior or full cinematic layout.
   Mouse long-press follows the source pointer lifetime: the first physical
   button starts the hold, additional buttons and wheel movement do not restart
   it, and the last physical button release cancels it. `node
@@ -1220,9 +1229,16 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Chromium's classic scrollbar and disables only the separate viewport mask.
   Preserve source visibility, reserved width, minimum thumb, integer placement,
   color and rounded coverage, plus native scroll values, wheel/touch, thumb drag,
-  track interaction and lifecycle. Acceptance: all seventeen original cases and
-  additional fractional-size, DPI and actual input programs pass without wider
-  tolerance or per-case baked images. Terra then binds the accepted adapter and
+  track interaction and lifecycle. Chromium scrolling cancels the active pointer
+  while preserving the subsequent `touchend`: in `tests/campaign_button_input.tscn`
+  a drag starting in the crawl leaves native hold feedback active, and a drag
+  from the finish button out and back activates it despite the source cancelling
+  the click. Preserve the touch stream, cancelled press and native button lifetime
+  without guessing a fixed gesture threshold. Acceptance includes both strict
+  failures, small movements, cancellation and multi-touch on real devices, the
+  controlled source/native event programs, all seventeen scrollbar cases and
+  additional fractional-size and DPI cases without wider tolerance or per-case
+  baked images. Terra then binds the accepted adapter and
   checks the edge mask, populated narrative, scrolling and complete composition.
 
 - **Opus — cinematic section dashed border:** agree a native material or

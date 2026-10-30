@@ -15,11 +15,20 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   populated LOS/target contract changes.
   Fog opacity must retain the original CSS ease-out curve and reversal-shortened
   durations, including repeated reversals, unchanged targets and zero-progress
-  cancellation. Native tween writes must reach shader uniforms in the same frame.
+  cancellation. Both fog transitions use wall time even when the game is paused
+  or runs at a different speed. Native tween writes must reach shader uniforms in
+  the same frame.
   `node tools/scope_transition_capture.mjs` and real-driver
   `tests/scope_transition.tscn` compare original browser transitions and native
-  uniforms; these checks do not certify scope gradient/blur pixels or complete
+  uniforms and test paused, zero-speed and accelerated wall-clock transitions;
+  these checks do not certify scope gradient/blur pixels or complete
   frame-order, freeze/death and populated view integration.
+  Removing the overlay or an ancestor cancels both fog tweens and settles their
+  retained targets, so reattachment cannot revive pre-detachment motion.
+  `node tools/scope_detach_capture.mjs`, `node --test tests/scope_detach.test.mjs`
+  and real-driver `tests/scope_detach.tscn` compare both original CSS fade
+  directions, fresh transitions after reattachment and paused ancestor removal.
+  These lifecycle probes do not certify source backdrop or weather pixels.
   Scope radius, visible weather-gradient stops and fire blur retain the original
   double-precision CSS serialization before native vector storage.
   `node tools/scope_values_capture.mjs`, `node --test tests/scope_values.test.mjs`

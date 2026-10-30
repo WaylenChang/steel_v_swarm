@@ -13,6 +13,7 @@ var weather_opacity := 0.0:
 			shader_material.set_shader_parameter("weather_opacity", value)
 var fire_target := 0.0
 var weather_target := 0.0
+var scope_active := false
 var fire_tween: Tween
 var weather_tween: Tween
 var shader_material: ShaderMaterial
@@ -38,6 +39,7 @@ static func color_value(value: Array) -> Color:
 	return Color(value[0], value[1], value[2], value[3])
 
 func update_view(state: ScopeState, scoped: bool) -> void:
+	scope_active = scoped
 	var rules: Dictionary = Content.balance.view.mask
 	if fire_target != state.fire_fog:
 		fire_target = state.fire_fog
@@ -62,7 +64,10 @@ func update_view(state: ScopeState, scoped: bool) -> void:
 	visible = scoped or fire_opacity > 0 or weather_opacity > 0 or fire_target > 0 or weather_target > 0
 
 func _start_fade(property: String, target: float, seconds: float, previous: Tween, transition: Dictionary) -> Tween:
-	return preload("res://scripts/css_transition.gd").start(self, property, target, seconds, previous, transition, HurtFlashState._ease_out)
+	var tween := preload("res://scripts/css_transition.gd").start(self, property, target, seconds, previous, transition, HurtFlashState._ease_out)
+	if tween != null:
+		tween.set_ignore_time_scale(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	return tween
 
 func clear() -> void:
 	if fire_tween != null:
@@ -73,6 +78,20 @@ func clear() -> void:
 	weather_opacity = 0
 	fire_target = 0
 	weather_target = 0
+	scope_active = false
 	fire_transition.clear()
 	weather_transition.clear()
 	hide()
+
+func _exit_tree() -> void:
+	if fire_tween != null and fire_tween.is_valid():
+		fire_tween.kill()
+	if weather_tween != null and weather_tween.is_valid():
+		weather_tween.kill()
+	fire_tween = null
+	weather_tween = null
+	fire_transition.clear()
+	weather_transition.clear()
+	fire_opacity = fire_target
+	weather_opacity = weather_target
+	visible = scope_active or fire_target > 0 or weather_target > 0

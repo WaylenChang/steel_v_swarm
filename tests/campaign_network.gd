@@ -13,7 +13,8 @@ var stages_seen := false
 var floor_tower := 0
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 18:
 		push_error("NETWORK_CAMPAIGN_TIMEOUT roster=%s floor=%s dialogue=%s stages=%s" % [roster_seen, floor_seen, dialogue_seen, stages_seen])
 		get_tree().quit(1)

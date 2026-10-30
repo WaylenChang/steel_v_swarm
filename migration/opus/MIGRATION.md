@@ -249,9 +249,13 @@ runtime acceptance remain incomplete. Component results do not certify the build
   source media and retain provenance; the offline copier must preserve authored
   bytes and exclude source-editor `.import` descriptors. Verify story image
   imports without treating a filename suffix as proof of the encoded format.
-  Network fixture handoff: owners of the other `tests/*_network.gd` clocks must
-  count from `Session.launch_announced`; authored world loading outlasts their
-  16-18 s limits. `tests/aiming_network.gd` authority timed out this way.
+  Network fixture handoff: authored world loading outlasts the 15-18 s fixture
+  limits, so clocks must count from `Session.launch_announced`. The Opus-owned
+  aiming, campaign, controls, missile, reachability, room and SUPER fixtures now
+  do this, but none of those changes has been run yet. The body, burst, camera,
+  cockpit, death, footprint, mobile, projectile-visual, TPS and view
+  `tests/*_network.gd` clocks still count from scene start; their owners must
+  apply the same guard.
   `tests/death_network.gd` compares a transport ID to a seat and sends `rpc_id`
   to a seat; use `Session.seats.player_for`/`transport_for` as `tests/blast_network.gd` does.
   `-Campaign` failed with `Unavailable` at `scripts/main.gd:246` (host port) in

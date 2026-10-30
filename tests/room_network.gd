@@ -42,7 +42,9 @@ func _create_simulation() -> BattleSimulation:
 	return QueueSimulation.new()
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	# Authored world loading outlasts the fixture budget; recovery keeps the launch flag.
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 18:
 		_fail("NETWORK_ROOM_TIMEOUT stage=%d disconnects=%d" % [stage, disconnects])
 		return

@@ -314,6 +314,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   empty scenes do not qualify actual source model pixels, authored HUD composition,
   DPI behavior, full-scene performance or populated transport. The separate
   `tests/pip_native.tscn` retains the full source-provenance gate below.
+  Real-driver `tests/pip_model_isolation.tscn` also loads the authored Steel
+  decoy, Super drone and T01 cockpit, including their native outline bindings.
+  Its two-slot and production-selection frames match direct source-style hiding
+  byte for byte, with visible controls for each excluded object and restored
+  layers after rendering. These native-to-native comparisons do not qualify
+  original model pixels, animated or damaged rigs, populated worlds or transport.
   `node tools/pip_window_capture.mjs`, `node --test tests/pip_window.test.mjs`
   and real-driver `tests/pip_window.tscn` compare the original WebGL border
   pixel bounds with the actual root-window PiP at eight controlled window/scale cases.

@@ -598,7 +598,16 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_hint_style.tscn` compare three viewport sizes, prologue/chapter
   transitions and replacement from a synchronous hint theme callback. Source
   letter spacing, font metrics and the ready hint's key badges remain unqualified.
-  These checks do not certify status icon, color or flash pixels. Failed attempts
+  Status text retains the original pending/ready/warning inherited colors and
+  0.3 s ease transition, including shortened repeated reversals. Warning text is
+  immediately red; later buffer progress restores inherited color without
+  clearing the warning state. `node tools/campaign_status_color_capture.mjs`,
+  `node --test tests/campaign_status_color.test.mjs` and real-driver
+  `tests/campaign_status_color.tscn` compare browser color samples, repeated
+  warnings, reversal timing, paused wall time and replacement callbacks. The
+  independently colored ready check, status spinner, flash animation, text
+  metrics, CSS class persistence across finished playback and complete status
+  pixels remain unqualified. Failed attempts
   count toward progress, not asset availability. Preserve independent 1800 ms
   warning deadlines, generation checks and decoder drains across replacement/exit,
   including pause and zero gameplay speed.

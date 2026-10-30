@@ -3,6 +3,7 @@ extends Control
 
 const Buffer = preload("res://scripts/campaign_buffer.gd")
 const CrawlSection = preload("res://scripts/campaign_crawl_section.gd")
+const StatusColor = preload("res://scripts/campaign_status_color.gd")
 
 signal finished
 signal finishing
@@ -66,7 +67,7 @@ var exit_deadline := 0.0
 var generation := 0
 var clock_msec := Callable()
 var buffer_loader: Buffer
-var buffer_status: Label
+var buffer_status: StatusColor
 var buffer_rules: Dictionary
 var hint_style_rules: Dictionary
 var buffer_warning := false
@@ -188,7 +189,10 @@ func _ready() -> void:
 	crawl_margin.add_child(column)
 	caption = NativeUi.label(Content.label("story_skip_hint"), int(hint_style_rules.hintFontSize))
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	buffer_status = NativeUi.label("", int(hint_style_rules.statusFontSize))
+	buffer_status = StatusColor.new()
+	buffer_status.rules = Content.read_json("res://data/campaign_status_color.json").rules
+	buffer_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buffer_status.add_theme_font_size_override("font_size", int(hint_style_rules.statusFontSize))
 	buffer_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buffer_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buffer_status.hide()
@@ -563,6 +567,9 @@ func _render_buffer() -> void:
 	buffer_status.text = buffer_rules.ready if complete else String(buffer_rules.pending).replace("{percent}", str(buffer_loader.percent))
 	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 		return
+	buffer_status.set_state(complete, buffer_warning, false)
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	caption.text = buffer_rules.readyHint if complete else buffer_rules.pendingHint
 	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
 		return
@@ -578,15 +585,22 @@ func _try_skip() -> void:
 	if buffer_loader == null or buffer_loader.complete:
 		finish()
 		return
+	var token := generation
 	buffer_warning = true
 	buffer_status.text = String(buffer_rules.warning).replace("{percent}", str(buffer_loader.percent))
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
+	buffer_status.set_state(false, true, true)
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	_layout_hud(NativeUi.safe_area(self), size.x > size.y)
+	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+		return
 	var timer := Timer.new()
 	timer.one_shot = true
 	timer.ignore_time_scale = true
 	timer.process_mode = Node.PROCESS_MODE_ALWAYS
 	buffer_warning_timers.append(timer)
-	var token := generation
 	add_child(timer)
 	if not is_instance_valid(self) or not _live() or token != generation or not playing or closing or not buffer_warning_timers.has(timer):
 		return
@@ -618,6 +632,7 @@ func _retire_buffer() -> void:
 	buffer_warning = false
 	if is_instance_valid(buffer_status):
 		var token := generation
+		buffer_status.retire()
 		buffer_status.hide()
 		if not is_instance_valid(self) or token != generation:
 			return

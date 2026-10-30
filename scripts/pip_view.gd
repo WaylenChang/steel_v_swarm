@@ -14,18 +14,36 @@ var _active_pilot: WeakRef
 var _active_side := ""
 var _active_render_scale := 1.0
 
+func _enter_tree() -> void:
+	_sync_render_signals()
+
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	RenderingServer.frame_pre_draw.connect(_begin_frame)
-	RenderingServer.frame_post_draw.connect(_end_frame)
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
-		clear()
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		if not is_visible_in_tree():
+			clear()
+		_sync_render_signals()
+
+func _sync_render_signals() -> void:
+	if is_inside_tree() and is_visible_in_tree():
+		if not RenderingServer.frame_pre_draw.is_connected(_begin_frame):
+			RenderingServer.frame_pre_draw.connect(_begin_frame)
+		if not RenderingServer.frame_post_draw.is_connected(_end_frame):
+			RenderingServer.frame_post_draw.connect(_end_frame)
+	else:
+		_disconnect_render_signals()
+
+func _disconnect_render_signals() -> void:
+	if RenderingServer.frame_pre_draw.is_connected(_begin_frame):
+		RenderingServer.frame_pre_draw.disconnect(_begin_frame)
+	if RenderingServer.frame_post_draw.is_connected(_end_frame):
+		RenderingServer.frame_post_draw.disconnect(_end_frame)
 
 func update_view(battle: BattleSimulation, pilot: BattleUnit, side: String, render_scale: float = 1.0) -> void:
 	var rules: Dictionary = Content.balance.get("pip", {})
-	if rules.is_empty() or not _renderable_root(battle) or not _renderable_root(pilot) or not is_visible_in_tree():
+	if rules.is_empty() or not _renderable_root(self) or not _renderable_root(battle) or not _renderable_root(pilot) or not is_visible_in_tree():
 		clear()
 		return
 	if not _renderable_root(battle.world) or not pilot.alive() or side.is_empty():
@@ -83,7 +101,7 @@ func update_view(battle: BattleSimulation, pilot: BattleUnit, side: String, rend
 	_restore_unused({})
 
 func _begin_frame() -> void:
-	if is_queued_for_deletion() or not is_visible_in_tree():
+	if not _renderable_root(self) or not is_visible_in_tree():
 		clear()
 		return
 	if _active_pilot != null:
@@ -93,7 +111,7 @@ func _begin_frame() -> void:
 			clear()
 			return
 		update_view(battle, pilot, _active_side, _active_render_scale)
-		if _active_pilot == null or is_queued_for_deletion() or not is_visible_in_tree():
+		if _active_pilot == null or not _renderable_root(self) or not is_visible_in_tree():
 			clear()
 			return
 	var retained := {}
@@ -186,3 +204,4 @@ func clear() -> void:
 
 func _exit_tree() -> void:
 	clear()
+	_disconnect_render_signals()

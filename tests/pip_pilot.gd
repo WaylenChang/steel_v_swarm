@@ -22,6 +22,8 @@ func _run() -> void:
 		_check_pip_source_identity(original, composition)
 		if failures == 0:
 			_check_lifecycle()
+			_check_owner_ancestors()
+			_check_render_signals()
 			failure_scope = "pip_existing_lifecycle"
 			_lifecycle()
 			_retiring_sources(original.pipFrames[0])
@@ -116,5 +118,73 @@ func _check_lifecycle() -> void:
 			_check_released(context, "Pilot recovery before a fresh selection")
 			_select(context)
 		context.view.free()
+		context.battle.free()
+	Controls.power_pref = saved_power
+
+func _check_render_signals() -> void:
+	var host := Control.new()
+	add_child(host)
+	var view := PipView.new()
+	host.add_child(view)
+	_check(RenderingServer.frame_pre_draw.is_connected(view._begin_frame)
+		and RenderingServer.frame_post_draw.is_connected(view._end_frame), "Visible PiP subscribes to both render boundaries")
+	for change in ["self", "ancestor", "detach"]:
+		match change:
+			"self": view.hide()
+			"ancestor": host.hide()
+			"detach": host.remove_child(view)
+		_check(not RenderingServer.frame_pre_draw.is_connected(view._begin_frame)
+			and not RenderingServer.frame_post_draw.is_connected(view._end_frame),
+			"Inactive PiP releases global render callbacks: " + change)
+		match change:
+			"self": view.show()
+			"ancestor": host.show()
+			"detach": host.add_child(view)
+		_check(RenderingServer.frame_pre_draw.is_connected(view._begin_frame)
+			and RenderingServer.frame_post_draw.is_connected(view._end_frame),
+			"Visible PiP restores its render callbacks: " + change)
+		_check(view.pending_tags.is_empty() and view.layers.is_empty(), "Reactivation requires fresh PiP selection")
+	view.free()
+	host.free()
+	var hidden_host := Control.new()
+	hidden_host.hide()
+	add_child(hidden_host)
+	var hidden_view := PipView.new()
+	hidden_host.add_child(hidden_view)
+	_check(not RenderingServer.frame_pre_draw.is_connected(hidden_view._begin_frame)
+		and not RenderingServer.frame_post_draw.is_connected(hidden_view._end_frame),
+		"PiP first attached beneath a hidden ancestor does not subscribe")
+	hidden_host.show()
+	_check(RenderingServer.frame_pre_draw.is_connected(hidden_view._begin_frame)
+		and RenderingServer.frame_post_draw.is_connected(hidden_view._end_frame),
+		"First visibility subscribes a previously hidden PiP")
+	hidden_host.free()
+
+func _check_owner_ancestors() -> void:
+	var saved_power: Variant = Controls.power_pref
+	Controls.power_pref = "0"
+	for sample: Array in [[true, "render"], [false, "render"], [true, "selection"], [false, "selection"]]:
+		var queued_parent: bool = sample[0]
+		var boundary: String = sample[1]
+		failure_scope = ("pip_owner_parent_" if queued_parent else "pip_owner_ancestor_") + boundary
+		var context := _context()
+		var ancestor := Control.new()
+		add_child(ancestor)
+		var parent := Control.new()
+		ancestor.add_child(parent)
+		remove_child(context.view)
+		parent.add_child(context.view)
+		_select(context)
+		var retiring: Control = parent if queued_parent else ancestor
+		retiring.queue_free()
+		if boundary == "render":
+			context.view._begin_frame()
+		else:
+			context.view.update_view(context.battle, context.pilot, "STEEL")
+		_check_released(context, "Queued PiP owner ancestor at " + boundary)
+		context.view._begin_frame()
+		context.view.update_view(context.battle, context.pilot, "STEEL")
+		_check_released(context, "Queued PiP owner ancestor cannot select again")
+		ancestor.free()
 		context.battle.free()
 	Controls.power_pref = saved_power

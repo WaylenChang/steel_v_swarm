@@ -187,12 +187,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `node tools/pip_capture.mjs` and real-driver `tests/pip_native.tscn` retain
   original selection/render decisions, layout and native lifecycle/pixel-isolation
   checks. A source detached or queued with an ancestor after selection must stop
-  its own viewport before drawing; a queued PiP owner releases every viewport and
-  temporary layer at that boundary. Losing the last source restores the cockpit
-  mask. A fresh selection is required after source reattachment.
+  its own viewport before drawing; a queued PiP owner or owner ancestor releases
+  every viewport and temporary layer at selection or the pre-draw boundary and
+  cannot select again. Losing the last source restores the cockpit mask. A fresh
+  selection is required after source reattachment.
   The selected pilot is weakly retained and rechecked before rendering; death,
   detachment, queued deletion of it or an ancestor, or freeing releases every
   viewport and temporary layer. Revival or reattachment needs a fresh selection.
+  Hidden or detached PiP controls disconnect both global render callbacks;
+  showing or reattaching reconnects them without restoring the retired selection.
   `node tools/pip_pilot_capture.mjs`, `node --test tests/pip_pilot.test.mjs` and
   real-driver `tests/pip_pilot.tscn` retain the original death/revival render
   decisions and native owner/source retirement checks. These controlled actors

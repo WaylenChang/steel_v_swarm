@@ -139,9 +139,6 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Positive populated-match acceptance still requires complete authored seasonal
   resources. Certify valid prebuild consumption, structure anchors and exactly-once
   population after all seats load; rejection coverage alone cannot establish this.
-  One `-LobControl` ENet run whose world failed to build kept ticking
-  `spawn_wave` (`scripts/simulation.gd`) on a null world until timeout; a failed
-  build must stop the authority tick. Reproduce before fixing (season is random).
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role
@@ -257,6 +254,8 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Compatibility rendering, memory/performance, threaded audio on Web, browser
   single-player, Pages artifact contents and production native hosting. Complete
   transport loss/bandwidth/MTU and cleanup acceptance on the current build.
+  Populated snapshots exceed the 64 KiB WebSocket default; validate the 1 MiB
+  session buffer against the largest authored match and the Web client.
 
 Baseline commands from the repository root:
 

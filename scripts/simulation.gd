@@ -151,6 +151,11 @@ func respawn_delay(kind: String, deaths: int) -> float:
 	var times: Dictionary = Content.constants.UNITS[kind].respawn
 	return (float(times.base) + float(times.perDeath) * deaths) * balance_multiplier("respawn")
 
+func _ready() -> void:
+	# Godot enables an overridden _physics_process on entry, but world preparation can
+	# wait or fail before setup; Session cannot stop a battle it has not yet adopted.
+	set_physics_process(false)
+
 func setup(map_data: Dictionary, roster: Array, env: Dictionary, authority: bool, wait_for_launch: bool = false, prepared_world: BattleWorld = null) -> void:
 	setup_complete = false
 	setup_error = ""

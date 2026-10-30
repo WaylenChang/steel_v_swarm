@@ -436,8 +436,9 @@ func engage(enemy: BattleUnit, delta: float) -> void:
 	fire(enemy, "light")
 	var heavy := heavy_weapon()
 	var packed := 0
+	var packed_reach := BotRules.packed_reach(heavy)
 	for other: BattleUnit in simulation.units.values():
-		if other.side != unit.side and not other.special.get("neutral", false) and simulation._planar_distance(other.position, enemy.position) <= float(heavy.r if heavy.r else 10) * 1.5:
+		if other.side != unit.side and not other.special.get("neutral", false) and simulation._planar_distance(other.position, enemy.position) <= packed_reach:
 			packed += 1
 	if difficulty.heavy and (packed >= 3 or structure or enemy.is_hero()) and heavy_ready(heavy) and simulation.clock >= aim_at and op("weapon"):
 		if not unit.input_state.get("aim", false):

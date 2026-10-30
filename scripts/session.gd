@@ -11,6 +11,8 @@ signal room_cleared
 signal room_returned
 signal battle_failed(reason: String)
 
+const WEBSOCKET_BUFFER_BYTES := 1 << 20
+
 var roster: Array = []
 var config: Dictionary = {}
 var simulation: BattleSimulation
@@ -245,7 +247,7 @@ func host(settings: Dictionary, port: int = 8620, transport: String = "offline")
 	if transport == "offline":
 		peer = OfflineMultiplayerPeer.new()
 	elif transport == "websocket":
-		var socket := WebSocketMultiplayerPeer.new()
+		var socket := _websocket_peer()
 		var error := socket.create_server(port)
 		if error != OK:
 			return error
@@ -363,10 +365,18 @@ func _clear_credential(force: bool = false) -> void:
 	if error != OK:
 		push_error("Cannot clear room recovery credential: " + error_string(error))
 
+func _websocket_peer() -> WebSocketMultiplayerPeer:
+	# A populated snapshot is one message and exceeds the engine's 64 KiB default,
+	# which silently starves the client of every state update.
+	var socket := WebSocketMultiplayerPeer.new()
+	socket.inbound_buffer_size = WEBSOCKET_BUFFER_BYTES
+	socket.outbound_buffer_size = WEBSOCKET_BUFFER_BYTES
+	return socket
+
 func _open_transport(address: String, port: int) -> Error:
 	var peer: MultiplayerPeer
 	if address.begins_with("ws://") or address.begins_with("wss://"):
-		var socket := WebSocketMultiplayerPeer.new()
+		var socket := _websocket_peer()
 		var error := socket.create_client(address)
 		if error != OK:
 			return error

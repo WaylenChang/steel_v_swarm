@@ -12,8 +12,20 @@ class GateSimulation extends BattleSimulation:
 		match_initialized = true
 		return true
 
+static func _check_unprepared_tick_gate(h: Node) -> void:
+	var battle := BattleSimulation.new()
+	h.add_child(battle)
+	h._check(not battle.is_physics_processing(), "Tree entry cannot start the authority tick before a match exists")
+	for frame in range(3):
+		await h.get_tree().physics_frame
+	h._check(battle.world == null and battle.clock == 0.0 and battle.simulation_tick == 0 and battle.wave == 0,
+		"A battle without a prepared world spends no clock, tick or wave while loading or after failure")
+	h.remove_child(battle)
+	battle.free()
+
 static func run(h: Node, fixtures: Dictionary) -> void:
 	await PreparationTests.run(h, fixtures)
+	await _check_unprepared_tick_gate(h)
 	if not fixtures.has("roomLoadingPrograms"):
 		h._check(false, "Regenerate original room ready/load barrier references")
 		return

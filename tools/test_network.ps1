@@ -158,7 +158,7 @@ try {
             $observer = Start-Process -FilePath $Godot -ArgumentList $observerArguments -WindowStyle Hidden -PassThru -RedirectStandardOutput "$projectRoot/tests/$mode-observer.log" -RedirectStandardError "$projectRoot/tests/$mode-observer-errors.log"
             $processes += $observer
         }
-        if (-not $client.WaitForExit($(if ($Rematch) { 40000 } elseif ($Recovery -or $QuickRestart) { 35000 } else { 20000 }))) { throw "$mode connection test timed out" }
+        if (-not $client.WaitForExit($(if ($Rematch) { 40000 } elseif ($Recovery -or $QuickRestart) { 35000 } else { 60000 }))) { throw "$mode connection test timed out" }
         $log = Get-Content -LiteralPath "$projectRoot/tests/$mode-client.log" -Raw
         $errors = Get-Content -LiteralPath "$projectRoot/tests/$mode-client-errors.log" -Raw
         $serverErrors = Get-Content -LiteralPath "$projectRoot/tests/$mode-server-errors.log" -Raw

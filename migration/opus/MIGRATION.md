@@ -147,8 +147,9 @@ runtime acceptance remain incomplete. Component results do not certify the build
   ID 1), so a world finished during an ENet timeout took the authority branch,
   cleared its room and began again on reattach. `Session.is_authority()` now
   excludes recovery; `tests/room_loading_suite.gd` covers the detached load.
-  Rerun `tests/run.tscn` and `-Rooms` on both transports; the client failure
-  line reports `recoveries`. If it is zero, the second `_begin` has another source.
+  Rerun `-Rooms` on both transports with generated seasonal worlds; the client
+  failure line reports `recoveries`. If it is zero, the second `_begin` has
+  another source.
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role

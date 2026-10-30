@@ -206,6 +206,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   points, colors, dash patterns and ten opaque rasters. All ten strict four-byte
   raster cases fail pending the shared lane-renderer contract below; identity
   projection and controlled paths do not qualify real lane geometry or maps.
+  `node tools/minimap_shadow_boundary_capture.mjs`,
+  `node --test tests/minimap_shadow_boundary.test.mjs` and real-driver
+  `tests/minimap_shadow_boundary.tscn` retain original shadow gate and tangent
+  programs. One boundary case fails until the shared browser-distance contract
+  below is accepted; controlled blockers do not qualify populated queries or fog
+  raster coverage.
 - [ ] **S14 — PiP:** certify original companion/decoy selection, stable order,
   ownership/death/lost-link gates, low-power limits, layout and camera offsets.
   Shared-world views must hide only their source body/cockpit while rendering,
@@ -863,6 +869,17 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   coordinates, zero, subnormal and non-finite inputs without tables or wider
   tolerances. Terra then keeps subtraction in scalar doubles and validates both
   axes before native storage with the original view-lock program.
+- **Opus — minimap shadow distance:** include `scripts/minimap_vision.gd::shadows`
+  in the shared two-argument browser `Math.hypot` acceptance above. With the
+  Float32-representable source `(0, 0)` and blocker center
+  `(0.10029599815607071, 1.200152039527893)`, blocker radius
+  `1.2043355866323489` and sight radius 100, Chromium computes distance
+  `1.204335586632349` and draws a shadow; the current square-root calculation
+  equals the blocker radius and rejects it. `tests/minimap_shadow_boundary.tscn`
+  retains the failing boundary and six control cases. Acceptance: the shared
+  adapter matches the source across inside, range and angular boundaries; Terra
+  binds it separately and validates this scene, ordered shadow caps and fog
+  composition without changing blocker-query semantics or raster tolerances.
 ### Shared-owner contracts required for presentation
 
 - **Opus — spectator, minimap, PiP, scope and dialogue provenance:** reconcile the original

@@ -17,6 +17,7 @@ func _run() -> void:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Original cinematic button source: " + path)
 	if failures == 0:
 		await _check_programs(capture.programs)
+		await _check_long_scroll()
 	print("CAMPAIGN_BUTTON_INPUT assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -74,9 +75,39 @@ func _check_programs(programs: Array) -> void:
 				Input.parse_input_event(touch)
 			previous = point
 			await get_tree().process_frame
+			if program.kind == "touch" and not DisplayServer.is_touchscreen_available() \
+					and frame.events.any(func(event): return event.type == "pointercancel"):
+				# ScrollContainer emits these itself when a real touchscreen starts panning.
+				view.scroll.propagate_notification(Control.NOTIFICATION_SCROLL_BEGIN)
+				view.scroll.scroll_started.emit()
 			_check(finishes.count == int(frame.finishes), "Original button completion: " + program.name + " " + operation)
 			_check(view.buffer_warning_timers.size() == int(frame.warnings), "Original button bypasses buffering: " + program.name)
 			_check(view.hold_indicator.active == bool(frame.holding), "Original button hold exclusion: " + program.name)
 			_check(view.last_tap == float(frame.lastTap), "Original button touch exclusion: " + program.name)
 		view.dispose()
 		view.free()
+
+func _check_long_scroll() -> void:
+	var clock := {"now": 1000.0}
+	var view := ProbeView.new()
+	view.clock_msec = func(): return clock.now
+	add_child(view)
+	view.play(Content.campaign.prologue, "Continue")
+	view.set_process(false)
+	await get_tree().process_frame
+	var touch := InputEventScreenTouch.new()
+	touch.index = 9
+	touch.position = Vector2(4, 4)
+	touch.pressed = true
+	view._input(touch)
+	_check(view.hold_indicator.active, "The original pointer starts long-press feedback")
+	view.scroll.scroll_started.emit()
+	clock.now += float(Content.campaign.presentation.skip.hold) * 1000 + 1
+	view._process(0)
+	_check(not view.hold_indicator.active and view.held_at < 0 and view.buffer_warning_timers.is_empty() and not view.closing,
+		"A continued scroll cannot trigger a retired long press or buffering warning")
+	touch.pressed = false
+	view._input(touch)
+	_check(view.last_tap == clock.now and view.finish_touches.is_empty(), "Scroll cancellation retains the later touch-end clock")
+	view.dispose()
+	view.free()

@@ -206,6 +206,7 @@ func _ready() -> void:
 			scroll_offset = value
 		_update_scene())
 	scroll.gui_input.connect(_scroll_input)
+	scroll.scroll_started.connect(_scroll_started)
 	hold_indicator = preload("res://scripts/campaign_hold.gd").new()
 	presentation_group.add_child(hold_indicator)
 	resized.connect(_layout)
@@ -537,6 +538,12 @@ func _scroll_input(event: InputEvent) -> void:
 	if (event is InputEventScreenTouch and event.pressed and not event.canceled) or event is InputEventScreenDrag \
 			or (event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]):
 		paused_until = _now_msec() + float(Content.campaign.presentation.crawl.pause) * 1000
+
+func _scroll_started() -> void:
+	if not _live() or not playing or closing:
+		return
+	held_at = -1
+	hold_indicator.cancel()
 
 func _finish_target(point: Vector2) -> bool:
 	return is_instance_valid(finish_button) and finish_button.is_visible_in_tree() \

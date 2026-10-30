@@ -37,7 +37,8 @@ const cases=[
   [{type:'down',time:1000,scroll:true},{type:'drag',time:1200,scroll:true},{type:'cancel',time:1300,scroll:true}],
   [{type:'mouse_down',time:1000,button:true},{type:'raf',time:2000},{type:'mouse_up',time:2010}],
   [{type:'mouse_down',time:1000},{type:'raf',time:1650}],
-  [{type:'double_click',time:1000}],
+  [{type:'mouse_down',time:1000},{type:'mouse_up',time:1050},
+    {type:'mouse_down',time:1100,double:true},{type:'mouse_up',time:1150,double:true}],
 ];
 try {
   for(const operations of cases) {
@@ -66,8 +67,8 @@ try {
         case 'drag':if(operation.scroll)context.viewport.emit('touchmove',event(false));break;
         case 'wheel':context.viewport.emit('wheel',event(false));break;
         case 'mouse_down':context.root.emit('pointerdown',event(!!operation.button));break;
-        case 'mouse_up':window.emit('pointerup',event(!!operation.button));break;
-        case 'double_click':context.root.emit('dblclick',event(false));break;
+        case 'mouse_up':window.emit('pointerup',event(!!operation.button));
+          if(operation.double)context.root.emit('dblclick',event(false));break;
         case 'raf': {
           const pending=[...rafs];rafs.clear();for(const [,callback]of pending)callback(now);break;
         }

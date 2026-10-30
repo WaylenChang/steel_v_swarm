@@ -56,12 +56,12 @@ func _run() -> void:
 						var drag := InputEventScreenDrag.new()
 						drag.position = point
 						event = drag
-					"wheel", "mouse_down", "mouse_up", "double_click":
+					"wheel", "mouse_down", "mouse_up":
 						var mouse := InputEventMouseButton.new()
 						mouse.position = point
 						mouse.button_index = MOUSE_BUTTON_WHEEL_DOWN if operation.type == "wheel" else MOUSE_BUTTON_LEFT
 						mouse.pressed = operation.type != "mouse_up"
-						mouse.double_click = operation.type == "double_click"
+						mouse.double_click = operation.type == "mouse_down" and bool(operation.get("double", false))
 						event = mouse
 				if event != null:
 					view._input(event)

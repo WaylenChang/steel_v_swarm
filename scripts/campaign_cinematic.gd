@@ -57,6 +57,7 @@ var last_frame_at := 0.0
 var paused_until := 0.0
 var held_at := -1.0
 var last_tap := 0.0
+var mouse_double_pending := false
 var finish_touches: Dictionary = {}
 var writing_scroll := false
 var exit_tween: Tween
@@ -476,16 +477,26 @@ func _input(event: InputEvent) -> void:
 			| (1 << (MOUSE_BUTTON_XBUTTON1 - 1)) | (1 << (MOUSE_BUTTON_XBUTTON2 - 1))
 		var button_mask := 1 << (int(event.button_index) - 1)
 		if event.pressed:
+			mouse_double_pending = false
 			if _finish_target(event.position):
 				return
 			if (event.button_mask & mouse_buttons & ~button_mask) == 0:
 				held_at = now
 				hold_indicator.begin(event.position, get_viewport_rect().size)
 			if event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
+				mouse_double_pending = true
+		else:
+			var token := generation
+			var skip_double: bool = event.button_index == MOUSE_BUTTON_LEFT and mouse_double_pending
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				mouse_double_pending = false
+			if (event.button_mask & mouse_buttons) == 0:
+				held_at = -1
+				hold_indicator.cancel()
+				if not is_instance_valid(self) or not _live() or token != generation or not playing or closing:
+					return
+			if skip_double and get_global_rect().has_point(event.position):
 				_try_skip()
-		elif (event.button_mask & mouse_buttons) == 0:
-			held_at = -1
-			hold_indicator.cancel()
 	elif event is InputEventScreenTouch:
 		if event.canceled:
 			held_at = -1
@@ -619,6 +630,7 @@ func finish() -> void:
 	var token := generation
 	closing = true
 	held_at = -1
+	mouse_double_pending = false
 	hold_indicator.cancel()
 	finish_touches.clear()
 	finishing.emit()
@@ -668,6 +680,7 @@ func dispose() -> void:
 		return
 	playing = false
 	held_at = -1
+	mouse_double_pending = false
 	hold_indicator.reset()
 	last_tap = 0
 	finish_touches.clear()
@@ -706,6 +719,7 @@ func _exit_tree() -> void:
 	playing = false
 	closing = false
 	held_at = -1
+	mouse_double_pending = false
 	finish_touches.clear()
 	_cancel_transitions()
 	if is_instance_valid(hold_indicator):

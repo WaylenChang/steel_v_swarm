@@ -553,6 +553,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/campaign_mouse_buttons.tscn` compare Chromium's actual right, middle,
   side-button, wheel and overlapping left/right event sequences with native
   dispatch. These controlled events do not qualify hardware input or touch emulation.
+  Mouse double-click skips or warns only after the second left-button release,
+  matching browser `dblclick` ordering. An intervening mouse-button press cancels
+  that pending double-click; wheel input does not. Replacement, finish and tree
+  removal discard a pending press. `node tools/campaign_double_click_capture.mjs`,
+  `node --test tests/campaign_double_click.test.mjs` and real-driver
+  `tests/campaign_double_click.tscn` retain actual Chromium mouse sequences and
+  controlled native dispatch for ready, buffering and interrupted gestures.
+  Hardware input and browser-specific click thresholds remain unqualified.
   A completed long press cancels and resets its feedback before checking the
   buffer, including repeated blocked attempts and a later successful skip.
   `node tools/campaign_hold_warning_capture.mjs`,

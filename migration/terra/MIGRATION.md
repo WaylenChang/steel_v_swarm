@@ -168,6 +168,14 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   legend colors, source window/crop/marker geometry and room retirement. The
   controlled sources do not qualify complete fog pixels, actual baked terrain,
   populated delivery or platform performance.
+  Remembered bunker records retain source coordinate inversion, rounded-key
+  deduplication, insertion order and the latest allegiance through later empty
+  snapshots. `node tools/minimap_bunker_capture.mjs`,
+  `node --test tests/minimap_bunker.test.mjs` and real-driver
+  `tests/minimap_bunker.tscn` compare seven original snapshot programs, committed
+  frame isolation, bunker marker positions/colors and match reset. These inputs
+  use native-representable positions; they do not qualify unrounded transport
+  coordinates or marker pixels.
   Window edges retain scalar doubles through the committed terrain crop, marker,
   lane and hard/soft reveal plans; conversion occurs at the native drawing
   boundary. The label rounds the unconverted source width.

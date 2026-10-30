@@ -15,7 +15,8 @@ var private_body_seen := false
 var damage_seen := false
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 16:
 		push_error("NETWORK_BOT_TIMEOUT movement=%s shot=%s resource=%s damage=%s" % [movement_seen, shot_seen, resource_seen, damage_seen])
 		get_tree().quit(1)

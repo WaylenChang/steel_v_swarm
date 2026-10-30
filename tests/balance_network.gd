@@ -24,7 +24,8 @@ func _ready() -> void:
 		Session.start_battle()
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 18:
 		_fail("NETWORK_BALANCE_TIMEOUT")
 		return
@@ -50,6 +51,9 @@ func _physics_process(delta: float) -> void:
 		else:
 			permitted = true
 	if Session.dedicated or not permitted or exercised:
+		return
+	# Replicas receive their pilots from the first snapshot after launch.
+	if not simulation.pilots.has(Session.player_id()):
 		return
 	exercised = true
 	if simulation.balance_profile != Content.local_balance:

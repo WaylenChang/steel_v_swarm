@@ -391,7 +391,8 @@ func _super_spawn_position(peer: int, hover: bool = false) -> Vector3:
 		if not guns.any(func(gun): return gun.kind == "base" and gun.side == side):
 			var base: Vector3 = world.bases[side]
 			guns.append({"kind": "base", "side": side, "x": base.x, "z": base.z})
-	var point := SuperRules.spawn_point(super_random.randf, authority_bounds, world.lane_points, guns, hazard_blockers, _terrain_blocked, super_spawns.get(peer, last_super_spawn))
+	var blockers := hazard_blockers.map(func(obstacle): return {"x": obstacle.x, "z": obstacle.z, "r": obstacle.radius})
+	var point := SuperRules.spawn_point(super_random.randf, authority_bounds, world.lane_points, guns, blockers, _terrain_blocked, super_spawns.get(peer, last_super_spawn))
 	last_super_spawn = point
 	super_spawns[peer] = point
 	var surface := _npc_surface(point)
@@ -4006,10 +4007,9 @@ func respawn(unit: BattleUnit) -> void:
 	unit.power = unit.max_power
 	unit.flying = unit.kind == "drone"
 	unit.position = position
+	# The third faction has no lane heading and keeps its previous facing.
 	if unit.side != Content.constants.SUPER_SIDE:
 		unit.yaw = world.spawn_heading(unit.side, unit.spawn_slot)
-	else:
-		unit.yaw = atan2(position.x, position.z)
 	if not unit.is_bot and not unit.player_view.rules.is_empty():
 		unit.pitch = float(Content.balance.playerView.spawnPitch)
 		unit.view_reset += 1

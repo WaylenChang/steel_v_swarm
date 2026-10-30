@@ -106,6 +106,9 @@ runtime acceptance remain incomplete. Component results do not certify the build
   turns and action priorities with traversal, BOSS/SUPER and full frame order.
   Preserve original evasion inputs, history retention/backdating, every-third
   light report and resource settlement. Compare seeded complete matches.
+  `-Bots` still times out on authored worlds: the fixture bot stays in `PUSH`
+  and never fires at the soldier placed at (0, -30) in `tests/bot_network.gd`.
+  Establish whether LOS/acquisition or the fixture placement is wrong.
 - [ ] **O15 — Balance initialization:** certify source preference normalization,
   constructor-time building DPS redistribution, cached range/mobility midpoints,
   first-use reach/curvature/history/role caches and ordinary offline versus
@@ -139,6 +142,9 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Positive populated-match acceptance still requires complete authored seasonal
   resources. Certify valid prebuild consumption, structure anchors and exactly-once
   population after all seats load; rejection coverage alone cannot establish this.
+  `-Rooms` on ENet reports `begins=2` at stage 0 with no disconnect: the client
+  emits `battle_started` twice before its first probe. Find the second `_begin`
+  (`scripts/session.gd`) before relaxing `tests/room_network.gd`.
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role
@@ -233,6 +239,13 @@ runtime acceptance remain incomplete. Component results do not certify the build
   source media and retain provenance; the offline copier must preserve authored
   bytes and exclude source-editor `.import` descriptors. Verify story image
   imports without treating a filename suffix as proof of the encoded format.
+  Network fixture handoff: owners of the other `tests/*_network.gd` clocks must
+  count from `Session.launch_announced`; authored world loading outlasts their
+  16-18 s limits. `tests/aiming_network.gd` authority timed out this way.
+  `tests/death_network.gd` compares a transport ID to a seat and sends `rpc_id`
+  to a seat; use `Session.seats.player_for`/`transport_for` as `tests/blast_network.gd` does.
+  `-Campaign` failed with `Unavailable` at `scripts/main.gd:246` (host port) in
+  sequential runs; check port release before reading its timeout as a mode failure.
   Models handoff: `tests/body_suite.gd` and `tests/civilian_body_suite.gd` need
   incremental case consumption through `Content.read_fixture_part(key, index)`.
   Their combined fixture dependencies exceed the runner's default encoded-byte

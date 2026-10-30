@@ -57,7 +57,7 @@ func _compare(view: CampaignDialogue, expected: Dictionary) -> void:
 		var portrait: Dictionary = expected.portraits[index]
 		_check(view.portrait_ids[index] == portrait.id and view.portraits[index].visible == bool(portrait.visible),
 			"Original viewer-relative portrait assignment and one-speaker hidden endpoint")
-		_check((view.portraits[index].modulate.a == 1) == bool(portrait.active), "Original speaker highlight endpoint and guest borrowing")
+		_check((float(view.portraits[index].get("target_opacity")) == 1) == bool(portrait.active), "Original speaker highlight endpoint and guest borrowing")
 		if not String(portrait.id).is_empty():
 			var texture: Texture2D = view.portraits[index].texture
 			_check(texture != null and texture.resource_path == "res://" + String(portrait.src).trim_prefix("/"),

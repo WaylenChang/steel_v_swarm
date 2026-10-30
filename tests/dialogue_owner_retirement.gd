@@ -200,12 +200,14 @@ func _native_lifetimes() -> void:
 	_check(early.viewport == null and early.content == null and early.material == null, "A retired layer cannot allocate render resources on late admission")
 	early.free()
 	var scene := {"title": "", "note": "", "lines": [{"ch": "t06", "t": ""}]}
-	for kind in ["portrait", "speaker"]:
+	for kind in ["portrait", "speaker", "note_title", "empty_column"]:
 		var cancelled := {"done": false}
 		var interrupt := func(node: Node):
 			if cancelled.done or not view.is_ancestor_of(node):
 				return
-			if (kind == "portrait" and node is TextureRect) or (kind == "speaker" and node == view.speaker):
+			if (kind == "portrait" and node is TextureRect) or (kind == "speaker" and node == view.speaker) \
+					or (kind == "note_title" and node == view.radio_note_title) \
+					or (kind == "empty_column" and node.name == "AbsentPortraitColumn"):
 				cancelled.done = true
 				view.clear()
 		get_tree().node_added.connect(interrupt)

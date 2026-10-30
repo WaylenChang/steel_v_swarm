@@ -542,8 +542,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/dialogue_native.tscn` compare original Dialogue methods and actual native
   character/mech asset bindings. DOM probes observe mutations without qualifying
   CSS layout/filter pixels. Manual `next()` is source storybook inspection only;
-  live gameplay must remain automatic. Finish original portrait opacity/filter
-  transitions and complete radio/transcript composition before visual acceptance.
+  live gameplay must remain automatic. Portrait opacity retains the original
+  initial 0.35/1 endpoints and 0.18 s ease-out transitions, including unchanged
+  targets, repeated reversals, wall time and immediate retirement on clear.
+  `node tools/dialogue_portrait_capture.mjs`, `node --test tests/dialogue_portrait.test.mjs`
+  and real-driver `tests/dialogue_portrait.tscn` compare the original browser CSS
+  and actual radio endpoint selection. The independent grayscale filter, faction
+  frames and complete radio/transcript composition remain open.
   Radio and transcript callbacks retain absolute monotonic wall deadlines,
   including native timeouts that arrive early. Gameplay speed and SceneTree pause
   must not freeze their timers or the radio retirement tween. Reject duplicate
@@ -576,6 +581,41 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   `tests/dialogue_motion.tscn` retain unrounded CSS Typed OM values and original
   removal methods. Controlled overlapping color layers qualify group animation,
   not actual radio layout, portrait filters, typography or complete overlay pixels.
+  Radio width, centered bottom anchoring, padding, note/row gaps and avatar sizes
+  follow the original viewport width and 720 px breakpoint. Dynamic content
+  changes recompute the bottom anchor. `node tools/dialogue_radio_layout_capture.mjs`,
+  `node --test tests/dialogue_radio_layout.test.mjs` and real-driver
+  `tests/dialogue_radio_layout.tscn` compare 27 controlled browser geometries,
+  resizing across the breakpoint and width cap, plus a long native dialogue line.
+  Controlled content heights do not qualify native text wrapping, fractional
+  inner layout, faction borders, gradients or
+  complete radio composition.
+  A single-speaker radio retains the empty third grid track and its trailing gap;
+  showing or hiding the right endpoint updates that track without changing the
+  left portrait or text. `node tools/dialogue_radio_grid_capture.mjs`,
+  `node --test tests/dialogue_radio_grid.test.mjs` and real-driver
+  `tests/dialogue_radio_grid.tscn` compare 48 controlled source geometries at
+  four viewport sizes and check a real single-speaker scene. Controlled integer
+  rectangles do not qualify fractional placement, typography or portrait pixels.
+  Radio title and note remain separate, with the original gap, font size and
+  neutral note color; the title and side border follow each speaker's faction.
+  `node tools/dialogue_radio_note_capture.mjs`,
+  `node --test tests/dialogue_radio_note.test.mjs` and real-driver
+  `tests/dialogue_radio_note.tscn` execute original dialogue markup and compare
+  empty and escaped fields across Steel, Swarm and mercenary speakers, plus long
+  native text. `tests/dialogue_owner_retirement.tscn` also exercises cancellation
+  during title admission.
+  Source font weight, baselines, fractional glyph metrics, full flex wrapping,
+  backdrop and faction-frame pixels still need their separate contracts.
+  Radio speaker size, text color and speaker-to-line gap retain the original CSS;
+  the dialogue font size changes at the same 720 px viewport breakpoint, including
+  when an existing bar is resized. `node tools/dialogue_radio_text_capture.mjs`,
+  `node --test tests/dialogue_radio_text.test.mjs` and real-driver
+  `tests/dialogue_radio_text.tscn` compare original text updates and CSS at four
+  viewport sizes, including empty, escaped and supplementary-plane text. Original
+  font selection, letter spacing, line height, wrapping and pixels remain open.
+  Layout continuations stop when font or size callbacks replace or clear the
+  owner; the same fixture exercises both reentrant cases.
   Transcript rows retain original integer-millisecond stagger arithmetic and
   260 ms ease-out group opacity/6 px translation, independent of gameplay pause.
   Clear cancels pending reveals without hiding rows already revealed. Removing

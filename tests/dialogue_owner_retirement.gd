@@ -22,9 +22,52 @@ func _run() -> void:
 		_check(provenance.inputs.get(path) == capture.source.sourceInputs[path], "Dialogue owner retains original cancellation source: " + path)
 	if failures == 0:
 		_replay(capture.programs)
+		_layer_visibility()
 		await _native_lifetimes()
 	print("DIALOGUE_OWNER_RETIREMENT assertions=", assertions, " failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)
+
+func _layer_visibility() -> void:
+	var host := Control.new()
+	host.hide()
+	add_child(host)
+	var layer := preload("res://scripts/dialogue_radio_layer.gd").new()
+	host.add_child(layer)
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"A layer initially attached under a hidden owner does not render")
+	host.show()
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS,
+		"Showing the owner starts the isolated renderer")
+	remove_child(host)
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"Detaching an owner stops the isolated renderer")
+	host.hide()
+	add_child(host)
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"Reattaching a hidden owner does not start its renderer")
+	host.show()
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS,
+		"Showing a reattached owner resumes its renderer")
+	layer.hide()
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"Hiding the layer stops its renderer")
+	remove_child(host)
+	add_child(host)
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"A hidden layer remains stopped after reattachment")
+	layer.show()
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS,
+		"Showing the layer after reattachment resumes rendering")
+	remove_child(host)
+	add_child(host)
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS,
+		"Reattaching a visible owner resumes its renderer")
+	layer.retire()
+	host.hide()
+	host.show()
+	_check(layer.viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"A retired renderer cannot restart when its owner changes visibility")
+	host.free()
 
 func _view(clock: Dictionary) -> CampaignDialogue:
 	var view := CampaignDialogue.new()

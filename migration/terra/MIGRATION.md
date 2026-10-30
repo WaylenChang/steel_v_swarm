@@ -538,6 +538,9 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   continuations before admitting nodes or timers. A queued/detached transcript
   host must not reveal or scroll from a pending deadline. Preserve replacement
   state during clear/dispose/expiry callbacks and release unadmitted portraits.
+  Isolated radio, transcript and crawl-section layers also stop their render
+  targets when initially hidden or detached; reattachment follows effective
+  visibility and cannot restart a retired layer.
   `node tools/dialogue_owner_capture.mjs` executes original `_after`, `clear`
   and `dispose` with declared timer/DOM probes; real-driver
   `tests/dialogue_owner_retirement.tscn` checks these programs and native

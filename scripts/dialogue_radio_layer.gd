@@ -9,6 +9,9 @@ var opacity := 1.0:
 		# The isolated texture stores premultiplied pixels.
 		self_modulate = Color(value, value, value, value)
 
+func _enter_tree() -> void:
+	_sync_visibility()
+
 func _ready() -> void:
 	if retired or is_queued_for_deletion():
 		return
@@ -28,6 +31,7 @@ func _ready() -> void:
 	viewport.add_child(content)
 	texture = viewport.get_texture()
 	visibility_changed.connect(_sync_visibility)
+	_sync_visibility()
 
 func _sync_visibility() -> void:
 	if retired or not is_instance_valid(viewport):
@@ -47,3 +51,7 @@ func retire() -> void:
 	if is_instance_valid(viewport):
 		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	hide()
+
+func _exit_tree() -> void:
+	if is_instance_valid(viewport):
+		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED

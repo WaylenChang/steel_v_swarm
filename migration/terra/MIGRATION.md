@@ -50,6 +50,13 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   Unknown remote magazines and movement resources remain null. These checks do
   not qualify populated ray queries, actor pixels, recipient publication or the
   shared main-to-camera angle transfer contract below.
+  The spectator roster preserves input order for equal side/player keys, including
+  when nearest selection encounters equal-distance duplicate entries.
+  `node tools/spectator_roster_capture.mjs`,
+  `node --test tests/spectator_roster.test.mjs` and real-driver
+  `tests/spectator_roster.tscn` compare the original Chromium roster, filtering,
+  follow target and notice. Controlled duplicate rows do not qualify populated
+  transport or upstream snapshot identity.
   Observer heading retains the previous value when a target heading is absent
   or null, and clamps nonpositive interpolation time to the original no-motion
   behavior. `node tools/spectator_heading_capture.mjs`,

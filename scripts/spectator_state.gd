@@ -63,11 +63,18 @@ static func source_pid(player: int) -> String:
 static func roster(actors: Array) -> Array:
 	var result: Array = []
 	for actor: Dictionary in actors:
-		if actor.get("hero", false) and not str(actor.get("pid", "")).is_empty() and actor.get("act", true) != false:
-			result.append(actor)
-	# Native IDs use only decimal digits and the lowercase source bot prefix.
-	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return str(a.pid) < str(b.pid) if a.side == b.side else str(a.side) < str(b.side))
+		if not actor.get("hero", false) or str(actor.get("pid", "")).is_empty() or actor.get("act", true) == false:
+			continue
+		# Native IDs use only decimal digits and the lowercase source bot prefix.
+		# Insert after equal keys, matching the original stable Array.sort.
+		var index := result.size()
+		while index > 0:
+			var prior: Dictionary = result[index - 1]
+			var before := str(actor.pid) < str(prior.pid) if actor.side == prior.side else str(actor.side) < str(prior.side)
+			if not before:
+				break
+			index -= 1
+		result.insert(index, actor)
 	return result
 
 func _nearest(list: Array) -> Dictionary:

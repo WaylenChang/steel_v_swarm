@@ -106,9 +106,14 @@ runtime acceptance remain incomplete. Component results do not certify the build
   turns and action priorities with traversal, BOSS/SUPER and full frame order.
   Preserve original evasion inputs, history retention/backdating, every-third
   light report and resource settlement. Compare seeded complete matches.
-  `-Bots` still times out on authored worlds: the fixture bot stays in `PUSH`
-  and never fires at the soldier placed at (0, -30) in `tests/bot_network.gd`.
-  Establish whether LOS/acquisition or the fixture placement is wrong.
+  `-Bots` timed out on authored worlds because of fixture placement, not
+  acquisition: at progress 0 the STEEL push foot is its own base, the first
+  full-power tick spends the operation gap on aiming, and two 0.625 rad turns
+  put the soldier at (0, -30) outside the 0.876 rad half-FOV before the first
+  scan. `tests/bot_network.gd` now starts mid-lane with lane progress and places
+  the target 30 m down the push direction. This change has not been run yet:
+  rerun `-Bots` on both transports. If it still times out, check terrain/building
+  LOS between the lane points next.
 - [ ] **O15 — Balance initialization:** certify source preference normalization,
   constructor-time building DPS redistribution, cached range/mobility midpoints,
   first-use reach/curvature/history/role caches and ordinary offline versus
@@ -142,9 +147,14 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Positive populated-match acceptance still requires complete authored seasonal
   resources. Certify valid prebuild consumption, structure anchors and exactly-once
   population after all seats load; rejection coverage alone cannot establish this.
-  `-Rooms` on ENet reports `begins=2` at stage 0 with no disconnect: the client
-  emits `battle_started` twice before its first probe. Find the second `_begin`
-  (`scripts/session.gd`) before relaxing `tests/room_network.gd`.
+  `-Rooms` on ENet reported `begins=2` at stage 0; its `disconnects` value is
+  server-only. A recovering client parks an `OfflineMultiplayerPeer` (unique
+  ID 1), so a world finished during an ENet timeout took the authority branch,
+  cleared its room and began again on reattach. `Session.is_authority()` now
+  excludes recovery; `tests/room_loading_suite.gd` covers the detached load.
+  Rerun `-Rooms` on both transports with generated seasonal worlds; the client
+  failure line reports `recoveries`. If it is zero, the second `_begin` has
+  another source.
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role
@@ -227,7 +237,10 @@ runtime acceptance remain incomplete. Component results do not certify the build
   generated `assets/worlds/*_{spring,summer,autumn,winter}.res` must agree
   on available authored seasonal resources. The ordinary smoke and both baseline
   transport cases must pass world preparation without early simulation or a
-  fabricated replacement map.
+  fabricated replacement map. The checked-in `data/worlds/berlin_*_{season}.json`
+  captures have no `deckProbes`, so `tools/import_worlds.tscn` rejects them until
+  `tools/world_references.mjs` reruns against the source; the `-Bots`, `-Rooms`,
+  smoke and populated core/loading/campaign cases stay blocked on that output.
   Sol handoff: `scripts/combat_effects.gd` needs the original cast-effect consumer
   for the existing public `character`, `side`, `slot`, `fx`, `point`, `radius`,
   `duration`, `level`, `fraction`, `carrier`, `origin` and `cast_duration` reports.
@@ -239,9 +252,13 @@ runtime acceptance remain incomplete. Component results do not certify the build
   source media and retain provenance; the offline copier must preserve authored
   bytes and exclude source-editor `.import` descriptors. Verify story image
   imports without treating a filename suffix as proof of the encoded format.
-  Network fixture handoff: owners of the other `tests/*_network.gd` clocks must
-  count from `Session.launch_announced`; authored world loading outlasts their
-  16-18 s limits. `tests/aiming_network.gd` authority timed out this way.
+  Network fixture handoff: authored world loading outlasts the 15-18 s fixture
+  limits, so clocks must count from `Session.launch_announced`. The Opus-owned
+  aiming, campaign, controls, missile, reachability, room and SUPER fixtures now
+  do this, but none of those changes has been run yet. The body, burst, camera,
+  cockpit, death, footprint, mobile, projectile-visual, TPS and view
+  `tests/*_network.gd` clocks still count from scene start; their owners must
+  apply the same guard.
   `tests/death_network.gd` compares a transport ID to a seat and sends `rpc_id`
   to a seat; use `Session.seats.player_for`/`transport_for` as `tests/blast_network.gd` does.
   `-Campaign` failed with `Unavailable` at `scripts/main.gd:246` (host port) in

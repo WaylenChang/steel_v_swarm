@@ -75,6 +75,7 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 		session.free()
 		battle.free()
 	_server_world_gate(h)
+	_detached_client_load(h)
 	await _native_preparation(h)
 
 static func compare(h: Node, session: Node, battle: GateSimulation, expected: Dictionary) -> void:
@@ -107,6 +108,37 @@ static func _server_world_gate(h: Node) -> void:
 	session._maybe_launch()
 	h._check(battle.launches == 1, "Duplicate completion cannot initialize a second authority match")
 	session.snapshot_timer.stop()
+	session.free()
+	battle.free()
+
+static func _detached_client_load(h: Node) -> void:
+	# The fixture tree runs on OfflineMultiplayerPeer, which is exactly the peer a
+	# recovering client parks between retries; its unique ID is 1.
+	var session := SessionScript.new()
+	h.add_child(session)
+	session.active = true
+	session.started = true
+	session.phase = "loading"
+	session.round_id = 3
+	session.local_player_id = 42
+	session.remote_host_id = 42
+	session.resume_token = "fixture-token"
+	session.reconnecting = true
+	session.config = {"team_size": 1}
+	session.roster = [{"peer": 42, "side": "STEEL", "character": "t01", "bot": false}]
+	var battle := GateSimulation.new()
+	h.add_child(battle)
+	battle.set_physics_process(false)
+	session.simulation = battle
+	var cleared := [0]
+	session.room_cleared.connect(func(): cleared[0] += 1)
+	h._check(not session.is_authority() and session.is_room_host(), "A detached client keeps its published host and never reads its empty seat registry as authority")
+	session.prepare_complete(battle, {})
+	session._maybe_launch()
+	h._check(cleared[0] == 0 and session.started and session.simulation == battle and session.phase == "loading" and session.roster.size() == 1,
+		"Finishing the world while detached retains the battle for reattach instead of clearing an empty local room")
+	h._check(session.world_prepared and battle.launches == 0 and not battle.match_initialized and session.seats.members.is_empty(),
+		"A detached client neither marks local seats loaded nor initializes an authority match")
 	session.free()
 	battle.free()
 

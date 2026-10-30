@@ -68,7 +68,7 @@ func _ready() -> void:
 	join_timer.timeout.connect(func():
 		if leaving:
 			stop()
-		elif active and (not started or reconnecting) and not multiplayer.is_server():
+		elif active and (not started or reconnecting) and not is_authority():
 			_connection_failed())
 	add_child(join_timer)
 	retry_timer = Timer.new()
@@ -93,7 +93,7 @@ func fail_battle(reason: String) -> void:
 		return
 	if reason.is_empty():
 		reason = "Battle preparation did not complete"
-	if multiplayer.is_server():
+	if is_authority():
 		for peer: int in _room_peers():
 			_receive_failure.rpc_id(peer, reason, round_id)
 	_receive_failure(reason, round_id)
@@ -117,10 +117,15 @@ func _sync_local_selection() -> void:
 		chosen_mode = player.get("mode", "player")
 		chosen_name = player.get("name", chosen_name)
 
+# A recovering client parks an OfflineMultiplayerPeer between attempts, whose
+# unique ID is 1; it must never settle room or match state while detached.
+func is_authority() -> bool:
+	return multiplayer.is_server() and not reconnecting
+
 func is_room_host() -> bool:
 	if not active:
 		return false
-	var host_player := seats.host_id if multiplayer.is_server() else remote_host_id
+	var host_player := seats.host_id if is_authority() else remote_host_id
 	return host_player > 0 and host_player == local_player_id
 
 func _room_peers() -> Array[int]:
@@ -433,7 +438,7 @@ func leave() -> void:
 		return
 	_clear_credential()
 	command_queue.clear()
-	if not active or multiplayer.is_server() or reconnecting or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+	if not active or is_authority() or reconnecting or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		stop()
 		return
 	leaving = true
@@ -446,7 +451,7 @@ func leave() -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _leave_room() -> void:
-	if not active or not multiplayer.is_server():
+	if not active or not is_authority():
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	if sender <= 1:
@@ -466,14 +471,14 @@ func _leave_complete() -> void:
 func set_control_mode(mode: String) -> bool:
 	if not active or reconnecting or leaving or not is_room_host() or mode not in Controls.rules.get("modeKeys", []):
 		return false
-	if not multiplayer.is_server():
+	if not is_authority():
 		_request_control_mode.rpc_id(1, mode)
 		return true
 	return _settle_control_mode(mode)
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_control_mode(mode: String) -> void:
-	if not active or not multiplayer.is_server():
+	if not active or not is_authority():
 		return
 	_set_control_mode_for(multiplayer.get_remote_sender_id(), mode)
 
@@ -488,7 +493,7 @@ func pick_side(side: String) -> bool:
 	side = side if side in ["STEEL", "SWARM"] or side == Content.constants.SUPER_SIDE and config.get("super", false) else ""
 	if side.is_empty() and not Content.balance.get("spectator", {}).has("initialFov"):
 		return false
-	if multiplayer.is_server():
+	if is_authority():
 		return _pick_side_for(1, side)
 	_side_request.rpc_id(1, side)
 	return true
@@ -496,18 +501,18 @@ func pick_side(side: String) -> bool:
 func set_room_info(room_name: String, is_public: bool) -> bool:
 	if not active or reconnecting or leaving or not is_room_host():
 		return false
-	if multiplayer.is_server():
+	if is_authority():
 		return _set_room_info_for(1, room_name, is_public)
 	_room_info_request.rpc_id(1, room_name, is_public)
 	return true
 
 @rpc("any_peer", "call_remote", "reliable")
 func _room_info_request(room_name: String, is_public: bool) -> void:
-	if active and multiplayer.is_server():
+	if active and is_authority():
 		_set_room_info_for(multiplayer.get_remote_sender_id(), room_name, is_public)
 
 func _set_room_info_for(transport: int, room_name: String, is_public: bool) -> bool:
-	if not active or not multiplayer.is_server() or not seats.is_host_transport(transport):
+	if not active or not is_authority() or not seats.is_host_transport(transport):
 		return false
 	config["room_name"] = RoomMetadata.sanitize(room_name)
 	config["is_public"] = is_public
@@ -516,11 +521,11 @@ func _set_room_info_for(transport: int, room_name: String, is_public: bool) -> b
 
 @rpc("any_peer", "call_remote", "reliable")
 func _side_request(side: String) -> void:
-	if active and multiplayer.is_server():
+	if active and is_authority():
 		_pick_side_for(multiplayer.get_remote_sender_id(), side)
 
 func _pick_side_for(transport: int, side: String) -> bool:
-	if not active or not multiplayer.is_server() or story_mode():
+	if not active or not is_authority() or story_mode():
 		return false
 	side = side if side in ["STEEL", "SWARM"] or side == Content.constants.SUPER_SIDE and config.get("super", false) else ""
 	if side.is_empty() and not Content.balance.get("spectator", {}).has("initialFov"):
@@ -539,18 +544,18 @@ func _pick_side_for(transport: int, side: String) -> bool:
 func pick_character(character: String) -> bool:
 	if not active or phase != "room" or reconnecting or leaving or story_mode():
 		return false
-	if multiplayer.is_server():
+	if is_authority():
 		return _pick_character_for(1, character)
 	_character_request.rpc_id(1, character)
 	return true
 
 @rpc("any_peer", "call_remote", "reliable")
 func _character_request(character: String) -> void:
-	if active and multiplayer.is_server():
+	if active and is_authority():
 		_pick_character_for(multiplayer.get_remote_sender_id(), character)
 
 func _pick_character_for(transport: int, character: String) -> bool:
-	if not active or not multiplayer.is_server() or phase != "room" or story_mode():
+	if not active or not is_authority() or phase != "room" or story_mode():
 		return false
 	var player := seats.player_for(transport)
 	if player == 0:
@@ -565,14 +570,14 @@ func _pick_character_for(transport: int, character: String) -> bool:
 func set_bot_difficulty(key: String) -> bool:
 	if not active or reconnecting or leaving or not is_room_host() or story_mode() or not Content.constants.BOT_DIFF.has(key):
 		return false
-	if multiplayer.is_server():
+	if is_authority():
 		return _settle_bot_difficulty(key)
 	_difficulty_request.rpc_id(1, key)
 	return true
 
 @rpc("any_peer", "call_remote", "reliable")
 func _difficulty_request(key: String) -> void:
-	if active and multiplayer.is_server():
+	if active and is_authority():
 		_set_bot_difficulty_for(multiplayer.get_remote_sender_id(), key)
 
 func _set_bot_difficulty_for(transport: int, key: String) -> bool:
@@ -581,7 +586,7 @@ func _set_bot_difficulty_for(transport: int, key: String) -> bool:
 	return _settle_bot_difficulty(key)
 
 func _settle_bot_difficulty(key: String) -> bool:
-	if not active or not multiplayer.is_server() or story_mode() or not Content.constants.BOT_DIFF.has(key):
+	if not active or not is_authority() or story_mode() or not Content.constants.BOT_DIFF.has(key):
 		return false
 	if not config.has("env"):
 		config.env = {}
@@ -592,18 +597,18 @@ func _settle_bot_difficulty(key: String) -> bool:
 func edit_bot(operation: String, player: int = 0, value: String = "") -> bool:
 	if not active or phase != "room" or reconnecting or leaving or not is_room_host() or story_mode() or operation not in ["add", "remove", "character"]:
 		return false
-	if multiplayer.is_server():
+	if is_authority():
 		return _edit_bot_for(1, operation, player, value)
 	_bot_request.rpc_id(1, operation, player, value)
 	return true
 
 @rpc("any_peer", "call_remote", "reliable")
 func _bot_request(operation: String, player: int, value: String) -> void:
-	if active and multiplayer.is_server():
+	if active and is_authority():
 		_edit_bot_for(multiplayer.get_remote_sender_id(), operation, player, value)
 
 func _edit_bot_for(transport: int, operation: String, player: int, value: String) -> bool:
-	if not active or not multiplayer.is_server() or phase != "room" or story_mode() or not seats.is_host_transport(transport):
+	if not active or not is_authority() or phase != "room" or story_mode() or not seats.is_host_transport(transport):
 		return false
 	var changed := false
 	match operation:
@@ -627,7 +632,7 @@ func _refresh_room_bots() -> void:
 			"bot": true, "ready": true, "loaded": true, "connected": true})
 
 func _settle_control_mode(mode: String) -> bool:
-	if not active or not multiplayer.is_server() or mode not in Controls.rules.get("modeKeys", []):
+	if not active or not is_authority() or mode not in Controls.rules.get("modeKeys", []):
 		return false
 	config["ctrl"] = mode
 	Controls.set_room(mode)
@@ -641,7 +646,7 @@ func request_start_battle() -> void:
 		return
 	if config.get("super", false):
 		set_ready(true)
-	if multiplayer.is_server():
+	if is_authority():
 		if not seats.all_ready():
 			notify_player(local_player_id, "room_not_ready")
 			return
@@ -652,7 +657,7 @@ func request_start_battle() -> void:
 func set_ready(ready: bool) -> bool:
 	if not active or reconnecting or leaving or phase != "room":
 		return false
-	if multiplayer.is_server():
+	if is_authority():
 		if not seats.set_ready(local_player_id, ready):
 			return false
 		_publish_membership()
@@ -662,14 +667,14 @@ func set_ready(ready: bool) -> bool:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _ready_player(ready: bool) -> void:
-	if not active or not multiplayer.is_server():
+	if not active or not is_authority():
 		return
 	var player := seats.player_for(multiplayer.get_remote_sender_id())
 	if player > 0 and seats.set_ready(player, ready):
 		_publish_membership()
 
 func all_ready() -> bool:
-	if multiplayer.is_server():
+	if is_authority():
 		return seats.all_ready()
 	var players := 0
 	for player: Dictionary in roster:
@@ -682,14 +687,14 @@ func all_ready() -> bool:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_start_battle() -> void:
-	if active and multiplayer.is_server() and seats.is_host_transport(multiplayer.get_remote_sender_id()):
+	if active and is_authority() and seats.is_host_transport(multiplayer.get_remote_sender_id()):
 		if not seats.all_ready():
 			_notice.rpc_id(multiplayer.get_remote_sender_id(), "room_not_ready")
 			return
 		start_battle()
 
 func start_battle() -> void:
-	if not active or not multiplayer.is_server() or started or phase != "room" or not seats.all_ready():
+	if not active or not is_authority() or started or phase != "room" or not seats.all_ready():
 		return
 	if story_mode():
 		var players := roster.filter(func(player): return not player.get("bot", false) and player.get("mode", "player") == "player" and not String(player.side).is_empty())
@@ -730,7 +735,7 @@ func prepare_complete(battle: BattleSimulation, map_data: Dictionary) -> void:
 		return
 	prepared_map = map_data
 	world_prepared = true
-	if multiplayer.is_server():
+	if is_authority():
 		if not dedicated:
 			seats.set_loaded(local_player_id)
 		_publish_membership()
@@ -743,12 +748,12 @@ func prepare_complete(battle: BattleSimulation, map_data: Dictionary) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _loaded_player(match_id: int) -> void:
-	if not active or not multiplayer.is_server() or match_id != round_id or phase not in ["loading", "game", "over"]:
+	if not active or not is_authority() or match_id != round_id or phase not in ["loading", "game", "over"]:
 		return
 	_set_loaded_for(multiplayer.get_remote_sender_id())
 
 func _set_loaded_for(transport: int) -> void:
-	if not active or not multiplayer.is_server():
+	if not active or not is_authority():
 		return
 	var player := seats.player_for(transport)
 	if player > 0 and seats.set_loaded(player):
@@ -756,7 +761,7 @@ func _set_loaded_for(transport: int) -> void:
 		_maybe_launch()
 
 func _maybe_launch() -> void:
-	if not active or not multiplayer.is_server() or phase != "loading" or not world_prepared or simulation == null or not seats.all_loaded() or not failure_reason.is_empty():
+	if not active or not is_authority() or phase != "loading" or not world_prepared or simulation == null or not seats.all_loaded() or not failure_reason.is_empty():
 		return
 	simulation.bot_difficulty = config.get("env", {}).get("bot_difficulty", Content.constants.DEFAULT_BOT_DIFF)
 	var players := roster.filter(func(player): return not String(player.side).is_empty() and (player.get("bot", false) or player.get("mode", "player") == "player"))
@@ -801,7 +806,7 @@ func _on_connected() -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _register(character: String, side: String, token: String = "", requested_mode: String = "player", requested_name: String = "") -> void:
-	if not active or not multiplayer.is_server():
+	if not active or not is_authority():
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	if sender <= 1:
@@ -963,7 +968,7 @@ func flush_pending_snapshot() -> void:
 	_snapshot(state)
 
 func notify_player(player: int, key: String) -> void:
-	if not multiplayer.is_server():
+	if not is_authority():
 		return
 	if player == 1 and not dedicated:
 		status_changed.emit(key)
@@ -980,7 +985,7 @@ func command(data: Dictionary) -> void:
 	if not active or simulation == null or not launch_announced or phase != "game" or leaving or chosen_side.is_empty() or chosen_mode != "player" or not failure_reason.is_empty():
 		return
 	local_command = data
-	if not reconnecting and multiplayer.is_server():
+	if is_authority():
 		simulation.submit_input(1, data)
 	else:
 		_send_combat({"kind": "input", "data": data, "match": round_id})
@@ -988,7 +993,7 @@ func command(data: Dictionary) -> void:
 # Input and actions share native reliable order, including a reconnect queue flush.
 @rpc("any_peer", "call_remote", "reliable", 2)
 func _receive_input(data: Dictionary, match_id: int) -> void:
-	if multiplayer.is_server() and simulation != null and phase == "game" and match_id == round_id and failure_reason.is_empty():
+	if is_authority() and simulation != null and phase == "game" and match_id == round_id and failure_reason.is_empty():
 		var player := seats.player_for(multiplayer.get_remote_sender_id())
 		if player > 0 and not String(seats.members[player].side).is_empty() and seats.members[player].mode == "player":
 			simulation.submit_input(player, data)
@@ -996,7 +1001,7 @@ func _receive_input(data: Dictionary, match_id: int) -> void:
 func act(type: String, argument: String = "") -> void:
 	if not _can_act():
 		return
-	if not reconnecting and multiplayer.is_server():
+	if is_authority():
 		simulation.action(1, type, argument)
 	else:
 		_send_combat({"kind": "action", "type": type, "argument": argument, "match": round_id})
@@ -1007,7 +1012,7 @@ func _can_act() -> bool:
 func cast_at(slot: String, source_point: Vector2) -> void:
 	if not _can_act() or slot not in ["def", "atk"] or not source_point.is_finite():
 		return
-	if not reconnecting and multiplayer.is_server():
+	if is_authority():
 		simulation.cast_player_at(1, slot, source_point)
 	else:
 		_send_combat({"kind": "cast", "slot": slot, "point": source_point, "match": round_id})
@@ -1042,7 +1047,7 @@ func _flush_commands() -> void:
 
 @rpc("any_peer", "call_remote", "reliable", 2)
 func _action(type: String, argument: String, match_id: int) -> void:
-	if not multiplayer.is_server() or simulation == null or phase != "game" or match_id != round_id or not failure_reason.is_empty():
+	if not is_authority() or simulation == null or phase != "game" or match_id != round_id or not failure_reason.is_empty():
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	var player := seats.player_for(sender)
@@ -1051,14 +1056,14 @@ func _action(type: String, argument: String, match_id: int) -> void:
 
 @rpc("any_peer", "call_remote", "reliable", 2)
 func _cast_at(slot: String, source_point: Vector2, match_id: int) -> void:
-	if not multiplayer.is_server() or simulation == null or phase != "game" or match_id != round_id or not failure_reason.is_empty():
+	if not is_authority() or simulation == null or phase != "game" or match_id != round_id or not failure_reason.is_empty():
 		return
 	var player := seats.player_for(multiplayer.get_remote_sender_id())
 	if player > 0 and not String(seats.members[player].side).is_empty() and seats.members[player].mode == "player":
 		simulation.cast_player_at(player, slot, source_point)
 
 func _broadcast_state() -> void:
-	if simulation == null or not multiplayer.is_server() or not launch_announced or not failure_reason.is_empty():
+	if simulation == null or not is_authority() or not launch_announced or not failure_reason.is_empty():
 		return
 	if simulation.over and phase != "over":
 		phase = "over"
@@ -1087,7 +1092,7 @@ func _state_for(player: int) -> Dictionary:
 	return state
 
 func broadcast_body_event(event: Dictionary) -> void:
-	if simulation == null or not multiplayer.is_server() or not failure_reason.is_empty():
+	if simulation == null or not is_authority() or not failure_reason.is_empty():
 		return
 	var actor: BattleUnit = simulation.units.get(int(event.actor))
 	var public_cast: bool = event.type in ["cast", "cast_start"]
@@ -1125,7 +1130,7 @@ func _snapshot(data: Dictionary) -> void:
 		state_received.emit(data)
 
 func _on_disconnected(peer: int) -> void:
-	if not active or closing_transport or not multiplayer.is_server():
+	if not active or closing_transport or not is_authority():
 		return
 	var registry := seats
 	var hold := started and float(Content.balance.rooms.dropMilliseconds) > 0
@@ -1146,7 +1151,7 @@ func _on_disconnected(peer: int) -> void:
 	_publish_membership()
 
 func _publish_membership() -> void:
-	if active and multiplayer.is_server() and seats.members.is_empty():
+	if active and is_authority() and seats.members.is_empty():
 		_clear_room()
 		return
 	_refresh_room_bots()
@@ -1174,18 +1179,18 @@ func _remember_match() -> void:
 func request_return_to_room() -> void:
 	if not active or reconnecting or leaving or not is_room_host():
 		return
-	if multiplayer.is_server():
+	if is_authority():
 		return_to_room()
 	else:
 		_return_to_room.rpc_id(1)
 
 @rpc("any_peer", "call_remote", "reliable")
 func _return_to_room() -> void:
-	if active and multiplayer.is_server() and seats.is_host_transport(multiplayer.get_remote_sender_id()):
+	if active and is_authority() and seats.is_host_transport(multiplayer.get_remote_sender_id()):
 		return_to_room()
 
 func return_to_room() -> void:
-	if not active or not multiplayer.is_server() or simulation == null:
+	if not active or not is_authority() or simulation == null:
 		return
 	round_id += 1
 	_dispose_match()

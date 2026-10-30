@@ -7,7 +7,8 @@ var missile_event_seen := false
 var fixture_elapsed := 0.0
 
 func _physics_process(delta: float) -> void:
-	fixture_elapsed += delta
+	if Session.launch_announced:
+		fixture_elapsed += delta
 	if fixture_elapsed > 15:
 		push_error("NETWORK_MISSILE_TIMEOUT ready=%s snapshot=%s event=%s state=%s" % [fixture_ready, missile_snapshot_seen, missile_event_seen, smoke_state_seen])
 		get_tree().quit(1)

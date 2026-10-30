@@ -10,7 +10,8 @@ var respawn_seen := false
 var reference_sequence: Dictionary = {}
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
+	if Session.launch_announced:
+		elapsed += delta
 	if elapsed > 18:
 		push_error("NETWORK_SUPER_TIMEOUT levels=%s death=%s respawn=%s" % [levels_seen, death_seen, respawn_seen])
 		get_tree().quit(1)

@@ -590,6 +590,15 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   replacement callbacks. Event-target doubles and direct native input dispatch
   do not qualify hardware touch bundling, GUI button activation, source image
   buffering, crawl/art pixels or complete campaign/transport acceptance.
+  `node tools/campaign_touch_bundle_capture.mjs`,
+  `node --test tests/campaign_touch_bundle.test.mjs` and real-driver
+  `tests/campaign_touch_bundle.tscn` additionally compare actual Chromium CDP
+  two-contact event order with native touch dispatch for a ready chapter. A single
+  CDP release of two contacts produces separate `touchend` callbacks and can
+  trigger the source double tap; a grouped cancellation produces no tap. The
+  tests also retain separate release deadlines and finish-button origins. CDP
+  synthesis and direct native dispatch do not establish physical-device event
+  bundling or GUI clicks.
   Mouse long-press follows the source pointer lifetime: the first physical
   button starts the hold, additional buttons and wheel movement do not restart
   it, and the last physical button release cancels it. `node

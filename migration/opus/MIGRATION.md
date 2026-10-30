@@ -237,7 +237,10 @@ runtime acceptance remain incomplete. Component results do not certify the build
   generated `assets/worlds/*_{spring,summer,autumn,winter}.res` must agree
   on available authored seasonal resources. The ordinary smoke and both baseline
   transport cases must pass world preparation without early simulation or a
-  fabricated replacement map.
+  fabricated replacement map. The checked-in `data/worlds/berlin_*_{season}.json`
+  captures have no `deckProbes`, so `tools/import_worlds.tscn` rejects them until
+  `tools/world_references.mjs` reruns against the source; the `-Bots`, `-Rooms`,
+  smoke and populated core/loading/campaign cases stay blocked on that output.
   Sol handoff: `scripts/combat_effects.gd` needs the original cast-effect consumer
   for the existing public `character`, `side`, `slot`, `fx`, `point`, `radius`,
   `duration`, `level`, `fraction`, `carrier`, `origin` and `cast_duration` reports.

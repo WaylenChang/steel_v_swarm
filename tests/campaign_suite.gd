@@ -75,6 +75,9 @@ static func run(h: Node, fixtures: Dictionary) -> void:
 
 static func dialogue_lifecycle(h: Node) -> void:
 	var dialogue := CampaignDialogue.new()
+	# Radio timers re-arm until their wall-clock deadline, so a synthetic timeout must advance this clock first.
+	var clock := {"now": 1000.0}
+	dialogue.clock_msec = func(): return clock.now
 	h.add_child(dialogue)
 	dialogue.side = "STEEL"
 	var scene := CampaignRules.talk(0, "STEEL", 0)
@@ -88,6 +91,7 @@ static func dialogue_lifecycle(h: Node) -> void:
 	old_timer.timeout.emit()
 	h._check(dialogue.at == 0 and dialogue.bar == null, "Cancelled generation cannot restore an old radio line")
 	dialogue.radio(scene)
+	clock.now += dialogue.timers[0].wait_time * 1000
 	dialogue.timers[0].timeout.emit()
 	h._check(dialogue.at == 2, "Live radio advances by timer without manual gameplay input")
 	dialogue.dispose()

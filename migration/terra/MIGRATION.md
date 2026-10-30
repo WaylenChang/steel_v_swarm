@@ -200,6 +200,12 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   outlines, inherited widths, rotated arrows, clipping and overlaps. Keep the
   strict four-byte raster failures until the shared marker-coverage contract
   below is accepted; these probes do not qualify the full populated map.
+  `node tools/minimap_lane_raster_capture.mjs`,
+  `node --test tests/minimap_lane_raster.test.mjs` and real-driver
+  `tests/minimap_lane_raster.tscn` compare the original lane callback, segmented
+  points, colors, dash patterns and ten opaque rasters. All ten strict four-byte
+  raster cases fail pending the shared lane-renderer contract below; identity
+  projection and controlled paths do not qualify real lane geometry or maps.
 - [ ] **S14 — PiP:** certify original companion/decoy selection, stable order,
   ownership/death/lost-link gates, low-power limits, layout and camera offsets.
   Shared-world views must hide only their source body/cockpit while rendering,
@@ -1014,6 +1020,24 @@ rewrite or edits to producer APIs. Complex work may use Sol 6.1 in this lane.
   transforms. Acceptance: all six captured rasters plus additional fractional
   frame positions pass without wider tolerance or per-size baked images, then
   recheck original art, shadows, DPI and populated cinematic composition.
+
+- **Opus — minimap lane raster:** agree source-faithful Canvas stroke bindings
+  under `shaders/minimap_lane*.gdshader` for `scripts/minimap_lanes.gd`. The
+  controlled `tests/minimap_lane_raster.tscn` confirms source segmentation,
+  points, color, alpha, width and dash patterns but all ten raster comparisons
+  fail at the unchanged four-byte gate. The solid horizontal case differs in
+  216 pixels: at `(8,17)` source RGBA is `[135,142,150,255]` and native is
+  `[174,179,184,255]`. The bridge turn, tunnel turn and overlap differ in
+  225/178/458 pixels, with maximum channel differences of 145/158/119 bytes.
+  Source/native PNGs and byte-domain witnesses are in
+  `artifacts/terra/minimap-lane-raster-byte-a7c21/`; byte counts equal the
+  normalized comparator counts for all ten cases. Preserve the source's 1.5 px
+  width, 0.7 alpha, butt caps, miter limit, per-grade dash phase and splitting,
+  subpixel positions, clipping, layer order and palette. Acceptance: all ten
+  captured original rasters and additional fractional, grade-transition,
+  clipped and zoomed paths pass without wider tolerance or per-path baked
+  images, then validate actual map lanes and complete minimap composition.
+  Terra binds the accepted renderer in a separate change.
 
 - **Opus — minimap marker coverage:** agree native bindings under
   `shaders/minimap_marker*.gdshader` before Terra replaces the marker drawing in

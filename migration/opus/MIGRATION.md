@@ -2,8 +2,53 @@
 
 Read [AGENTS.md](AGENTS.md). Current source metadata, fixture coverage and combined
 runtime acceptance remain incomplete. Component results do not certify the build.
+Publication and fixture commands are in [PUBLICATION.md](PUBLICATION.md); load them
+only for lane A. Bounded fixes that blocked this backlog are in
+[Sonnet](../sonnet/MIGRATION.md).
 
-## Live blockers and high-risk fidelity
+## Execution lanes
+
+Select one lane per session and worktree. Files are exclusive between lanes; tasks
+inside a lane run one at a time. A task that crosses lanes runs in lane E while
+the other affected lane is idle. Shared publication in A stays single-writer.
+
+| Lane | Tasks | Exclusive Opus files |
+| --- | --- | --- |
+| A — Publication | O25, O26A, O27 | `tools/import_source.mjs`, `tools/world_references.mjs`, other shared `tools/*_references.mjs`, `scripts/content.gd`, `data/` outside SN8's bundles |
+| B — Render and numeric contracts | O26B, O3-O5 | `shaders/`, `scripts/source_cel_*.gd`, `scripts/source_outline_*.gd`, `scripts/source_texture_images.gd`, `scripts/source_fixture_sections.gd`, new shared numeric/font adapters, `tools/{outline,cel,texture}_*.mjs` |
+| C — Simulation | O6-O17 | `scripts/simulation.gd`, `scripts/unit.gd`, remaining Opus `scripts/*_rules.gd`, `scripts/*_math.gd` and authority helpers |
+| D — Session and rooms | O18-O22 | `scripts/session.gd`, Opus `scripts/room_*.gd`, `scripts/actor_snapshot.gd`, `scripts/match_recipe.gd`, `scripts/fatal_watchdog.gd` |
+| E — Integration | O23, O24 | `scripts/main.gd`, `scenes/main.tscn`, `project.godot`, export presets, `.github/`, `tests/run.*`, `tests/validation.json`, `tools/test_network.ps1`, `tools/export_web.ps1` |
+
+## Unblocking order
+
+O25 and O26 come first: they release SN8, then every populated case. Sol and Terra
+keep the full requests; find them by searching their backlogs for `**Opus`.
+
+- [ ] **O25 — Source identity (lane A):** after SN7, choose one accepted snapshot, then
+  refresh provenance, producer declarations and consumer plans once through
+  `tools/import_source.mjs`. Covers original `rng.js`, `pool.js`, `lookPrefs.js`,
+  `movePrefs.js`, `audio_references.mjs`, `projectile_references.mjs` and the SN7
+  consumer changes. Requests: S4's three `rng.js` handoffs, "shared audio fixtures",
+  "shared audio provenance/consumer publication", "original presentation pool
+  provenance", "shared projectile fixture publication", "current particle
+  provenance" and Terra's "spectator, minimap, PiP, scope and dialogue provenance".
+- [ ] **O26 — World contracts:** complete before SN8.
+  - **O26A (lane A):** "layered-deck reference provenance", including signed-zero
+    preservation in `tools/world_references.mjs`.
+  - **O26B (lane B):** "exact native source JSON numbers", "float vertex colors" and
+    "cel resource metadata". Add "original sign emission" if the selected baseline
+    bundle has active glow.
+- [ ] **O27 — Story media (lane A):** all 70 PNG-named `assets/story/` files hold
+  JPEG bytes. Complete Terra's "story image encoding" and "failed story load guard",
+  then publish `assets/logo_flat.png` and `assets/loading/`. The offline copier
+  preserves authored bytes and excludes source-editor `.import` descriptors.
+
+Remaining inbound requests follow their files: `shaders/` and shared numeric/font
+adapters go to B, simulation and unit contracts to C, session and snapshot
+contracts to D, and `scripts/main.gd` or `project.godot` contracts to E.
+
+## Render fidelity
 
 - [ ] **O3 — Full native surface shaders:** translate and mount original toon/
   built-in/School B programs, curve/ink/shadow hooks, material-style/light finish,
@@ -106,14 +151,6 @@ runtime acceptance remain incomplete. Component results do not certify the build
   turns and action priorities with traversal, BOSS/SUPER and full frame order.
   Preserve original evasion inputs, history retention/backdating, every-third
   light report and resource settlement. Compare seeded complete matches.
-  `-Bots` timed out on authored worlds because of fixture placement, not
-  acquisition: at progress 0 the STEEL push foot is its own base, the first
-  full-power tick spends the operation gap on aiming, and two 0.625 rad turns
-  put the soldier at (0, -30) outside the 0.876 rad half-FOV before the first
-  scan. `tests/bot_network.gd` now starts mid-lane with lane progress and places
-  the target 30 m down the push direction. This change has not been run yet:
-  rerun `-Bots` on both transports. If it still times out, check terrain/building
-  LOS between the lane points next.
 - [ ] **O15 — Balance initialization:** certify source preference normalization,
   constructor-time building DPS redistribution, cached range/mobility midpoints,
   first-use reach/curvature/history/role caches and ordinary offline versus
@@ -147,14 +184,6 @@ runtime acceptance remain incomplete. Component results do not certify the build
   Positive populated-match acceptance still requires complete authored seasonal
   resources. Certify valid prebuild consumption, structure anchors and exactly-once
   population after all seats load; rejection coverage alone cannot establish this.
-  `-Rooms` on ENet reported `begins=2` at stage 0; its `disconnects` value is
-  server-only. A recovering client parks an `OfflineMultiplayerPeer` (unique
-  ID 1), so a world finished during an ENet timeout took the authority branch,
-  cleared its room and began again on reattach. `Session.is_authority()` now
-  excludes recovery; `tests/room_loading_suite.gd` covers the detached load.
-  Rerun `-Rooms` on both transports with generated seasonal worlds; the client
-  failure line reports `recoveries`. If it is zero, the second `_begin` has
-  another source.
 - [ ] **O19 — Observers/privacy:** certify explicit/late admission, capacity
   bypass, no readiness/progress contribution, shared world preparation and camera
   restoration. Complete recipient-specific snapshots/events, public special-role
@@ -220,66 +249,9 @@ runtime acceptance remain incomplete. Component results do not certify the build
   source flat-ground heights onto the prepared ground (one shared offset where
   the source compares absolute hero eyes; missiles stay in the altitude frame).
   A case that aborts before freeing its match leaks that world into later cases.
-  Rerun the structure cases on real geometry once Sol's MultiMesh fix lands.
-  Campaign deployment still requires authored chapter terrain. Isolated climb
-  failures are in `scripts/climb_presentation.gd` MultiMesh buffers/matrices;
-  isolated field failures are in `scripts/skill_field_presentation.gd` fog
-  vertices. Sol owns those consumers. Preserve every authority assertion when
-  rerunning them after those corrections; presentation failures cannot certify
-  populated traversal or field interactions.
-  Sol handoff: `scripts/scenery_presentation.gd` must preserve source instance
-  transforms and duplicate the imported MultiMesh before camp clearance.
-  `tests/structure_suite.gd` reproduces buffer-size errors and source matrix/
-  shared-resource mutation differences without world setup; retain every
-  rotated, mirrored, zero-scale, overlap and repeated-clearance assertion. `scripts/scenery_presentation.gd`, `scripts/climb_presentation.gd`, `scripts/aquatic_presentation.gd`, `scripts/wildlife_presentation.gd` and `scripts/petal_presentation.gd` must allocate a fresh `MultiMesh` and copy `transform_format`, `use_colors`, `use_custom_data`, `mesh`, `instance_count`, `visible_instance_count`, `custom_aabb` and `buffer` in order instead of calling `MultiMesh.duplicate()`, which in Godot 4.7.2 triggers `set_buffer` before `instance_count` is applied.
-  Sol handoff: `scripts/control_preferences.gd` must check `has_section_key("presentation", "low_power")` before calling `ConfigFile.get_value` with a `null` default and preserve `lookSens` clamp/persistence in `tests/mobile_suite.gd`; `scripts/audio_preferences.gd` must validate bracketed INI section headers before `ConfigFile.parse` in `tests/audio_suite.gd` and match `tests/audio_clip_suite.gd` PCM conversion. `tests/audio_move_render.gd:108` must explicitly type `var complete: bool = ...` so GDScript strict type inference does not fail on `Content.balance.audio.scene.categories`, and `tests/aquatic_render.gd`, `tests/audio_pan_render.gd`, `tests/death_render.gd`, `tests/minimap_fog_render.gd` and `tests/splat_render.gd` must pass explicit section arrays to `Content.read_json("res://data/fixtures.json", ...)` and register as fixture consumers.
-  Sol handoff: `scripts/room_world_resources.gd`, `scripts/world.gd` and the
-  generated `assets/worlds/*_{spring,summer,autumn,winter}.res` must agree
-  on available authored seasonal resources. The ordinary smoke and both baseline
-  transport cases must pass world preparation without early simulation or a
-  fabricated replacement map. The checked-in `data/worlds/berlin_*_{season}.json`
-  captures have no `deckProbes`, so `tools/import_worlds.tscn` rejects them until
-  `tools/world_references.mjs` reruns against the source; the `-Bots`, `-Rooms`,
-  smoke and populated core/loading/campaign cases stay blocked on that output.
-  Sol handoff: `scripts/combat_effects.gd` needs the original cast-effect consumer
-  for the existing public `character`, `side`, `slot`, `fx`, `point`, `radius`,
-  `duration`, `level`, `fraction`, `carrier`, `origin` and `cast_duration` reports.
-  Match `public/js/game.js`/`castfx.js` with a hidden or removed caster anchored
-  at the effect point; carrier casts must defer their destination effect until
-  delivery. Do not infer a generic effect from a passing publication fixture.
-  Sol handoff: the original `public/assets/story/*.png` includes JPEG/JFIF
-  bytes under PNG names. `assets/story/` native imports must decode the actual
-  source media and retain provenance; the offline copier must preserve authored
-  bytes and exclude source-editor `.import` descriptors. Verify story image
-  imports without treating a filename suffix as proof of the encoded format.
-  Network fixture handoff: authored world loading outlasts the 15-18 s fixture
-  limits, so clocks must count from `Session.launch_announced`. The Opus-owned
-  aiming, campaign, controls, missile, reachability, room and SUPER fixtures now
-  do this, but none of those changes has been run yet. The body, burst, camera,
-  cockpit, death, footprint, mobile, projectile-visual, TPS and view
-  `tests/*_network.gd` clocks still count from scene start; their owners must
-  apply the same guard.
-  `tests/death_network.gd` compares a transport ID to a seat and sends `rpc_id`
-  to a seat; use `Session.seats.player_for`/`transport_for` as `tests/blast_network.gd` does.
-  `-Campaign` failed with `Unavailable` at `scripts/main.gd:246` (host port) in
-  sequential runs; check port release before reading its timeout as a mode failure.
-  Models handoff: `tests/body_suite.gd` and `tests/civilian_body_suite.gd` need
-  incremental case consumption through `Content.read_fixture_part(key, index)`.
-  Their combined fixture dependencies exceed the runner's default encoded-byte
-  budget. Retain every original row, nested frame sequence, rig reset and
-  cross-frame state; verify the same complete assertions with bounded memory.
-  The explicit unverified-suite failure remains until that owner integrates the
-  reader. Increasing the budget does not establish memory or delivery acceptance.
-  Models handoff: `assets/companions/guer_tank.scn` nodes 61/62 and
-  `assets/companions/{steel,swarm,super}_main_battle_tank.scn` nodes 81/82 must
-  match the captured `companionGeometry` world bounds and hierarchy within the
-  existing tolerance. Validate with `tests/companion_suite.gd`; authority spawn,
-  height and lifecycle fixtures must retain their complete scope.
-  Models handoff: `tests/burst_suite.gd` must parent cockpit fixture units under
-  a `BattleSimulation` before `CockpitRig.update_view` consumes their authority
-  context. Retain all original burst frames and serial/kick/muzzle assertions;
-  a parent-type script error cannot establish a presentation difference.
-  Models handoff: `scripts/view_occlusion.gd` must copy `MultiMesh` format flags and `instance_count` before `buffer` instead of calling `MultiMesh.duplicate()`, and match `expandByObject` descendant bounds, nine TPS body samples and instanced fade restoration in `tests/view_occlusion_suite.gd` (`tests/player_view_suite.gd`). `scripts/civilian_body_builder.gd` must unset `owner` before reparenting instantiated template nodes in `configure` so `tests/snapshot_suite.gd` does not emit inconsistent-owner engine warnings.
+  Campaign deployment still requires authored chapter terrain. Pull failures
+  reported by SN9; presentation failures cannot certify populated traversal or
+  field interactions.
 - [ ] **O24 — Delivery:** certify native exports, mobile sensors/safe areas,
   Compatibility rendering, memory/performance, threaded audio on Web, browser
   single-player, Pages artifact contents and production native hosting. Complete
@@ -296,63 +268,6 @@ godot --headless --path . -- --smoke
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -RecoveryQueue
 ./tools/test_network.ps1 -Godot C:/path/to/godot_console.exe -SnapshotEvents
 ```
-
-Source publication is serialized. Capture into a separate directory, then use
-the canonical importer to validate original hashes, the captured generator and
-offline runtime, native world inputs, required fixture keys and complete outputs
-before publication. Keep that producer identity on every fixture section. Do not
-relabel an older capture after editing the generator or copy source-editor
-`.import` descriptors into the native project:
-
-```powershell
-node tools/import_source.mjs C:/path/to/steel_vs_swarm --output-root artifacts/source-capture
-node tools/import_source.mjs C:/path/to/steel_vs_swarm --publish-stage artifacts/source-capture
-godot --headless --path . res://tests/fixture_registry.tscn
-```
-
-`data/fixtures.json` is a section registry; its content-addressed JSON parts retain
-the complete captured bytes and its numeric tapes preserve the JavaScript parser's
-IEEE-754 values across Godot decimal decoding. Never edit either representation
-by hand. A native suite change requires regenerating its consumer plan with
-`node tools/import_source.mjs --refresh-fixture-consumers`. Isolate an existing
-suite using `res://tests/run.tscn -- --fixture-suite=tests/snapshot_suite.gd`;
-the full default run is still required. Console samples are bounded per suite;
-every assertion failure is retained in `user://source-fixture-failures.jsonl`.
-
-Generated captures use binary Git diffs and preserve their exact bytes. Producer
-tools and native test consumers also retain their captured line endings; do not
-normalize them independently of their SHA manifests. After staging, validate the
-actual commit contents before pushing:
-
-```powershell
-node tools/check_git_storage.mjs --staged --verify-fixtures
-```
-
-The check rejects regular Git blobs above 100 MiB, raw blobs that bypass an LFS
-filter, omitted fixture parts and staged-byte changes to pinned inputs. Keep the
-existing oversized world files in LFS; changing diff attributes does not exempt a
-file from GitHub's object-size limit.
-
-Use `--status-references`, `--bot-references`, `--companion-references`,
-`--missile-defense-references`, `--ability-route-references`, `--tick-references`
-or `--death-references` / `--snapshot-event-references` with the source path for focused authority-oracle
-publication. Each seals its
-producer, rechecks all published original input
-hashes and rejects a changed destination without replacing unrelated sections.
-
-For the isolated procedural-envelope source comparison:
-
-```powershell
-node tools/import_source.mjs C:/path/to/steel_vs_swarm --audio-music-gain
-godot --headless --path . res://tests/audio_music_envelope.tscn
-```
-
-The focused importer accepts `--playwright-module C:/path/to/playwright/index.mjs`
-and `--chrome C:/path/to/chrome.exe` when the source development browser helper
-is unavailable. It verifies the existing audio-source provenance before atomic
-publication and rejects source or destination changes during capture. The scene
-checks only the envelope; playback, resampling and audible integration require
-the Sol consumer's acceptance.
 
 Select relevant existing case switches in `tools/test_network.ps1` one per run
 for membership/loading/roster, observers, recovery/rematch/restart/fatal, balance,

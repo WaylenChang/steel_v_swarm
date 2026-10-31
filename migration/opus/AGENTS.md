@@ -7,10 +7,10 @@ semantics, coupled state machines, numeric/shader fidelity and failure-sensitive
 integration. This workstream owns the shared integration surfaces; it does not
 gain permission to edit another workstream's implementation files.
 
-Read this file, then [MIGRATION.md](MIGRATION.md), then the selected source
-producer, native consumers and fixtures. Pull only an explicitly relevant
-handoff from another workstream; do not load every sibling backlog. Commands run
-from the repository root.
+Read this file, then [MIGRATION.md](MIGRATION.md), select one execution lane, then
+read the selected source producer, native consumers and fixtures. Pull only an
+explicitly relevant handoff from another workstream; do not load every sibling
+backlog. Commands run from the repository root.
 
 ## Authority contract
 

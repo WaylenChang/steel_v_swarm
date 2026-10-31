@@ -12,6 +12,7 @@ a complete match, seasonal world set, transport lifecycle or platform delivery.
 | 1 — Gemini Flash | Bounded UI, settings panels and authored HUD composition | [AGENTS](migration/flash/AGENTS.md) | [Backlog](migration/flash/MIGRATION.md) |
 | 2 — ChatGPT Sol 6.1 | World/resource pipelines, audio, input and combat presentation integration | [AGENTS](migration/sol/AGENTS.md) | [Backlog](migration/sol/MIGRATION.md) |
 | 2 — ChatGPT Terra 6.1 | View/scope, minimap, PiP and campaign presentation with explicit fixtures | [AGENTS](migration/terra/AGENTS.md) | [Backlog](migration/terra/MIGRATION.md) |
+| 2 — Claude Sonnet 5.5 | Bounded leased fixes and reruns that unblock Opus | [AGENTS](migration/sonnet/AGENTS.md) | [Backlog](migration/sonnet/MIGRATION.md) |
 | 3 — Claude Opus | Authority, shared lifecycle, difficult source semantics and final acceptance | [AGENTS](migration/opus/AGENTS.md) | [Backlog](migration/opus/MIGRATION.md) |
 | Separate — Models | Mechs, gameplay NPCs, combat buildings, rigs and model damage | [AGENTS](migration/models/AGENTS.md) | [Backlog](migration/models/MIGRATION.md) |
 
@@ -31,8 +32,9 @@ its files or loading the stronger model's other workstream instructions.
    `scripts/simulation.gd`, `scripts/session.gd`, `scripts/unit.gd`,
    `scripts/content.gd`, `scenes/main.tscn`, `project.godot`, export presets,
    `.github/`, `tests/run.gd`, `tests/run.tscn`, `tests/validation.json`,
-   `tools/import_source.mjs`, `tools/test_network.ps1` and
-   `tools/export_web.ps1`. Shared fixture/manifest publication is serialized here.
+   `tools/import_source.mjs`, `tools/world_references.mjs`,
+   `tools/test_network.ps1` and `tools/export_web.ps1`. Shared fixture/manifest
+   publication is serialized here.
 2. **Models owns actor geometry and posing:** `scripts/body_*.gd`,
    `scripts/cockpit_*.gd`, `scripts/authority_body_pose.gd`,
    `scripts/authority_weapon_pose.gd`, `scripts/source_quaternion.gd`,
@@ -94,6 +96,27 @@ The target owner pulls that request only when integrating that contract. New
 ownership exceptions must be settled before concurrent edits begin; ordinary
 progress never rewrites this router. Concurrent runs of publishers that overwrite
 the same generated output are also prohibited, even if their source edits differ.
+
+## Claude Sonnet leases
+
+A lease beats rules 1-7 while its ID remains in `migration/sonnet/MIGRATION.md`.
+Before editing a listed file, search that backlog for the ID; do not load it whole.
+Deleting the task returns the file to its rule owner without editing this router.
+Leases are disjoint, so tasks with different IDs never edit the same file.
+
+| Task | Exclusive files | Rule owner |
+| --- | --- | --- |
+| SN1 | `scripts/multimesh_copy.gd`, `scripts/{scenery,climb,aquatic,wildlife,petal}_presentation.gd`, `scripts/view_occlusion.gd` | Sol, Models; helper returns to Opus |
+| SN2 | `scripts/control_preferences.gd`, `scripts/audio_preferences.gd`, `scripts/skill_field_presentation.gd` | Sol |
+| SN3 | `tests/{body,burst,camera,cockpit,death,footprint,mobile,projectile_visual,tps,view}_network.gd` | Their production owners |
+| SN4 | `tests/body_suite.gd`, `tests/civilian_body_suite.gd`, `tests/burst_suite.gd`, `scripts/civilian_body_builder.gd` | Models |
+| SN5 | `tools/import_cockpits.gd`/`.tscn`, `assets/companions/` | Models |
+| SN6 | `scripts/combat_effects.gd` | Sol |
+| SN7 | `tools/fixture_json.mjs`, `tests/{aquatic_render,death_render,minimap_fog_render,splat_render}.gd`, `tests/campaign_suite.gd`, `tests/death_sequence_suite.gd`, `tests/raster_compare.gd` | Opus, Sol, Terra |
+| SN8 | `tools/source_world_meshes.gd`, `tools/import_worlds.gd`/`.tscn`, `scripts/world.gd`, `scripts/room_world_resources.gd`, the selected bundles' `data/worlds/` and `assets/worlds/` outputs | Sol |
+
+SN9 edits no production file. Opus accepts contracts in its own lanes; a Sonnet
+task never edits an Opus-owned file outside this table.
 
 ## Sol/Terra concurrency contract
 

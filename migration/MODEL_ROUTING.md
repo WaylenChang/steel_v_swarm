@@ -10,6 +10,7 @@ prompts. It explains the current routing decision; it is not a status ledger.
 | Flash | Small edit surface, explicit source/UI contract, deterministic acceptance | Gemini Flash | Missing producer semantics, new protocol, shared numeric/shader algorithm |
 | Sol | World/resource pipelines, audio, input and combat presentation integration | ChatGPT Sol 6.1 | Cross-owner authority/lifecycle change or unresolved high-risk source semantics |
 | Terra | Fixture-backed view/scope, minimap, PiP and campaign consumer changes | ChatGPT Terra 6.1 | Unresolved source/shader semantics or producer API change; use a stronger model in the same lane |
+| Sonnet | Leased fixes with named files, explicit contracts and runnable acceptance | Claude Sonnet 5.5 at `medium` | Use `high` for longer tasks; send ambiguous semantics, authority, privacy or lifecycle changes to Opus |
 | Opus | Coupled authority state, privacy/race/order analysis, exact shader/audio semantics | Claude Opus | Resolve from original source and independent evidence; unavailable if semantics remain absent |
 | Models | Geometry, actor rigs, transforms, materials and model lifecycle | Choose per task | Use stronger reasoning for pose composition/aliasing; use a source/render workflow for visual fidelity |
 
@@ -54,6 +55,45 @@ Root first-match file ownership, dedicated output ownership and frozen producer
 contracts make the two lanes independently editable. Shared registries and
 fixed-output publication remain serialized. This is repository routing, not an
 OpenAI-endorsed Godot classification or evidence of full game parity.
+
+## Claude Sonnet/Opus evidence and routing decision
+
+Checked on 2026-10-31 (Asia/Taipei). Anthropic assigns complex agentic coding and
+large-scale refactoring to Opus 5.5, and everyday coding and agent work to Sonnet
+5.5. Sonnet lists at half of Opus's token price.
+[Official model selection](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model),
+[models overview](https://platform.claude.com/docs/en/about-claude/models/overview).
+Its launch page places Sonnet at well-scoped tasks and bug fixing and keeps Opus
+ahead on complex, open-ended work. At `max`, Sonnet more often started a
+multi-subagent review skill; two examined cases timed out or edited out of scope.
+[Sonnet 5.5 launch](https://www.anthropic.com/claude-sonnet-5-5).
+The effort guide starts Sonnet at `medium` for well-specified agentic coding,
+moves to `high` for harder or longer tasks and reserves `xhigh`/`max` for measured
+gains. [Official effort guide](https://platform.claude.com/docs/en/build-with-claude/effort).
+
+Anthropic's multi-model measurements found delegation saved money for routine work
+with a long cost tail or work larger than one context window. One dependent chain
+did better on one model at lower effort. Its only Sonnet-with-Opus-advisor result,
+on a non-coding benchmark, was within noise at 25% more cost.
+[Official cost and intelligence guide](https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence).
+Secondary reporting says Sonnet used more output tokens and cost more per task than
+Opus at max effort, and found 6 of 13 known issues against Opus's 8 of 13 in a small
+code-review set. [Codersera summary](https://codersera.com/blog/claude-sonnet-5-5-vs-opus-5-5-2026/).
+
+Community evidence is thin and conflicting. Reddit could not be retrieved, so this
+sample is Hacker News comments from 2026-10-21 through 2026-10-26, not a survey:
+
+- One developer reports Sonnet as cheaper per task and faster for personal work.
+  [Sonnet report](https://news.ycombinator.com/item?id=50243939).
+- Another reports Opus as more token-efficient and cheaper per run on a
+  reverse-engineering benchmark. [Opus report](https://news.ycombinator.com/item?id=50220395).
+- A third reports Sonnet implementation exhausting a team limit about two hours
+  into a session. [Usage report](https://news.ycombinator.com/item?id=50178757).
+
+Project inference: price per token alone does not justify Sonnet. Use it where a
+narrow contract limits exploration and retries; keep open-ended authority work on
+Opus. Run independent leased sessions rather than an Opus orchestrator or advisor.
+Compare completed, accepted tasks and retries before widening Sonnet's scope.
 
 ## Developer commentary considered
 
@@ -117,5 +157,10 @@ Codex's initial discovery follows the project-root-to-working-directory chain.
 Sibling workstream instructions under `migration/` are therefore explicitly
 selected documents when starting at the repository root. Other clients need
 their own equivalent loading configuration; there is no assumption that Gemini
-or Claude automatically honors every nested `AGENTS.md`.
+automatically honors every nested `AGENTS.md`.
 [Official AGENTS.md discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+
+Claude Code reads `AGENTS.md` directly only from v2.1.277, and a root `CLAUDE.md`
+takes precedence over it. The installed CLI is 2.1.208, so root `CLAUDE.md` imports
+`AGENTS.md`. Imports load in every session, so workstream files stay explicit reads.
+[Official Claude memory guide](https://code.claude.com/docs/en/memory).

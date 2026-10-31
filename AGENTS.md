@@ -36,6 +36,7 @@
 | Bounded UI and settings | [Flash](migration/flash/AGENTS.md) | Gemini Flash |
 | World/resources, audio, input and combat presentation | [Sol](migration/sol/AGENTS.md) | ChatGPT Sol 6.1 |
 | View/scope, minimap, PiP and campaign presentation | [Terra](migration/terra/AGENTS.md) | ChatGPT Terra 6.1 |
+| Leased fixes and reruns that unblock Opus | [Sonnet](migration/sonnet/AGENTS.md) | Claude Sonnet 5.5 |
 | Authority, integration and difficult source semantics | [Opus](migration/opus/AGENTS.md) | Claude Opus |
 | Mechs, gameplay NPCs and combat-building models | [Models](migration/models/AGENTS.md) | Task-dependent; outside the difficulty tiers |
 

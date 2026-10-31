@@ -68,9 +68,12 @@ func render(gain: float, rate: int) -> Dictionary:
 	var bytes := PackedByteArray()
 	bytes.resize(output.size() * 2)
 	for frame in range(output.size()):
-		bytes.encode_s16(frame * 2, clampi(floori(output[frame] / normalization * 32768.0 + .5), -32767, 32767))
+		bytes.encode_s16(frame * 2, quantize_pcm16(output[frame], normalization))
 	var stream := AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = rate
 	stream.data = bytes
 	return {"stream": stream, "gain": normalization, "route": route, "effects": effects}
+
+static func quantize_pcm16(value: float, normalization: float) -> int:
+	return clampi(floori(value / normalization * 32768.0 + .5), -32767, 32767)

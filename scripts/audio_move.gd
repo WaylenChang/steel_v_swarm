@@ -60,7 +60,8 @@ func set_move(category: String, gain: float, pan: float = 0, rate: float = 1, we
 	if voice == null or voice.activated:
 		return
 	if not thread.is_started():
-		var error := thread.start(worker.run)
+		# The native mixer consumes this feeder's output on a fixed device deadline.
+		var error := thread.start(worker.run, Thread.PRIORITY_HIGH)
 		if error != OK:
 			voice.mixer.stop()
 			voices.erase(category)

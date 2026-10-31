@@ -2,6 +2,7 @@ class_name AudioVoice
 extends Node
 
 const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
+const SampleStream = preload("res://scripts/audio_sample_stream.gd")
 
 var buses: AudioBuses
 var players: Array[AudioStreamPlayer] = []
@@ -28,10 +29,20 @@ func start(clip: NativeAudioClip, routing: AudioBuses, gain: float, pan: float, 
 			return ERR_UNCONFIGURED
 		routes.append(bus)
 		var normalization := clip.panned_gains[index] if not clip.panned_gains.is_empty() else 1.0
-		if not _player(clip.panned[index], bus, gain * float(matrix[index].gain) * normalization, rate):
+		var prepared := SampleStream.prepare(clip.panned[index], rate) if clip.source.get("layer") == "sample" \
+			else {"stream": clip.panned[index], "gain": 1.0, "rate": rate}
+		if prepared.is_empty():
+			dispose()
+			return ERR_UNAVAILABLE
+		if not _player(prepared.stream, bus, gain * float(matrix[index].gain) * normalization * float(prepared.gain), float(prepared.rate)):
 			return ERR_UNCONFIGURED
 	if clip.centered != null:
-		if not _player(clip.centered, buses.sfx, gain * clip.centered_gain, rate):
+		var prepared := SampleStream.prepare(clip.centered, rate) if clip.source.get("layer") == "sample" \
+			else {"stream": clip.centered, "gain": 1.0, "rate": rate}
+		if prepared.is_empty():
+			dispose()
+			return ERR_UNAVAILABLE
+		if not _player(prepared.stream, buses.sfx, gain * clip.centered_gain * float(prepared.gain), float(prepared.rate)):
 			return ERR_UNCONFIGURED
 	return OK if _play() else ERR_UNCONFIGURED
 

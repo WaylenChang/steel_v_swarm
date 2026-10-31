@@ -96,6 +96,11 @@ func render(frequencies: PackedFloat32Array, rate_modes: PackedByteArray = Packe
 	var mask := table_size - 1
 	var lanes := Vector4.ZERO
 	var quantum_origin := position
+	var selected_frequency := NAN
+	var high := PackedFloat32Array()
+	var low := PackedFloat32Array()
+	var blend := 0.0
+	var weights := PackedFloat64Array()
 	for group in range(0, frequencies.size(), 4):
 		var increments := Vector4(frequencies[group] * rate_scale, frequencies[group + 1] * rate_scale, frequencies[group + 2] * rate_scale, frequencies[group + 3] * rate_scale)
 		var constant := not rate_modes.is_empty() and rate_modes[group / 128] == 0
@@ -109,15 +114,18 @@ func render(frequencies: PackedFloat32Array, rate_modes: PackedByteArray = Packe
 			var increment: float = increments[offset]
 			var read_position: float = lanes[offset] if constant and increment >= TWO_POINT else position
 			var fundamental := Vector2(inverse_scale * increment, 0).x if not constant else frequencies[group + offset]
-			var ratio := Vector2(fundamental / lowest, 0).x
-			var cents := Vector2(Vector2(log(ratio) / LOG_TWO, 0).x * 1200, 0).x
-			var pitch := clampf(Vector2(1.0 + Vector2(cents / 400.0, 0).x, 0).x, 0, tables.size() - 1)
-			var higher := int(pitch)
-			var lower := mini(higher + 1, tables.size() - 1)
-			var blend := Vector2(pitch - higher, 0).x
+			# Reuse only exact physical frequency words; automation keeps every change.
+			if fundamental != selected_frequency:
+				selected_frequency = fundamental
+				var ratio := Vector2(fundamental / lowest, 0).x
+				var cents := Vector2(Vector2(log(ratio) / LOG_TWO, 0).x * 1200, 0).x
+				var pitch := clampf(Vector2(1.0 + Vector2(cents / 400.0, 0).x, 0).x, 0, tables.size() - 1)
+				var higher := int(pitch)
+				var lower := mini(higher + 1, tables.size() - 1)
+				blend = Vector2(pitch - higher, 0).x
+				high = tables[higher]
+				low = tables[lower]
 			var index := int(read_position)
-			var high := tables[higher]
-			var low := tables[lower]
 			var high_value := 0.0
 			var low_value := 0.0
 			if linear:
@@ -130,15 +138,23 @@ func render(frequencies: PackedFloat32Array, rate_modes: PackedByteArray = Packe
 			else:
 				var t := read_position - index
 				var t2 := t * t
-				var weights := PackedFloat64Array()
 				if increment >= TWO_POINT:
+					weights.resize(0)
 					var fraction := Vector2(read_position, 0).x - index
 					high_value = (1.0 - fraction) * high[index] + fraction * high[(index + 1) & mask]
 					low_value = (1.0 - fraction) * low[index] + fraction * low[(index + 1) & mask]
 				elif increment >= THREE_POINT:
-					weights = PackedFloat64Array([.5 * t * (t - 1), 1 - t2, .5 * t * (t + 1)])
+					weights.resize(3)
+					weights[0] = .5 * t * (t - 1)
+					weights[1] = 1 - t2
+					weights[2] = .5 * t * (t + 1)
 				else:
-					weights = PackedFloat64Array([t * (t2 - 1) * (t - 2) / 24, -t * (t - 1) * (t2 - 4) / 6, (t2 - 1) * (t2 - 4) / 4, -t * (t + 1) * (t2 - 4) / 6, t * (t2 - 1) * (t + 2) / 24])
+					weights.resize(5)
+					weights[0] = t * (t2 - 1) * (t - 2) / 24
+					weights[1] = -t * (t - 1) * (t2 - 4) / 6
+					weights[2] = (t2 - 1) * (t2 - 4) / 4
+					weights[3] = -t * (t + 1) * (t2 - 4) / 6
+					weights[4] = t * (t2 - 1) * (t + 2) / 24
 				for point in range(weights.size()):
 					var sample_index := (index + point - (weights.size() >> 1)) & mask
 					high_value += weights[point] * high[sample_index]

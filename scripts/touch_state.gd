@@ -11,9 +11,10 @@ const HOLD := ["fire", "aim", "jump", "dive", "lock"]
 var rules: Dictionary
 var sensitivity := 1.0
 var blocked := false
-var axis := Vector2.ZERO
-var move_stick := {"id": NONE, "vector": Vector2.ZERO, "centre": Vector2.ZERO, "radius": 1.0}
-var look_stick := {"id": NONE, "vector": Vector2.ZERO, "centre": Vector2.ZERO, "radius": 1.0}
+# Native axes are (right, -forward), including the source's zero forward value.
+var axis := Vector2(0.0, -0.0)
+var move_stick := {"id": NONE, "vector": Vector2.ZERO, "centre": Vector2.ZERO, "radius": 1.0, "x": 0.0, "y": 0.0, "mag": 0.0}
+var look_stick := {"id": NONE, "vector": Vector2.ZERO, "centre": Vector2.ZERO, "radius": 1.0, "x": 0.0, "y": 0.0, "mag": 0.0}
 var look_id := NONE
 var look_position := Vector2.ZERO
 var down_position := Vector2.ZERO
@@ -30,13 +31,21 @@ func _init(metadata: Dictionary) -> void:
 	rules = metadata
 
 static func stick_vector(point: Vector2, centre: Vector2, radius: float, dead: float) -> Vector2:
-	var offset := point - centre
-	var length := offset.length()
+	var values := _stick_values(point, centre, radius, dead)
+	return Vector2(values[0], values[1])
+
+static func _stick_values(point: Vector2, centre: Vector2, radius: float, dead: float) -> PackedFloat64Array:
+	var dx := float(point.x) - float(centre.x)
+	var dy := float(point.y) - float(centre.y)
+	var length := CarrierRules.hypot2(dx, dy)
 	var magnitude := minf(1, length / radius)
 	magnitude = 0.0 if magnitude < dead else (magnitude - dead) / (1 - dead)
 	if magnitude <= 0 or length < 0.001:
-		return Vector2.ZERO
-	return Vector2(offset.x, -offset.y) / length * magnitude
+		return PackedFloat64Array([0.0, 0.0, 0.0])
+	return PackedFloat64Array([dx / length * magnitude, -dy / length * magnitude, magnitude])
+
+static func _pointer_distance(first: Vector2, second: Vector2) -> float:
+	return CarrierRules.hypot2(float(first.x) - float(second.x), float(first.y) - float(second.y))
 
 func owns(id: int) -> bool:
 	return id == look_id or id == move_stick.id or id == look_stick.id or held.has(id) or taps.has(id)
@@ -51,16 +60,20 @@ func stick_down(movement: bool, id: int, point: Vector2, centre: Vector2, radius
 	_move_stick(stick, point, movement)
 
 func _move_stick(stick: Dictionary, point: Vector2, movement: bool) -> void:
-	stick.vector = stick_vector(point, stick.centre, stick.radius, rules.STICK_DEAD)
+	var values := _stick_values(point, stick.centre, stick.radius, rules.STICK_DEAD)
+	stick.x = values[0]
+	stick.y = values[1]
+	stick.mag = values[2]
+	stick.vector = Vector2(stick.x, stick.y)
 	if movement:
 		axis = Vector2(stick.vector.x, -stick.vector.y)
-		command.emit("sprint", stick.vector.length() >= rules.SPRINT_MAG)
+		command.emit("sprint", stick.mag >= rules.SPRINT_MAG)
 
 func look_down(id: int, point: Vector2, now: float) -> void:
 	if blocked or look_id != NONE or owns(id):
 		return
 	look_id = id
-	fire_arm = tap_at > 0 and now - tap_at <= rules.TAP_GAP_MS and point.distance_to(tap_position) <= rules.TAP_SLOP_PX
+	fire_arm = tap_at > 0 and now - tap_at <= rules.TAP_GAP_MS and _pointer_distance(point, tap_position) <= rules.TAP_SLOP_PX
 	tap_at = 0
 	down_at = now
 	down_position = point
@@ -82,14 +95,16 @@ func button_down(action: String, id: int, point: Vector2, now: float) -> void:
 func move(id: int, point: Vector2) -> void:
 	var token := revision
 	if id == look_id:
-		var change := point - look_position
+		var dx := float(point.x) - float(look_position.x)
+		var dy := float(point.y) - float(look_position.y)
 		look_position = point
 		if not blocked:
-			if fire_arm and not look_fire and point.distance_to(down_position) >= rules.TAP_FIRE_PX:
+			if fire_arm and not look_fire and _pointer_distance(point, down_position) >= rules.TAP_FIRE_PX:
 				_set_look_fire(true)
 				if token != revision:
 					return
-			look.emit(-change * float(rules.TOUCH_RAD_PX) * sensitivity)
+			var scale := float(rules.TOUCH_RAD_PX) * sensitivity
+			look.emit(Vector2(-dx * scale, -dy * scale))
 			if token != revision:
 				return
 	for movement: bool in [true, false]:
@@ -98,14 +113,14 @@ func move(id: int, point: Vector2) -> void:
 			_move_stick(stick, point, movement)
 			if token != revision:
 				return
-	if taps.has(id) and point.distance_to(taps[id].position) > rules.TAP_SLOP_PX:
+	if taps.has(id) and _pointer_distance(point, taps[id].position) > rules.TAP_SLOP_PX:
 		taps.erase(id)
 
 func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
 	var token := revision
 	if id == look_id:
 		look_id = NONE
-		var tap: bool = not look_fire and now - down_at <= rules.TAP_MS and point.distance_to(down_position) <= rules.TAP_SLOP_PX
+		var tap: bool = not look_fire and now - down_at <= rules.TAP_MS and _pointer_distance(point, down_position) <= rules.TAP_SLOP_PX
 		# The original look-pad cancellation uses its normal release handler.
 		tap_at = now if tap and not fire_arm else 0.0
 		tap_position = down_position
@@ -118,15 +133,18 @@ func up(id: int, point: Vector2, now: float, cancelled: bool = false) -> void:
 		if id == stick.id:
 			stick.id = NONE
 			stick.vector = Vector2.ZERO
+			stick.x = 0.0
+			stick.y = 0.0
+			stick.mag = 0.0
 			if movement:
-				axis = Vector2.ZERO
+				axis = Vector2(0.0, -0.0)
 				command.emit("sprint", false)
 				if token != revision:
 					return
 	if taps.has(id):
 		var tap: Dictionary = taps[id]
 		taps.erase(id)
-		if not cancelled and not blocked and now - float(tap.at) <= rules.TAP_MS and point.distance_to(tap.position) <= rules.TAP_SLOP_PX:
+		if not cancelled and not blocked and now - float(tap.at) <= rules.TAP_MS and _pointer_distance(point, tap.position) <= rules.TAP_SLOP_PX:
 			command.emit(tap.action, true)
 			if token != revision:
 				return
@@ -149,11 +167,10 @@ func tick(delta: float, now: float) -> void:
 	for id: int in taps.keys():
 		if now - float(taps[id].at) > rules.TAP_MS:
 			taps.erase(id)
-	var vector: Vector2 = look_stick.vector
-	var magnitude := vector.length()
+	var magnitude := float(look_stick.mag)
 	if not blocked and magnitude > 0:
 		var speed: float = rules.LOOK_RAD_S * sensitivity * pow(magnitude, rules.LOOK_CURVE) * delta
-		look.emit(Vector2(-vector.x, vector.y) / magnitude * speed)
+		look.emit(Vector2(-(float(look_stick.x) / magnitude) * speed, float(look_stick.y) / magnitude * speed))
 
 func _set_look_fire(on: bool) -> void:
 	if look_fire == on or on and blocked:
@@ -178,7 +195,7 @@ func reset() -> void:
 	var actions := held.values()
 	var release_look := look_fire and not "fire" in actions
 	# Seal old ownership before release callbacks can reset or admit new pointers.
-	axis = Vector2.ZERO
+	axis = Vector2(0.0, -0.0)
 	look_id = NONE
 	look_fire = false
 	fire_arm = false
@@ -186,6 +203,9 @@ func reset() -> void:
 	for stick: Dictionary in [move_stick, look_stick]:
 		stick.id = NONE
 		stick.vector = Vector2.ZERO
+		stick.x = 0.0
+		stick.y = 0.0
+		stick.mag = 0.0
 	held.clear()
 	taps.clear()
 	if release_look:

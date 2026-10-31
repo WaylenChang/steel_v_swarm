@@ -157,7 +157,9 @@ func pump() -> bool:
 	for input: Dictionary in inputs:
 		if input.has("playback") and input.playback.get_skips() > 0:
 			return _fault("oscillator_underrun", ERR_BUSY)
-	var count := output.get_frames_available()
+	# Commit one native refill before servicing the next admitted voice. Draining
+	# a delayed capture in one call can exhaust another voice's unchanged reserve.
+	var count := mini(output.get_frames_available(), AudioGeneratorFeed.REFILL_FRAMES)
 	var captured: Array[PackedVector2Array] = []
 	var raw: Array[PackedVector2Array] = []
 	var discarded := false

@@ -48,16 +48,19 @@ func movement(entities: Array, camera: Transform3D, own_weights: Variant, ground
 		if category.is_empty() or self_source and category not in ["stomp", "engine"]:
 			continue
 		var position := _position(entity)
-		var delta := position - camera.origin
-		var distance := 0.0 if self_source else delta.length()
+		var dx := float(position.x) - float(camera.origin.x)
+		var dz := float(position.z) - float(camera.origin.z)
+		var dy := float(position.y) - float(camera.origin.y)
+		# The source uses this double sum, not a Float32 vector length or hypot3.
+		var distance := 0.0 if self_source else sqrt(dx * dx + dz * dz + dy * dy)
 		if distance > float(rules.maxDistance):
 			continue
 		counts[category] += 1
 		if best[category] == null or distance < float(best[category].distance):
 			var motion: Variant = entity.get("loco")
 			var weights: Variant = own_weights if self_source else motion.get("w") if motion is Dictionary else null
-			best[category] = {"distance": distance, "dx": 0.0 if self_source else delta.x, "dz": 0.0 if self_source else delta.z,
-				"weights": weights, "self": self_source, "position": position}
+			best[category] = {"distance": distance, "dx": 0.0 if self_source else dx, "dz": 0.0 if self_source else dz,
+				"weights": weights, "self": self_source, "x": float(position.x), "z": float(position.z)}
 	var result: Array[Dictionary] = []
 	for category: String in rules.categories:
 		var selected: Variant = best[category]
@@ -71,7 +74,7 @@ func movement(entities: Array, camera: Transform3D, own_weights: Variant, ground
 		var density := clampf(float(rules.densityBase) + float(counts[category]) * float(rules.densityStep), rules.densityBase, 1)
 		var floor_gain: float = rules.groundFloor if category in ["stomp", "engine"] else rules.airFloor
 		var gain := clampf(distance * density * (floor_gain + (1 - floor_gain) * moving), 0, 1)
-		var horizontal := Vector2(selected.dx, selected.dz).length()
+		var horizontal := CarrierRules.hypot2(float(selected.dx), float(selected.dz))
 		if horizontal == 0:
 			horizontal = 1
 		var pan := clampf((camera.basis.x.x * float(selected.dx) + camera.basis.x.z * float(selected.dz)) / horizontal, -1, 1)
@@ -80,7 +83,7 @@ func movement(entities: Array, camera: Transform3D, own_weights: Variant, ground
 			if not selected.self and not ground_query.is_valid():
 				push_error("Movement audio requires the existing terrain environment query")
 				return []
-			var ground := own_ground if selected.self else int(ground_query.call(selected.position.x, selected.position.z))
+			var ground := own_ground if selected.self else int(ground_query.call(selected.x, selected.z))
 			wet = 1.0 if ground == 1 else 0.0
 		result.append({"category": category, "gain": gain, "pan": pan,
 			"rate": clampf(float(rules.rateBase) + running * float(rules.rateSlope), rules.rateMinimum, rules.rateMaximum), "wet": wet})
@@ -89,16 +92,18 @@ func movement(entities: Array, camera: Transform3D, own_weights: Variant, ground
 func density(query: SourceBlockerQuery, point: Vector2) -> Dictionary:
 	if query == null:
 		return {"bld": 0.0, "tree": 0.0}
-	var local := point / float(rules.cell) - Vector2(.5, .5)
-	var first := Vector2i(floori(local.x), floori(local.y))
-	var offset := local - Vector2(first)
+	var local_x := float(point.x) / float(rules.cell) - .5
+	var local_z := float(point.y) / float(rules.cell) - .5
+	var first := Vector2i(floori(local_x), floori(local_z))
+	var fx := local_x - first.x
+	var fz := local_z - first.y
 	var c00 := _cell(query, first)
 	var c10 := _cell(query, first + Vector2i.RIGHT)
 	var c01 := _cell(query, first + Vector2i.DOWN)
 	var c11 := _cell(query, first + Vector2i.ONE)
 	var result := {}
 	for key: String in ["bld", "tree"]:
-		result[key] = (float(c00[key]) * (1 - offset.x) + float(c10[key]) * offset.x) * (1 - offset.y) + (float(c01[key]) * (1 - offset.x) + float(c11[key]) * offset.x) * offset.y
+		result[key] = (float(c00[key]) * (1 - fx) + float(c10[key]) * fx) * (1 - fz) + (float(c01[key]) * (1 - fx) + float(c11[key]) * fx) * fz
 	return result
 
 func _cell(query: SourceBlockerQuery, key: Vector2i) -> Dictionary:
@@ -122,10 +127,11 @@ func place(position: Vector2, ground: int, tunnel: bool, densities: Dictionary, 
 		if not ControlPreferences.truthy(entity.get("isStatic")) or ControlPreferences.truthy(entity.get("dead")):
 			continue
 		var location := _position(entity)
-		camp = minf(camp, position.distance_to(Vector2(location.x, location.z)))
+		var distance := CarrierRules.hypot2(float(location.x) - float(position.x), float(location.z) - float(position.y))
+		if distance < camp:
+			camp = distance
 	return {"tunnel": 0 if tunnel else 1, "water": 0 if ground == 1 else 1, "swamp": 0 if ground == 2 else 1,
 		"camp": camp, "urban": 1 - float(densities.bld), "forest": 1 - float(densities.tree)}
 
-static func _position(entity: Dictionary) -> Vector3:
-	var position: Dictionary = entity.mesh.position
-	return Vector3(position.x, position.y, position.z)
+static func _position(entity: Dictionary) -> Dictionary:
+	return entity.mesh.position

@@ -357,6 +357,10 @@ semantics have separate Opus ownership; actor model construction is Models-owned
   probes isolate property-boundary cancellation; these checks do not qualify
   original sky/cloud/fog/precipitation pixels, particle trajectories, authored
   lightning geometry or complete seasonal/transport acceptance.
+  Full `weatherFx.js` particle/rain-impact/lightning constructors execute the
+  original `mulberry32`; they remain gated by the shared RNG provenance request
+  below. Profile-only captures cannot replace that constructor dependency or
+  qualify the current native GPU emitters as original particle trajectories.
   Fire flicker/drift uses the same local wall clock as loot, independently of
   incoming authority times and render deltas. Retain authored origin/scale doubles
   until final native Float32 writes; extinguished nodes keep their prior pose.
@@ -446,6 +450,50 @@ The wrapper runs capture, source references and native packing sequentially.
   frames, normalization, mono/stereo routing, PCM/synthesis resources, retained
   BGM position/fallback, first gesture and independent sample RNG. Verify original
   sample rate/resampling, source codec failure and complete native audible output.
+  `node tools/capture_audio_sample_waveforms.mjs <rate>` captures all seven
+  original OGG takes through `_loadSamples`/`decodeAudioData` and `_playSample`.
+  Bind original module/asset bytes, producer fingerprints and the matching SFX
+  context's exact bytes, Chromium version and flags. Retain normal, missing,
+  decode-failure and low-power loader programs; the BGM callback is a declared
+  transport probe, not music playback. Keep complete decoded Float32 channels
+  and all three jitter draws at each of three pans, at gain .35, in
+  `data/audio_sample_waveforms/`.
+  `tests/audio_sample_waveforms.test.mjs` authenticates this corpus and requires
+  exact original linear interpolation, last-frame extrapolation, Float32 gain
+  and EOF silence for both channels of every centered probe. Source reservation
+  uses the original double jitter, independently of the Float32 AudioParam rate.
+  `tests/audio_sample_mix_render.tscn` compares the complete 48,000 Hz corpus
+  through WASAPI with an independent PCM timing tracer, never target-signal
+  alignment. Its bounds contain measured input PCM conversion, interpolation's
+  L1 gain, an additional private-output half PCM quantum and Float32 mixer error.
+  Keep imported PCM, clip identity and logical duration immutable. Imported
+  sample voices use `scripts/audio_sample_stream.gd` to prepare a private native
+  WAV with source linear interpolation at unity native pitch; generic loop and
+  synthesis callers keep their separate playback contracts. The private PCM
+  reuses `NativeAudioStem.quantize_pcm16`; do not invent a second rounding rule.
+  Keep the 70-frame silent EOF drain after source audio: Godot 4.7.2's server
+  discards its 64-frame lookahead and the resampler's four history/two startup
+  frames at EOF. Requalify this native contract when changing Godot versions.
+  Reject unsupported sample codecs, loops, stereo stems, incomplete PCM and
+  unrepresentable rates explicitly. Keep the native resource-retirement,
+  manager-budget and panning checks with this waveform capture.
+  **Still required:** remove whole-sample preparation from the input frame and
+  qualify bounded source-timed admission under simultaneous source voice limits,
+  UI stalls and unchanged reservation/RNG budgets. Full waveform agreement after
+  the timing marker does not qualify input-to-audio latency; private conversion
+  of long takes can still occupy tens of milliseconds before native start.
+  The matching-rate corpus does not qualify other device rates, the legacy
+  catalogue's cross-rate decoded samples, physical audible delivery or complete
+  music/noise publication. Keep S7 open until these distinct gates pass.
+  The registered `tests/audio_suite.gd` centered-layer assertion still compares
+  physical WAV volume with logical .35. Retain decoder compensation; the expected
+  physical gain is `native_gain(wave, .35)` from the existing
+  `scripts/audio_pcm_gain.gd` helper. Correct this Sol-owned assertion only with
+  coordinated Opus republication of its consumer fingerprint in
+  `data/fixtures.json`; editing the registered test alone rejects suite loading.
+  Acceptance is the same centered bus and compensated physical gain, without a
+  wider tolerance. The leased preference parser's malformed-ConfigFile engine
+  error remains a separate root-suite acceptance issue.
   `node tools/capture_audio_sfx_rate.mjs <rate>` captures the original SFX
   synthesis at an explicit context rate without executing procedural music,
   movement construction or sample decoding. Keep its complete sound/gain corpus,
@@ -547,6 +595,18 @@ The wrapper runs capture, source references and native packing sequentially.
   timing, filter modulation, tunnel/fluid/terrain queries and low-power ownership.
   Verify fade-out retention, driver suspension, buffer latency, thread shutdown,
   scheduling/performance and threaded Web export with actual mixer output.
+  Keep source admission in scalar doubles: subtract native coordinate components
+  before `sqrt(dx * dx + dz * dz + dy * dy)` in that order. Pan and camp distance
+  reuse `CarrierRules.hypot2`; density interpolation must not round intermediate
+  cell coordinates through native vectors. `node tools/audio_scene_precision_capture.mjs`
+  executes original selection/location methods and the literal 32-character
+  profile table under Node and Chromium without unrelated data-module/RNG startup;
+  `tests/audio_scene_precision.tscn` compares exact Float64 parameters, 200 m
+  admission, near-equal winner order, hero flight thresholds, winning stomp
+  queries, planar panning/camp and cached four-cell interpolation. Keep
+  `tests/audio_scene_precision.test.mjs` and the existing numeric-transfer tests.
+  These character/terrain-query probes do not certify actor constructors, actual
+  terrain admission, mixer delivery or populated frames.
   `node tools/capture_audio_move_waveforms.mjs <rate>` captures the original
   static movement graphs with the exact archived shared noise, including dry,
   blended and wet stomp. `tests/audio_move_waveforms.tscn` compares every frame
@@ -655,11 +715,17 @@ The wrapper runs capture, source references and native packing sequentially.
   optional path in normal resource loading. Keep the archive's
   `rateOscillatorsQualified` false until that integration passes. Never enlarge
   native waveform bounds or enable a runtime catalogue from isolated observations.
-  Source-curve rate stress still lacks repeatable scheduling acceptance: retained
-  rotor/stomp failures each record four output skips, with maximum service gaps
-  of 26,628/20,783 microseconds. Preserve `build/sol-audio-move-wave-stress-underrun.log`
-  and `build/sol-audio-move-wave-stress-retry.log`; an earlier passing run does not
-  discharge these failures. Keep the existing buffering and strict skip checks.
+  Keep the deadline-bound feeder on Godot's native high-priority thread. Commit
+  at most one 128-frame native refill per voice/pass, retaining admission order
+  and draining ready captures before idle polling; a delayed voice must not
+  monopolize service while later voices exhaust their unchanged reserve.
+  Reuse oscillator table selection only for exactly equal physical frequency
+  words and keep interpolation scratch private, preserving mixed two/three/five-
+  point paths and Float64 operation order. The five repeated source-curve stress
+  tapes in `artifacts/sol/audio-move-stress-refill-*.json` cover the existing
+  32 UI stalls/rate changes per run on one WASAPI configuration. They do not
+  qualify sustained CPU contention, other devices/drivers or platform delivery.
+  Keep the existing buffering and strict skip checks.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)
@@ -751,6 +817,18 @@ player's position when pausing/resuming.
   screen-axis sensor data or fabricate an identity pose from missing sensors.
   Physical hardware, hybrid-device/DPI detection and mobile exports remain open;
   synthetic decision fixtures cannot certify them.
+  Keep stick `x`/`y`/`mag` in doubles until the existing UI `Vector2` boundary.
+  Sprint and look integration consume the original radial magnitude, never a
+  length reconstructed from rounded vector components. Pointer subtraction and
+  all tap/drag distances reuse scalar `CarrierRules.hypot2`; drag-look multiplies
+  the original double sensitivity scale before native storage. Preserve source
+  zero-axis signs and clear all scalar stick fields before release callbacks.
+  `node tools/touch_precision_capture.mjs` runs the original constructor and
+  handlers under Node and Chromium; `tests/touch_precision.tscn` retains exact
+  scalar words, native look/axis writes and strict dead-zone/sprint/tap/fire
+  decisions. Keep `tests/touch_precision.test.mjs`, numeric-transfer tests and
+  `tests/touch_reset.tscn` together. DOM/capture/layout transport probes do not
+  certify physical pointer delivery, Flash-owned node lifetime or mobile exports.
   Native gyro owners configure once and retire terminally on tree exit. Stop the
   retained sensor state, disconnect its look/failure and preference subscriptions,
   and reject queued or late commands. Preserve the stopped state for existing
@@ -855,7 +933,7 @@ scenes before integrated acceptance; neither scene certifies populated snapshots
 - [ ] **S19 — Loot/fields/missiles:** certify native airdrop descent/landing,
   loot/relay/threat effects, cube/fog presentation, interpolated missile views,
   smoke/intercept/fracture timing and model-owner triangle queries. Finish
-  source-conforming flood/pothole meshes and relay progress/strike visuals. Preserve
+  source-conforming flood/pothole meshes and relay activation starbursts. Preserve
   silent removal versus genuine impact and source owner/round lifetime gates.
   Water conformance consumes explicit original immediate-child water flags,
   geometry parameters and double positions. Preserve `radiusTop ?? radius ?? 6`,
@@ -1127,6 +1205,15 @@ them. Remove completed items; no dated checkpoints or copied validation history.
   `3de024594ab66b555c6df2e54a2def16c957981acd4bd5c2666aaabc278df245`.
   Refresh those shared producer declarations through the importer; Sol's separate
   manager capture reuses the current recorder without editing this registry.
+- **Opus — selected audio-suite dispatch:** `tests/run.gd::_run_fixture_suite`
+  accepts registered `--fixture-suite=tests/audio_move_suite.gd`, then calls its
+  three-argument `run(h, fixtures, metadata)` with two arguments and still prints
+  `SOURCE_FIXTURE_PASS assertions=0` after the script error. Dispatch the declared
+  audio metadata contract or explicitly reject unsupported selected signatures
+  before execution; a script error must never produce a passing result.
+  Acceptance: selected audio consumers execute their assertions with the same
+  metadata as `tests/audio_lifecycle.tscn`, or fail explicitly with nonzero exit;
+  retain source provenance/dependency checks and empty engine-error requirements.
 - **Opus — shared audio provenance/consumer publication:** refresh
   `data/provenance.json` and the shared fixture consumer manifests through
   `tools/import_source.mjs`. Original `public/js/rng.js` and Sol's
@@ -1143,6 +1230,16 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for local feedback
 
+- **Opus — scalar touch-axis publication:** `scripts/main.gd::_physics_process`
+  and `_advance_spectator` consume only `TouchState.axis`'s rounded native vector;
+  the latter reconstructs magnitude with `motion.length()`, as does
+  `scripts/input_rules.gd::moving` for the 0.02 movement gate. Agree a source
+  scalar `(right, forward, magnitude)` consumer contract using the existing
+  `TouchState.move_stick.x/y/mag`, preserving keyboard precedence, overlay release
+  and the shared simulation command boundary before changing publication.
+  Acceptance: original near-dead-zone, 0.02 movement, sprint and unit-radius
+  states retain source decisions for player and spectator, while unchanged
+  keyboard inputs and cancelled/reset sticks retain their existing behavior.
 - **Opus — snapshot acceptance before feedback:** `scripts/session.gd::_snapshot`
   emits `state_received` even when `scripts/simulation.gd::apply_snapshot`
   rejects an older clock. `scripts/main.gd::_receive_state` then consumes the
@@ -1258,6 +1355,16 @@ them. Remove completed items; no dated checkpoints or copied validation history.
 
 ### Shared-owner contracts required for loot frame integration
 
+- **Opus — relay activation delivery:** `scripts/main.gd` must deliver accepted
+  public relay events to the existing `CombatEffects.spark` consumer, separately
+  from pilot-only supply notices. Original `game.js`'s relay event branch emits
+  one `starburst` at `(ev.x, terrain.heightAt(ev.x, -ev.z) + 9, -ev.z)`, radius 8,
+  with the event side's source color or `0x66ffe0` for an absent side. It does not
+  render snapshot `relay_progress` or a strike/progress ring. Preserve source
+  height-query order, existing oldest-first effect budgets and event replay
+  rejection. Acceptance: allied/enemy/absent-side events and spectator delivery
+  produce one original activation effect per accepted event; stale/duplicate
+  events emit none and ordinary progress snapshots emit no invented visual.
 - **Models/Opus — original water hazard bindings:** preserve original
   `userData.water`, geometry-parameter presence/nullish radius fields and double
   `source_trs.p` for every immediate source child through

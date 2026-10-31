@@ -1,6 +1,8 @@
 extends Node
 
 const Importer = preload("res://tools/audio_move_import.gd")
+const WaveImport = preload("res://tools/audio_move_wave_import.gd")
+const WaveBank = preload("res://scripts/native_audio_move_waves.gd")
 const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
 const PAD := 4096
 var failures: Array[String] = []
@@ -14,6 +16,7 @@ var live := false
 var rates := false
 var source_curves := false
 var isolated: Dictionary = {}
+var wave_bank: WaveBank
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -171,7 +174,7 @@ func _case(fixture: Dictionary, bank: NativeAudioMoveBank) -> void:
 	var gen_route := buses.capture_bus([gen_trace])
 	var voice := AudioMoveVoice.new()
 	add_child(voice)
-	var configured := voice.configure(fixture.category, Content.balance.audio, bank, buses, fixture, 0, isolated.waveTables if source_curves else {})
+	var configured := voice.configure(fixture.category, Content.balance.audio, bank, buses, fixture, 0, wave_bank)
 	if not _check(configured == OK, "Configure original static movement graph"):
 		voice.free()
 		return
@@ -273,6 +276,11 @@ func _run() -> void:
 	if not _check(bank != null, "Build the original device-rate movement bank"):
 		get_tree().quit(1)
 		return
+	if source_curves:
+		wave_bank = WaveImport.build(isolated, bank)
+		if not _check(wave_bank != null, "Authenticate the complete native wave-bank cohort"):
+			get_tree().quit(1)
+			return
 	AudioServer.add_bus()
 	sink = StringName("MoveWaveformSink_%d" % get_instance_id())
 	AudioServer.set_bus_name(AudioServer.bus_count - 1, sink)

@@ -1,6 +1,8 @@
 class_name AudioMove
 extends Node
 
+const WaveBank = preload("res://scripts/native_audio_move_waves.gd")
+
 signal failed(category: String, operation: String, error: Error)
 
 var state := AudioMoveState.new()
@@ -13,18 +15,21 @@ var context_origin := 0.0
 var configured := false
 var worker_ready := false
 var resources := preload("res://scripts/audio_resource_snapshot.gd").new()
-var wave_tables: Dictionary = {}
+var wave_bank: WaveBank
 
-func configure(metadata: Dictionary, routing: AudioBuses, low_power: bool, source_tables: Dictionary = {}) -> Error:
+func configure(metadata: Dictionary, routing: AudioBuses, low_power: bool, source_bank: WaveBank = null) -> Error:
 	if configured or state.disposed or not is_inside_tree() or is_queued_for_deletion():
 		return ERR_UNCONFIGURED
 	if not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
 		return ERR_UNCONFIGURED
 	if not metadata.has("moveGraphs") or not metadata.has("moveTiming"):
 		return ERR_INVALID_DATA
-	if not source_tables.is_empty() and source_tables.get("sampleRate") != AudioServer.get_mix_rate():
-		return ERR_UNAVAILABLE
-	wave_tables = source_tables.duplicate(true)
+	if source_bank != null:
+		if source_bank.sample_rate != AudioServer.get_mix_rate():
+			return ERR_UNAVAILABLE
+		if not source_bank.valid() or source_bank.graphs != metadata.moveGraphs:
+			return ERR_INVALID_DATA
+		wave_bank = source_bank.duplicate(true)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	buses = routing
 	buses.retiring.connect(_retire, CONNECT_ONE_SHOT)
@@ -117,7 +122,7 @@ func _register(category: String) -> void:
 	if not _active():
 		voice.retire()
 		return
-	var error := voice.configure(category, state.metadata, bank, buses, state.voices[category].values, context_origin, wave_tables)
+	var error := voice.configure(category, state.metadata, bank, buses, state.voices[category].values, context_origin, wave_bank)
 	if error != OK:
 		voices.erase(category)
 		voice.free()
@@ -155,6 +160,7 @@ func _retire() -> void:
 		thread.wait_to_finish()
 	for voice: AudioMoveVoice in voices.values():
 		voice.retire()
+	wave_bank = null
 
 func _exit_tree() -> void:
 	_retire()

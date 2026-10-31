@@ -1,5 +1,7 @@
 extends Node
 
+const WaveBank = preload("res://scripts/native_audio_move_waves.gd")
+
 var buses: AudioBuses
 var movement: AudioMove
 var capture: AudioEffectCapture
@@ -7,10 +9,19 @@ var sink: StringName
 var failures: Array[Dictionary] = []
 var results: Dictionary = {}
 var source_curves := false
+var wave_bank: WaveBank
 
 func _ready() -> void:
 	source_curves = OS.get_cmdline_user_args().has("--source-curves")
 	var archive: Dictionary = Content.read_json("res://data/audio_move_oscillators/48000.json") if source_curves else {}
+	var source_movement: NativeAudioMoveBank
+	if source_curves:
+		var data: Dictionary = Content.read_json("res://data/audio_move_rates/48000.json")
+		source_movement = preload("res://tools/audio_move_import.gd").build(data, data.source, data.graphs)
+		wave_bank = preload("res://tools/audio_move_wave_import.gd").build(archive, source_movement)
+		if wave_bank == null:
+			_abort("AUDIO_MOVE_SOURCE_COHORT")
+			return
 	if not Content.balance.get("audio", {}).has("moveGraphs") or preload("res://scripts/audio_resource_snapshot.gd").new().movement() == null:
 		_abort("Regenerate and import original movement audio")
 		return
@@ -30,7 +41,7 @@ func _ready() -> void:
 	AudioServer.add_bus_effect(index, capture)
 	movement = AudioMove.new()
 	add_child(movement)
-	if movement.configure(Content.balance.audio, buses, true, archive.waveTables if source_curves else {}) != OK:
+	if movement.configure(Content.balance.audio, buses, true, wave_bank) != OK:
 		_abort("AUDIO_MOVE_CONFIGURE")
 		return
 	movement.failed.connect(func(category: String, operation: String, error: Error) -> void:
@@ -41,14 +52,7 @@ func _ready() -> void:
 		_abort("AUDIO_MOVE_LOW_POWER_ALLOCATED")
 		return
 	if source_curves:
-		var data: Dictionary = Content.read_json("res://data/audio_move_rates/48000.json")
-		if FileAccess.get_sha256("res://" + str(archive.source.movementProfile.path)) != archive.source.movementProfile.sha256:
-			_abort("AUDIO_MOVE_SOURCE_COHORT")
-			return
-		movement.bank = preload("res://tools/audio_move_import.gd").build(data, data.source, data.graphs)
-		if movement.bank == null:
-			_abort("AUDIO_MOVE_SOURCE_BANK")
-			return
+		movement.bank = source_movement
 	movement.set_low_power(false)
 	for category: String in Content.balance.audio.scene.categories:
 		movement.set_move(category, .8, 0, 1, 0)
@@ -131,7 +135,8 @@ func _ready() -> void:
 			return
 	results = {"before_stall": before, "after_stall": after, "wet": wet, "quiet": quiet, "resumed": resumed,
 		"mean_energy": energy / frames.size(), "stress": stress, "audibleAcceptanceRequired": true}
-	var file := FileAccess.open("res://tests/audio-move-native.json", FileAccess.WRITE)
+	DirAccess.make_dir_recursive_absolute("res://artifacts/sol")
+	var file := FileAccess.open("res://artifacts/sol/audio-move-native%s.json" % ("-source-curves" if source_curves else ""), FileAccess.WRITE)
 	if file == null:
 		_abort("AUDIO_MOVE_CAPTURE_OUTPUT")
 		return

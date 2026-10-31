@@ -643,11 +643,23 @@ The wrapper runs capture, source references and native packing sequentially.
   events in the live output-control corpus. Also run
   `tests/audio_move_render.tscn -- --stress --rate-stress --source-curves` for
   concurrent playback, UI stalls, exact physical LFO phase and route retirement.
-  Finish serialized wave-bank identity/admission, matching-rate catalogue
-  publication, game-frame delivery and device suspension before selecting this
+  `tools/audio_move_wave_import.gd` builds native Float32 wave-bank resources
+  only from the complete current producer/source declarations and exact parent
+  archive bytes. Bind the movement resource's full identity, original graphs,
+  device rate and all three ordered table families; native disk reload must
+  preserve every table word, including signed zero. Optional movement owners
+  retain isolated snapshots and reject another noise/movement cohort before
+  allocating players. Keep `tests/audio_move_wave_import.tscn` with the existing
+  oscillator, DSP and native mixer gates. Matching-rate catalogue publication,
+  game-frame delivery and device suspension remain required before selecting this
   optional path in normal resource loading. Keep the archive's
   `rateOscillatorsQualified` false until that integration passes. Never enlarge
   native waveform bounds or enable a runtime catalogue from isolated observations.
+  Source-curve rate stress still lacks repeatable scheduling acceptance: retained
+  rotor/stomp failures each record four output skips, with maximum service gaps
+  of 26,628/20,783 microseconds. Preserve `build/sol-audio-move-wave-stress-underrun.log`
+  and `build/sol-audio-move-wave-stress-retry.log`; an earlier passing run does not
+  discharge these failures. Keep the existing buffering and strict skip checks.
   Discard each input's native startup history before advancing the common
   source clock. Requalify `AudioGeneratorFeed.input_latency_frames` against
   Godot's [server lookahead](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/audio/audio_server.cpp)

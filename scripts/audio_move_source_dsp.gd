@@ -2,6 +2,7 @@ extends RefCounted
 
 const ParamCurve = preload("res://scripts/audio_param_curve.gd")
 const Oscillator = preload("res://scripts/audio_move_oscillator.gd")
+const WaveBank = preload("res://scripts/native_audio_move_waves.gd")
 
 var output_curves: Dictionary = {}
 var frequencies: Dictionary = {}
@@ -10,9 +11,11 @@ var rate_bases: Dictionary = {}
 var input_node := -1
 var modulation_node := -1
 
-func configure(graph: Dictionary, plan: Dictionary, initial: Dictionary, rate: float, tables: Dictionary) -> Error:
-	if initial.rate != 1 or tables.get("sampleRate") != rate:
+func configure(graph: Dictionary, plan: Dictionary, initial: Dictionary, rate: float, bank: WaveBank) -> Error:
+	if initial.rate != 1 or bank == null or bank.sample_rate != rate:
 		return ERR_UNAVAILABLE
+	if not bank.valid() or not graph in bank.graphs.values():
+		return ERR_INVALID_DATA
 	for key: String in ["gain", "pan"]:
 		output_curves[key] = _curve(float(initial[key]), rate)
 	if graph.has("wet"):
@@ -28,7 +31,7 @@ func configure(graph: Dictionary, plan: Dictionary, initial: Dictionary, rate: f
 			if node.parameters.get("detune", {}).get("initial", 0) != 0:
 				return ERR_UNAVAILABLE
 			var oscillator := Oscillator.new()
-			if oscillator.configure(tables, node.type) != OK:
+			if not bank.tables.has(node.type) or oscillator.configure_native(bank.sample_rate, bank.tables[node.type]) != OK:
 				return ERR_INVALID_DATA
 			oscillators[int(node.id)] = oscillator
 			frequencies[int(node.id)] = _curve(float(node.parameters.frequency.initial), rate)

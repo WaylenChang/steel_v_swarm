@@ -11,13 +11,20 @@ var tables: Array[PackedFloat32Array] = []
 var phase := 0.0
 var frame := 0
 
-func configure(captured: Dictionary, shape: String) -> Error:
-	var rate: Variant = captured.get("sampleRate")
+static func layout(rate: Variant) -> Dictionary:
 	if not (rate is int or rate is float) or not is_finite(float(rate)) or float(rate) != floor(float(rate)) or rate < 8000 or rate > 384000:
-		return ERR_INVALID_DATA
+		return {}
 	var size := 2048 if rate <= 24000 else (4096 if rate <= 88200 else 16384)
 	var ranges := int(.5 + 3 * log(float(size)) / LOG_TWO)
-	if captured.get("frames") != size or captured.get("ranges") != ranges or not captured.get("types") is Array:
+	return {"frames": size, "ranges": ranges}
+
+func configure(captured: Dictionary, shape: String) -> Error:
+	var rate: Variant = captured.get("sampleRate")
+	var dimensions := layout(rate)
+	if dimensions.is_empty():
+		return ERR_INVALID_DATA
+	var size: int = dimensions.frames
+	if captured.get("frames") != size or captured.get("ranges") != dimensions.ranges or not captured.get("types") is Array:
 		return ERR_INVALID_DATA
 	var selected: Dictionary = {}
 	for entry: Variant in captured.types:
@@ -29,7 +36,7 @@ func configure(captured: Dictionary, shape: String) -> Error:
 			selected = entry
 	if selected.is_empty() or not shape in ["sine", "square", "sawtooth"]:
 		return ERR_UNAVAILABLE
-	if not selected.get("tables") is Array or selected.tables.size() != ranges:
+	if not selected.get("tables") is Array or selected.tables.size() != dimensions.ranges:
 		return ERR_INVALID_DATA
 	var decoded: Array[PackedFloat32Array] = []
 	for entry: Variant in selected.tables:
@@ -44,14 +51,22 @@ func configure(captured: Dictionary, shape: String) -> Error:
 		var bytes := Marshalls.base64_to_raw(entry.values)
 		if bytes.size() != size * 4 or Marshalls.raw_to_base64(bytes) != entry.values:
 			return ERR_INVALID_DATA
-		var values := bytes.to_float32_array()
+		decoded.append(bytes.to_float32_array())
+	return configure_native(int(rate), decoded)
+
+func configure_native(rate: int, decoded: Array) -> Error:
+	var dimensions := layout(rate)
+	if dimensions.is_empty() or decoded.size() != dimensions.ranges:
+		return ERR_INVALID_DATA
+	for values: Variant in decoded:
+		if not values is PackedFloat32Array or values.size() != dimensions.frames:
+			return ERR_INVALID_DATA
 		for value: float in values:
 			if not is_finite(value):
 				return ERR_INVALID_DATA
-		decoded.append(values)
-	sample_rate = int(rate)
-	table_size = size
-	tables = decoded
+	sample_rate = rate
+	table_size = dimensions.frames
+	tables.assign(decoded)
 	phase = 0
 	frame = 0
 	return OK

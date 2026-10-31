@@ -4,6 +4,8 @@ extends Node
 const PcmGain = preload("res://scripts/audio_pcm_gain.gd")
 const SampleFilter = preload("res://scripts/audio_move_filter.gd")
 const SourceDsp = preload("res://scripts/audio_move_source_dsp.gd")
+const WaveBank = preload("res://scripts/native_audio_move_waves.gd")
+const Identity = preload("res://scripts/audio_resource_identity.gd")
 
 signal failed(operation: String, error: Error)
 
@@ -17,7 +19,7 @@ var disposed := false
 var activated := false
 var context_origin := 0.0
 
-func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float, wave_tables: Dictionary = {}) -> Error:
+func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank, routing: AudioBuses, initial: Dictionary, origin: float, wave_bank: WaveBank = null) -> Error:
 	if configured or disposed or not is_inside_tree() or is_queued_for_deletion():
 		return ERR_UNCONFIGURED
 	if not is_instance_valid(routing) or routing.is_queued_for_deletion() or not routing.available():
@@ -36,9 +38,11 @@ func configure(category: String, metadata: Dictionary, bank: NativeAudioMoveBank
 				return ERR_INVALID_DATA
 	if oscillator_count > 1:
 		return ERR_UNAVAILABLE
-	if not wave_tables.is_empty():
+	if wave_bank != null:
+		if wave_bank.movement_hash != Identity.digest(bank):
+			return ERR_INVALID_DATA
 		var dsp := SourceDsp.new()
-		var error := dsp.configure(metadata.moveGraphs[category], plan, initial, AudioServer.get_mix_rate(), wave_tables)
+		var error := dsp.configure(metadata.moveGraphs[category], plan, initial, AudioServer.get_mix_rate(), wave_bank)
 		if error != OK:
 			return error
 		mixer.source_dsp = dsp

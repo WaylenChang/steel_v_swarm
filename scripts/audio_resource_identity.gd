@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ClipIdentity = preload("res://scripts/audio_clip_identity.gd")
+const WaveBank = preload("res://scripts/native_audio_move_waves.gd")
 
 static func digest(resource: Resource) -> String:
 	if resource is NativeAudioClip:
@@ -54,6 +55,15 @@ static func digest(resource: Resource) -> String:
 				oscillators.append(layout)
 				blocks.append(values.to_byte_array())
 		header = {"version": 1, "kind": "movement", "noise": noise_hash, "oscillators": oscillators}
+	elif resource is WaveBank:
+		if not resource.valid():
+			return ""
+		for shape: String in WaveBank.SHAPES:
+			for values: PackedFloat32Array in resource.tables[shape]:
+				blocks.append(values.to_byte_array())
+		header = {"version": 1, "kind": "movement_waves", "rate": resource.sample_rate,
+			"movement": resource.movement_hash, "source": resource.source, "graphs": resource.graphs,
+			"shapes": WaveBank.SHAPES, "layout": WaveBank.Oscillator.layout(resource.sample_rate)}
 	else:
 		return ""
 	var hash := HashingContext.new()
